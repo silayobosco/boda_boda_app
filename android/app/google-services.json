@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "157804352950",
+    "project_id": "bodaboda-b5aa8",
+    "storage_bucket": "bodaboda-b5aa8.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:157804352950:android:41418ae10cdc2189031d17",
+        "android_client_info": {
+          "package_name": "com.bosco.bodaboda"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "157804352950-g3sa7i3115mg665991jf6k30buncif76.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.bosco.bodaboda",
+            "certificate_hash": "54c246d01520a5f1ec3973451c93a8720cb80f01"
+          }
+        },
+        {
+          "client_id": "157804352950-1u6arpvpsotfq9h3onc28bgskdnuflie.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDMvL9o7v_Je-RP-LutapvT0FDwxVQU-nw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "157804352950-1u6arpvpsotfq9h3onc28bgskdnuflie.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "157804352950-ivce7qh7iipmhk0668469jks21gpiqg6.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.bosco.bodaboda"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

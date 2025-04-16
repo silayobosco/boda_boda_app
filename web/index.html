@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <!--
+    If you are serving your web app in a path other than the root, change the
+    href value below to reflect the base path you are serving from.
+
+    The path provided below has to start and end with a slash "/" in order for
+    it to work correctly.
+
+    For more details:
+    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
+
+    This is a placeholder for base href that will be replaced by the value of
+    the `--base-href` argument provided to `flutter build`.
+  -->
+  <base href="/">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="A new Flutter project.">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="google-signin-client_id" content="157804352950-1u6arpvpsotfq9h3onc28bgskdnuflie.apps.googleusercontent.com">
+
+  <!-- iOS meta tags & icons -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="boda_boda_app">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <title>Boda Boda App</title>
+  <link rel="manifest" href="manifest.json">
+  <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.0.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.0.0/firebase-auth.js"></script>
+  <script>
+    firebase.initializeApp({
+        apiKey: "AIzaSyD2NDyEe7SH3g2mUEu6XWpLrP4NxJptAiA",
+        authDomain: "bodaboda-b5aa8.firebaseapp.com",
+        projectId: "bodaboda-b5aa8",
+        appId: "1:157804352950:web:9439e025c4bc0bfb031d17"
+    });
+  </script>
+</head>
+<body>
+  <script type="module">
+    // Import the functions you need from the SDKs you need
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-app.js";
+    import { } from 'firebase/auth';
+    import { } from 'firebase/firestore';
+    import { } from 'firebase/storage';
+    import { } from 'firebase/messaging';
+    // TODO: Add SDKs for Firebase products that you want to use
+    // https://firebase.google.com/docs/web/setup#available-libraries
+
+    // Your web app's Firebase configuration
+    const firebaseConfig = {
+      apiKey: "AIzaSyD2NDyEe7SH3g2mUEu6XWpLrP4NxJptAiA",
+      authDomain: "bodaboda-b5aa8.firebaseapp.com",
+      projectId: "bodaboda-b5aa8",
+      storageBucket: "bodaboda-b5aa8.firebasestorage.app",
+      messagingSenderId: "157804352950",
+      appId: "1:157804352950:web:9439e025c4bc0bfb031d17"
+    };
+
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+  </script>
+  <script src="main.dart.js" type="application/javascript"></script>
+</body>
+</html>
