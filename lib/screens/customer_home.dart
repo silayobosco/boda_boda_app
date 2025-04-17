@@ -15,19 +15,33 @@ class CustomerHome extends StatefulWidget {
 }
 
 class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClientMixin {
+  // Map and Location Variables
   GoogleMapController? _mapController;
   ll.LatLng? _pickupLocation;
   ll.LatLng? _dropOffLocation;
   final Set<Marker> _markers = {};
+  final Set<Polyline> _polylines = {};
   final TextEditingController _pickupController = TextEditingController();
   final TextEditingController _destinationController = TextEditingController();
+  
+  // Search and Suggestions
   List<Map<String, dynamic>> _destinationSuggestions = [];
   List<Map<String, dynamic>> _pickupSuggestions = [];
+  final String _googlePlacesApiKey = 'AIzaSyCkKD8FP-r9bqi5O-sOjtuksT-0Dr9dgeg';
+  
+  // UI State Variables
   bool _selectingPickup = false;
   bool _editingPickup = false;
-  final String _googlePlacesApiKey = 'AIzaSyCkKD8FP-r9bqi5O-sOjtuksT-0Dr9dgeg';
   final FocusNode _destinationFocusNode = FocusNode();
   final FocusNode _pickupFocusNode = FocusNode();
+  
+  // Sheet Control
+  final DraggableScrollableController _sheetController = DraggableScrollableController();
+  double _currentSheetSize = 0.35;
+  bool _isSheetExpanded = false;
+  
+  // Stops Management
+  final List<Stop> _stops = [];
 
   @override
   bool get wantKeepAlive => true;
@@ -36,32 +50,56 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
   void initState() {
     super.initState();
     _initializePickupLocation();
-    _destinationFocusNode.addListener(_onDestinationFocusChange);
-    _pickupFocusNode.addListener(_onPickupFocusChange);
+    _setupFocusListeners();
+    _sheetController.addListener(_onSheetChanged);
   }
 
-  void _onDestinationFocusChange() {
-    if (_destinationFocusNode.hasFocus) {
-      Future.delayed(const Duration(milliseconds: 300), () {
-        Scrollable.ensureVisible(
-          context,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
-      });
-    }
+  void _setupFocusListeners() {
+    _destinationFocusNode.addListener(() {
+      if (_destinationFocusNode.hasFocus) {
+        _expandSheet();
+        Future.delayed(const Duration(milliseconds: 300), () {
+          Scrollable.ensureVisible(
+            context,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          );
+        });
+      }
+    });
+    _pickupFocusNode.addListener(() {
+      if (_pickupFocusNode.hasFocus) {
+        _expandSheet();
+        Future.delayed(const Duration(milliseconds: 300), () {
+          Scrollable.ensureVisible(
+            context,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          );
+        });
+      }
+    });
   }
 
-  void _onPickupFocusChange() {
-    if (_pickupFocusNode.hasFocus) {
-      Future.delayed(const Duration(milliseconds: 300), () {
-        Scrollable.ensureVisible(
-          context,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
-      });
-    }
+  void _onSheetChanged() {
+    setState(() {
+      _currentSheetSize = _sheetController.size;
+      _isSheetExpanded = _sheetController.size > 0.6;
+    });
+  }
+
+  void _collapseSheet() {
+    _sheetController.animateTo(0.35,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+    );
+  }
+
+  void _expandSheet() {
+    _sheetController.animateTo(0.9,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+    );
   }
 
   Future<void> _initializePickupLocation() async {
@@ -70,17 +108,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
       _pickupLocation = currentLocation;
       _updateGooglePickupMarker(LatLng(currentLocation.latitude, currentLocation.longitude));
       await _reverseGeocode(_pickupLocation!, _pickupController);
-    } else {
-      print('Current location not immediately available.');
     }
-  }
-
-  @override
-  void dispose() {
-    _mapController?.dispose();
-    _destinationFocusNode.dispose();
-    _pickupFocusNode.dispose();
-    super.dispose();
   }
 
   Future<void> _reverseGeocode(ll.LatLng location, TextEditingController controller) async {
@@ -92,12 +120,9 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
       if (placemarks.isNotEmpty) {
         final Placemark place = placemarks.first;
         controller.text = '${place.street}, ${place.locality}, ${place.administrativeArea}';
-      } else {
-        controller.text = 'Address not found';
       }
     } catch (e) {
       print('Error reverse geocoding: $e');
-      controller.text = 'Finding address...';
     }
   }
 
@@ -113,9 +138,6 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
         ),
       );
     });
-    _mapController?.animateCamera(CameraUpdate.newCameraPosition(
-      CameraPosition(target: location, zoom: 15),
-    ));
   }
 
   void _updateGoogleDropOffMarker(LatLng? location) {
@@ -131,16 +153,11 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
           ),
         );
       });
-    } else {
-      setState(() {
-        _markers.removeWhere((marker) => marker.markerId == const MarkerId('dropoff'));
-      });
     }
   }
 
-  void _handleMapTapForGoogleMaps(LatLng tappedLatLng) async {
+  void _handleMapTap(LatLng tappedLatLng) {
     final llTappedLatLng = ll.LatLng(tappedLatLng.latitude, tappedLatLng.longitude);
-
     if (_selectingPickup) {
       setState(() {
         _pickupLocation = llTappedLatLng;
@@ -153,240 +170,140 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
         _dropOffLocation = llTappedLatLng;
         _updateGoogleDropOffMarker(tappedLatLng);
         _reverseGeocode(_dropOffLocation!, _destinationController);
+        _drawRoute();
+        _collapseSheet();
       });
     }
   }
 
-  void _clearPickupSelection() {
-    setState(() {
-      _pickupLocation = null;
-      _markers.removeWhere((marker) => marker.markerId == const MarkerId('pickup'));
-      _pickupController.clear();
-    });
+  void _drawRoute() {
+    if (_pickupLocation != null && _dropOffLocation != null) {
+      setState(() {
+        _polylines.clear();
+        _polylines.add(Polyline(
+          polylineId: const PolylineId('route'),
+          color: Colors.blue,
+          width: 4,
+          points: [
+            LatLng(_pickupLocation!.latitude, _pickupLocation!.longitude),
+            LatLng(_dropOffLocation!.latitude, _dropOffLocation!.longitude),
+          ],
+        ));
+        _mapController?.animateCamera(
+          CameraUpdate.newLatLngBounds(
+            _boundsFromLatLngList([
+              LatLng(_pickupLocation!.latitude, _pickupLocation!.longitude),
+              LatLng(_dropOffLocation!.latitude, _dropOffLocation!.longitude),
+            ]),
+            100,
+          ),
+        );
+      });
+    }
   }
 
-  void _clearDropOffSelection() {
-    setState(() {
-      _dropOffLocation = null;
-      _markers.removeWhere((marker) => marker.markerId == const MarkerId('dropoff'));
-      _destinationController.clear();
-    });
-  }
-
-  void _editPickupLocation() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Tap on the map to select a new pickup location.')),
+  LatLngBounds _boundsFromLatLngList(List<LatLng> list) {
+    double? x0, x1, y0, y1;
+    for (LatLng latLng in list) {
+      if (x0 == null) {
+        x0 = x1 = latLng.latitude;
+        y0 = y1 = latLng.longitude;
+      } else {
+        if (latLng.latitude > x1!) x1 = latLng.latitude;
+        if (latLng.latitude < x0) x0 = latLng.latitude;
+        if (latLng.longitude > y1!) y1 = latLng.longitude;
+        if (latLng.longitude < y0!) y0 = latLng.longitude;
+      }
+    }
+    return LatLngBounds(
+      northeast: LatLng(x1!, y1!),
+      southwest: LatLng(x0!, y0!),
     );
-    _selectingPickup = true;
   }
 
   Future<List<Map<String, dynamic>>> _getGooglePlacesSuggestions(String query) async {
-    if (query.isEmpty) {
-      return [];
-    }
-
-    final apiKey = _googlePlacesApiKey;
-    final baseUrl = 'https://maps.googleapis.com/maps/api/place/autocomplete/json';
-    final locationBias = _pickupLocation != null
-        ? 'circle:2000@${_pickupLocation!.latitude},${_pickupLocation!.longitude}'
-        : null;
-    String url = '$baseUrl?input=$query&key=$apiKey';
-    if (locationBias != null) {
-      url += '&locationbias=$locationBias';
-    }
-
+    if (query.isEmpty) return [];
+    final url = 'https://maps.googleapis.com/maps/api/place/autocomplete/json?input=$query&key=$_googlePlacesApiKey';
     try {
       final response = await http.get(Uri.parse(url));
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['status'] == 'OK') {
-          return (data['predictions'] as List)
-              .map((p) => {
-                    'place_id': p['place_id'],
-                    'description': p['description'],
-                  })
-              .toList();
-        } else {
-          print('Google Places Autocomplete API Error: ${data['status']} - ${data['error_message']}');
-          return [];
+          return (data['predictions'] as List).map((p) => {
+            'place_id': p['place_id'],
+            'description': p['description'],
+          }).toList();
         }
-      } else {
-        print('HTTP Error: ${response.statusCode} - ${response.body}');
-        return [];
       }
+      return [];
     } catch (e) {
-      print('Error fetching Google Places suggestions: $e');
+      print('Error fetching suggestions: $e');
       return [];
     }
   }
 
   Future<Map<String, dynamic>?> _getPlaceDetails(String placeId) async {
-    final apiKey = _googlePlacesApiKey;
-    final baseUrl = 'https://maps.googleapis.com/maps/api/place/details/json';
-    final fields = 'geometry';
-    final url = '$baseUrl?place_id=$placeId&fields=$fields&key=$apiKey';
-
+    final url = 'https://maps.googleapis.com/maps/api/place/details/json?place_id=$placeId&key=$_googlePlacesApiKey';
     try {
       final response = await http.get(Uri.parse(url));
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        if (data['status'] == 'OK' && data['result'] != null) {
+        if (data['status'] == 'OK') {
           final geometry = data['result']['geometry']['location'];
           return {
             'latitude': geometry['lat'],
             'longitude': geometry['lng'],
           };
-        } else {
-          print('Google Places Details API Error: ${data['status']} - ${data['error_message']}');
-          return null;
         }
-      } else {
-        print('HTTP Error: ${response.statusCode} - ${response.body}');
-        return null;
       }
+      return null;
     } catch (e) {
-      print('Error fetching Google Place details: $e');
+      print('Error fetching place details: $e');
       return null;
     }
   }
 
-  Widget _buildPickupLocationDisplay() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: Row(
-        children: [
-          const Icon(Icons.location_on, color: Colors.green, size: 24),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              _pickupController.text.isNotEmpty 
-                  ? _pickupController.text 
-                  : 'Getting current location...',
-              style: const TextStyle(fontSize: 16),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          TextButton(
-            onPressed: () {
-              setState(() {
-                _editingPickup = true;
-              });
-              Future.delayed(const Duration(milliseconds: 50), () {
-                _pickupFocusNode.requestFocus();
-              });
-            },
-            child: const Text('Edit'),
-          ),
-        ],
-      ),
-    );
+  Future<void> _handleDestinationSelected(Map<String, dynamic> suggestion) async {
+    final placeDetails = await _getPlaceDetails(suggestion['place_id']);
+    if (placeDetails != null) {
+      final latLng = ll.LatLng(placeDetails['latitude'], placeDetails['longitude']);
+      setState(() {
+        _dropOffLocation = latLng;
+        _updateGoogleDropOffMarker(LatLng(latLng.latitude, latLng.longitude));
+        _destinationController.text = suggestion['description'] ?? '';
+        _destinationSuggestions = [];
+      });
+      await _reverseGeocode(_dropOffLocation!, _destinationController);
+      _drawRoute();
+      _collapseSheet();
+    }
   }
 
-  Widget _buildPickupLocationInput() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Pickup Location',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 8),
-        TextField(
-          controller: _pickupController,
-          focusNode: _pickupFocusNode,
-          decoration: InputDecoration(
-            labelText: 'Search pickup location',
-            prefixIcon: const Icon(Icons.location_on, color: Colors.green),
-            suffixIcon: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (_pickupController.text.isNotEmpty)
-                  IconButton(
-                    icon: const Icon(Icons.clear),
-                    onPressed: () {
-                      _pickupController.clear();
-                      setState(() {
-                        _pickupSuggestions = [];
-                      });
-                    },
-                  ),
-                IconButton(
-                  icon: const Icon(Icons.map),
-                  onPressed: _editPickupLocation,
-                ),
-              ],
-            ),
-          ),
-          style: const TextStyle(color: Colors.black),
-          onChanged: (value) async {
-            if (value.isNotEmpty) {
-              final suggestions = await _getGooglePlacesSuggestions(value);
-              setState(() {
-                _pickupSuggestions = suggestions;
-              });
-            } else {
-              setState(() {
-                _pickupSuggestions = [];
-              });
-            }
-          },
-        ),
-        if (_pickupSuggestions.isNotEmpty)
-          ..._buildSuggestionList(_pickupSuggestions, true),
-      ],
-    );
+  void _swapLocations() {
+    final temp = _pickupController.text;
+    final tempLoc = _pickupLocation;
+    setState(() {
+      _pickupController.text = _destinationController.text;
+      _destinationController.text = temp;
+      _pickupLocation = _dropOffLocation;
+      _dropOffLocation = tempLoc;
+      _drawRoute();
+    });
   }
 
-  List<Widget> _buildSuggestionList(List<Map<String, dynamic>> suggestions, bool isPickup) {
-    return [
-      const SizedBox(height: 8),
-      Container(
-        decoration: BoxDecoration(
-          color: Colors.grey[100],
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: ListView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: suggestions.length,
-          itemBuilder: (context, index) {
-            final suggestion = suggestions[index];
-            return ListTile(
-              dense: true,
-              leading: const Icon(Icons.location_on, size: 20),
-              title: Text(
-                suggestion['description'] ?? '',
-                style: const TextStyle(fontSize: 14),
-              ),
-              onTap: () async {
-                final placeDetails = await _getPlaceDetails(suggestion['place_id']);
-                if (placeDetails != null) {
-                  final latLng = ll.LatLng(placeDetails['latitude'], placeDetails['longitude']);
-                  if (isPickup) {
-                    setState(() {
-                      _pickupLocation = latLng;
-                      _updateGooglePickupMarker(LatLng(latLng.latitude, latLng.longitude));
-                      _pickupController.text = suggestion['description'] ?? '';
-                      _pickupSuggestions = [];
-                      _editingPickup = false;
-                    });
-                    _reverseGeocode(_pickupLocation!, _pickupController);
-                  } else {
-                    setState(() {
-                      _dropOffLocation = latLng;
-                      _updateGoogleDropOffMarker(LatLng(latLng.latitude, latLng.longitude));
-                      _destinationController.text = suggestion['description'] ?? '';
-                      _destinationSuggestions = [];
-                    });
-                    _reverseGeocode(_dropOffLocation!, _destinationController);
-                  }
-                }
-              },
-            );
-          },
-        ),
-      ),
-    ];
+  void _addStop() {
+    setState(() {
+      _stops.add(Stop(
+        name: 'Stop ${_stops.length + 1}',
+        address: 'Address details',
+      ));
+    });
+  }
+
+  void _removeStop(int index) {
+    setState(() {
+      _stops.removeAt(index);
+    });
   }
 
   @override
@@ -394,213 +311,323 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
     super.build(context);
     final locationProvider = Provider.of<LocationProvider>(context);
 
-    if (locationProvider.currentLocation == null && _pickupController.text.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    final initialCameraPosition = locationProvider.currentLocation != null
-        ? CameraPosition(
-            target: LatLng(
-              locationProvider.currentLocation!.latitude,
-              locationProvider.currentLocation!.longitude,
-            ),
-            zoom: 15.0,
-          )
-        : const CameraPosition(target: LatLng(0, 0), zoom: 2);
-
     return Scaffold(
       resizeToAvoidBottomInset: true,
       body: Stack(
         children: [
           GoogleMap(
-            key: const PageStorageKey<String>('customerMap'),
-            initialCameraPosition: initialCameraPosition,
-            onMapCreated: (GoogleMapController controller) async {
-              _mapController = controller;
-            },
-            onTap: _handleMapTapForGoogleMaps,
-            myLocationEnabled: true,
-            myLocationButtonEnabled: false,
+            initialCameraPosition: CameraPosition(
+              target: locationProvider.currentLocation != null
+                  ? LatLng(
+                      locationProvider.currentLocation!.latitude,
+                      locationProvider.currentLocation!.longitude,
+                    )
+                  : const LatLng(0, 0),
+              zoom: 15,
+            ),
+            onMapCreated: (controller) => _mapController = controller,
+            onTap: _handleMapTap,
             markers: _markers,
+            polylines: _polylines,
+            myLocationEnabled: true,
           ),
-          DraggableScrollableSheet(
-            initialChildSize: 0.35,
-            minChildSize: 0.25,
-            maxChildSize: 0.9,
-            snap: true,
-            snapSizes: const [0.35, 0.7, 0.9],
-            builder: (BuildContext context, ScrollController scrollController) {
-              return Container(
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-                  boxShadow: [
-                    BoxShadow(
-                      blurRadius: 10,
-                      color: Colors.grey,
-                      offset: Offset(0, -2),
-                    ),
-                  ],
-                ),
-                child: CustomScrollView(
-                  controller: scrollController,
-                  slivers: [
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _editingPickup 
-                                ? _buildPickupLocationInput()
-                                : _buildPickupLocationDisplay(),
-
-                            const SizedBox(height: 16),
-                            
-                            const Text(
-                              'Where to?',
-                              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 8),
-                            TextField(
-                              controller: _destinationController,
-                              focusNode: _destinationFocusNode,
-                              decoration: InputDecoration(
-                                labelText: 'Choose Destination',
-                                prefixIcon: const Icon(Icons.flag, color: Colors.red),
-                                suffixIcon: _dropOffLocation != null
-                                    ? IconButton(
-                                        icon: const Icon(Icons.clear),
-                                        onPressed: _clearDropOffSelection,
-                                      )
-                                    : null,
-                              ),
-                              style: const TextStyle(color: Colors.black),
-                              onChanged: (value) async {
-                                if (value.isNotEmpty) {
-                                  final suggestions = await _getGooglePlacesSuggestions(value);
-                                  setState(() {
-                                    _destinationSuggestions = suggestions;
-                                  });
-                                } else {
-                                  setState(() {
-                                    _destinationSuggestions = [];
-                                  });
-                                }
-                              },
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    
-                    if (_destinationSuggestions.isNotEmpty)
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          child: Column(
-                            children: _buildSuggestionList(_destinationSuggestions, false),
-                          ),
-                        ),
-                      ),
-                    
-                    if (_destinationSuggestions.isEmpty && _destinationController.text.isEmpty)
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const SizedBox(height: 16),
-                              const Text(
-                                'Recent Destinations',
-                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-                              ),
-                              const SizedBox(height: 8),
-                              ListTile(
-                                dense: true,
-                                leading: const Icon(Icons.history, size: 20),
-                                title: const Text('Previous Location 1'),
-                              ),
-                              ListTile(
-                                dense: true,
-                                leading: const Icon(Icons.history, size: 20),
-                                title: const Text('Another Place'),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    
-                    if (_dropOffLocation != null && _pickupLocation != null)
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Pickup: ${_pickupController.text}', 
-                                  style: const TextStyle(fontWeight: FontWeight.bold)),
-                              const SizedBox(height: 8),
-                              Text('Destination: ${_destinationController.text}', 
-                                  style: const TextStyle(fontWeight: FontWeight.bold)),
-                              const SizedBox(height: 16),
-                              
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: OutlinedButton.icon(
-                                      onPressed: () => print('Add stop pressed'),
-                                      icon: const Icon(Icons.add_location_alt),
-                                      label: const Text('Add Stop'),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 16),
-                                  Expanded(
-                                    child: OutlinedButton.icon(
-                                      onPressed: () => print('Schedule ride pressed'),
-                                      icon: const Icon(Icons.schedule),
-                                      label: const Text('Schedule'),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 16),
-                              
-                              SizedBox(
-                                width: double.infinity,
-                                child: ElevatedButton(
-                                  onPressed: () => print('Requesting ride'),
-                                  style: ElevatedButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(vertical: 16),
-                                  ),
-                                  child: const Text('Request Ride', style: TextStyle(fontSize: 18)),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    
-                    if (_dropOffLocation == null)
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: const Text(
-                            'Select your destination to see pickup options and request a ride.',
-                            style: TextStyle(color: Colors.grey),
-                          ),
-                        ),
-                      ),
-                    
-                    const SliverToBoxAdapter(child: SizedBox(height: 50)),
-                  ],
-                ),
-              );
-            },
-          ),
+          _buildRouteSheet(),
         ],
       ),
     );
   }
+
+  Widget _buildRouteSheet() {
+    return DraggableScrollableSheet(
+      controller: _sheetController,
+      initialChildSize: 0.35,
+      minChildSize: 0.25,
+      maxChildSize: 0.9,
+      snap: true,
+      snapSizes: const [0.35, 0.7, 0.9],
+      builder: (context, scrollController) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            boxShadow: [
+              BoxShadow(
+                blurRadius: 10,
+                color: Colors.black12,
+                offset: Offset(0, -2),
+              ),
+            ],
+          ),
+          child: CustomScrollView(
+            controller: scrollController,
+            slivers: [
+              SliverToBoxAdapter(
+                child: Column(
+                  children: [
+                    _buildDragHandle(),
+                    _buildRouteHeader(),
+                    _buildPickupField(),
+                    _buildDestinationField(),
+                  ],
+                ),
+              ),
+              if (_isSheetExpanded) ...[
+                if (_destinationSuggestions.isNotEmpty)
+                  SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) => _buildSuggestionItem(_destinationSuggestions[index]),
+                      childCount: _destinationSuggestions.length,
+                    ),
+                  ),
+                SliverToBoxAdapter(child: _buildStopsList()),
+                SliverToBoxAdapter(child: _buildAddStopButton()),
+              ],
+              SliverToBoxAdapter(child: _buildConfirmButton()),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDragHandle() {
+    return Center(
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 8),
+        width: 40,
+        height: 4,
+        decoration: BoxDecoration(
+          color: Colors.grey[300],
+          borderRadius: BorderRadius.circular(2),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRouteHeader() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Text(
+        'Your route',
+        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
+      ),
+    );
+  }
+
+  Widget _buildPickupField() {
+    return _buildLocationField(
+      controller: _pickupController,
+      icon: Icons.my_location,
+      label: 'Pickup',
+      isFirst: true,
+      isCompleted: false,
+      onTap: () {
+        _selectingPickup = true;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Tap on map to select pickup location')),
+        );
+      },
+    );
+  }
+
+  Widget _buildDestinationField() {
+    return _buildLocationField(
+      controller: _destinationController,
+      icon: Icons.flag,
+      label: 'Destination',
+      isFirst: false,
+      isCompleted: _dropOffLocation != null,
+      onTap: _expandSheet,
+    );
+  }
+
+  Widget _buildLocationField({
+    required TextEditingController controller,
+    required IconData icon,
+    required String label,
+    required bool isFirst,
+    required bool isCompleted,
+    VoidCallback? onTap,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: InkWell(
+        onTap: onTap,
+        child: Row(
+          children: [
+            Container(
+              width: 24,
+              height: 24,
+              decoration: BoxDecoration(
+                color: isCompleted ? Colors.green : Colors.grey[300],
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, size: 16, color: isCompleted ? Colors.white : Colors.grey),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: TextField(
+                controller: controller,
+                focusNode: isFirst ? _pickupFocusNode : _destinationFocusNode,
+                decoration: InputDecoration(
+                  hintText: label,
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.zero,
+                ),
+                onChanged: (value) async {
+                  if (value.isNotEmpty && !isFirst) {
+                    final suggestions = await _getGooglePlacesSuggestions(value);
+                    setState(() => _destinationSuggestions = suggestions);
+                  }
+                },
+              ),
+            ),
+            if (!isFirst && _dropOffLocation != null)
+              IconButton(
+                icon: const Icon(Icons.swap_vert, size: 20),
+                onPressed: _swapLocations,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSuggestionItem(Map<String, dynamic> suggestion) {
+    return ListTile(
+      leading: const Icon(Icons.location_on),
+      title: Text(suggestion['description'] ?? ''),
+      onTap: () => _handleDestinationSelected(suggestion),
+    );
+  }
+
+  Widget _buildStopsList() {
+    return Column(
+      children: _stops.asMap().entries.map((entry) {
+        final index = entry.key;
+        final stop = entry.value;
+        return Dismissible(
+          key: Key('stop_$index'),
+          direction: DismissDirection.endToStart,
+          background: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.red[100],
+              borderRadius: BorderRadius.circular(10),
+            ),
+            alignment: Alignment.centerRight,
+            padding: const EdgeInsets.only(right: 20),
+            child: const Icon(Icons.delete, color: Colors.red),
+          ),
+          onDismissed: (direction) => _removeStop(index),
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.grey[50],
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).primaryColor.withOpacity(0.2),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: Text(
+                      '${index + 1}',
+                      style: TextStyle(
+                        color: Theme.of(context).primaryColor,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        stop.name,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      if (stop.address != null)
+                        Text(
+                          stop.address!,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildAddStopButton() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: TextButton.icon(
+        onPressed: _addStop,
+        icon: const Icon(Icons.add, size: 20),
+        label: const Text('Add stop'),
+        style: TextButton.styleFrom(
+          foregroundColor: Theme.of(context).primaryColor,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildConfirmButton() {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: ElevatedButton(
+        onPressed: _dropOffLocation != null ? () {} : null,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Theme.of(context).primaryColor,
+          minimumSize: const Size(double.infinity, 50),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+        child: const Text(
+          'Confirm Route',
+          style: TextStyle(color: Colors.white, fontSize: 16),
+        ),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _sheetController.dispose();
+    _destinationFocusNode.dispose();
+    _pickupFocusNode.dispose();
+    super.dispose();
+  }
+}
+
+class Stop {
+  final String name;
+  final String? address;
+  LatLng? location;
+  final TextEditingController controller = TextEditingController();
+
+  Stop({
+    required this.name,
+    this.address,
+    this.location,
+  });
 }
