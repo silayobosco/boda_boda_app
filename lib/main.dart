@@ -4,7 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart'; // Import provider
 import 'theme/app_theme.dart'; // Import AppThemes and ThemeProvider
-import '../screens/additional_info_screen.dart';
+import 'screens/additional_info_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/register_screen.dart';
 import 'screens/home_screen.dart';
@@ -12,10 +12,17 @@ import 'screens/customer_home.dart';
 import 'screens/driver_home.dart';
 import 'screens/admin_home.dart';
 import 'screens/settings_screen.dart';
-import 'firebase_options.dart'; // Ensure this exists
+import 'firebase_options.dart'; 
 import 'providers/location_provider.dart';
-import 'providers/map_data_provider.dart';
+import 'map/providers/map_data_provider.dart';
 import 'providers/ride_request_provider.dart';
+import 'services/auth_service.dart';
+import 'providers/driver_provider.dart';
+import 'services/firestore_service.dart';
+
+final FirestoreService firestoreService = FirestoreService();
+final AuthService authService = AuthService();
+
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -30,7 +37,15 @@ void main() async {
       ChangeNotifierProvider(create: (_) => ThemeProvider()),
       ChangeNotifierProvider(create: (_) => LocationProvider()),
       ChangeNotifierProvider(create: (_) => MapDataProvider()),
-      ChangeNotifierProvider(create: (_) => RideRequestProvider()),
+      ChangeNotifierProvider(create: (_) => DriverProvider()),
+      Provider<AuthService>(create: (_) => authService),
+        Provider<FirestoreService>(create: (_) => firestoreService),
+        ChangeNotifierProvider<RideRequestProvider>(
+          create: (context) => RideRequestProvider(
+            firestoreService: context.read<FirestoreService>(),
+            authService: context.read<AuthService>(),
+          )
+        ),
     ],
     child: const MyApp(),
   ),

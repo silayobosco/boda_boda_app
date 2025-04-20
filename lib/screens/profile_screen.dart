@@ -84,6 +84,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   : null;
           _gender = _userModel?.gender ?? "";
           _photoURL = _userModel?.profileImageUrl ?? "";
+          _role = _userModel?.role ?? "N/A"; // Fetch role from UserModel
         });
 
         // Cache the data locally
@@ -97,8 +98,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         await prefs.setString('phone', _phone ?? "");
         await prefs.setString('dob', _dob?.toIso8601String() ?? "");
         await prefs.setString('gender', _gender ?? "");
-        await prefs.setString('location', _location ?? "");
         await prefs.setString('photoURL', _photoURL ?? "");
+        await prefs.setString('role', _role ?? "N/A"); // Cache role locally
+        await prefs.setString('location', _location ?? "");
         await prefs.setString('email', _email ?? "");
         await prefs.setString('role', _role ?? "");
       } else {
@@ -276,41 +278,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Center(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              GestureDetector(
-                                onTap:
-                                    _isEditing
-                                        ? _pickImage
-                                        : null, // Allow image picking only in edit mode
-                                child: CircleAvatar(
-                                  radius: 60,
-                                  backgroundColor:
-                                      Colors
-                                          .grey[300], // Fallback background color
-                                  backgroundImage:
-                                      _photoURL != null && _photoURL!.isNotEmpty
-                                          ? NetworkImage(_photoURL!)
-                                              as ImageProvider
-                                          : const AssetImage("assets/icon.png"),
-                                  onBackgroundImageError: (_, __) {
-                                    setState(() {
-                                      _photoURL =
-                                          null; // Reset photoURL to trigger default avatar
-                                    });
-                                  },
-                                  child:
-                                      (_photoURL == null || _photoURL!.isEmpty)
-                                          ? const Icon(
-                                            Icons.person,
-                                            size: 60,
-                                            color: Colors.white,
-                                          )
-                                          : null, // Show an icon if no image is available
-                                ),
-                              ),
+                      Center(
+                        child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          GestureDetector(
+                          onTap: _pickImage, // Always allow image picking
+                          child: CircleAvatar(
+                            radius: 60,
+                            backgroundColor:
+                              Colors.grey[300], // Fallback background color
+                            backgroundImage:
+                              _photoURL != null && _photoURL!.isNotEmpty
+                                ? NetworkImage(_photoURL!)
+                                : null, // Use null if no image is available
+                            child: (_photoURL == null || _photoURL!.isEmpty)
+                              ? const Icon(
+                                Icons.person,
+                                size: 60,
+                                color: Colors.white,
+                              )
+                              : null, // Show an icon only if no image is available
+                          ),
+                          ),
                               const SizedBox(height: 16),
                               Text(
                                 " ${_role ?? "N/A"}",

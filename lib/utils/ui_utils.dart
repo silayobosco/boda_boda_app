@@ -8,6 +8,8 @@ const Color backgroundColor = Colors.white; // Default background color
 const Color textColor = Colors.black; // Default text color
 const Color hintTextColor = Colors.grey; // Hint text color
 const Color errorColor = Colors.red; // Error message color
+const Color successColor = Colors.green; // Success indication color
+const Color warningColor = Colors.orange; // Warning indication color
 
 // Text Styles - Define reusable text styles for your app
 TextStyle appTextStyle({

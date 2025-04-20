@@ -38,10 +38,11 @@ dependencies:
   firebase_auth: ^5.5.1
   cloud_firestore: ^5.6.5
   firebase_messaging: ^15.2.4
+  firebase_storage: ^12.4.4
+  
   google_sign_in: ^6.3.0
   intl: ^0.20.2
   image_picker: ^1.1.2
-  firebase_storage: ^12.4.4
   cupertino_icons: ^1.0.8
   geolocator: ^14.0.0
   permission_handler: ^12.0.0+1 
@@ -50,6 +51,7 @@ dependencies:
   geocoding: ^3.0.0
   latlong2: ^0.9.1
   google_maps_flutter: ^2.12.1
+  url_launcher: ^6.3.1
   mapbox_gl: #^0.16.0
      git:
       url: https://github.com/tobrun/flutter-mapbox-gl.git
@@ -84,9 +86,8 @@ flutter:
   assets:
     - assets/google_logo.png
     - assets/icon.png
-    - assets/green_marker.png
-    - assets/red_marker.png
-
+    - assets/boda_marker.png
+   
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
   # the material Icons class.

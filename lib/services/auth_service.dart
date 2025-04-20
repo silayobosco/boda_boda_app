@@ -9,6 +9,7 @@ class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final GoogleSignIn _googleSignIn = GoogleSignIn();
+  User? get currentUser => _auth.currentUser;
 
   // ... (registerUser, loginUser, logout functions remain the same)
 

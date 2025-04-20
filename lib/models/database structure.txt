@@ -1,0 +1,52 @@
+/Unions/{unionId}
+    - name: String
+    - level: String
+    - parentUnionId: String (optional)
+    - contactPerson: String
+    - contactPhone: String
+
+/Kijiwes/{kijiweId}
+    - name: String
+    - location: GeoPoint
+    - unionId: String
+    - leaderId: String (userId from Users collection)
+    - permanentMembers: Array of Strings (userIds from Users collection)
+
+/Users/{userId}  //  Unified User Collection
+    - createdAt: Timestamp
+    - dob: String
+    - email: String
+    - gender: String
+    - location: GeoPoint (General user location - can be used before driver status)
+    - name: String
+    - password: String
+    - phone: String
+    - phoneNumber: String
+    - photoURL: String
+    - role: String  // "Customer", "Driver", "Both", "Kijiwe Leader", "Union Official"
+    - uid: String  // Firebase Auth UID (This is the key identifier)
+    - fcmToken: String
+    - driverDetails: Map  //  Optional - Only present if role includes "Driver"
+        - vehicle: String
+        - currentLocation: GeoPoint (Driver's active location)
+        - kijiweId: String
+        - unionId: String
+        - available: Boolean
+        - rating: Number
+        - status: String ("available", "en_route_pickup", etc.)
+
+/RideRequests/{rideRequestId}
+    - customerId: String (userId from Users collection)
+    - pickupLocation: GeoPoint
+    - dropOffLocation: GeoPoint
+    - pickupAddress: String
+    - dropOffAddress: String
+    - requestTime: Timestamp
+    - status: String
+    - assignedDriverId: String (userId from Users collection)
+    - kijiweId: String
+    - unionId: String
+    - fare: Number
+
+/KijiweQueues/{kijiweId}
+    - driverIds: Array of Strings (userIDs from Users collection, where role includes "Driver")

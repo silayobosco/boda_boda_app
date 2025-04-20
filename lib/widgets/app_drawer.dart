@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../screens/profile_screen.dart';
 import '../screens/login_screen.dart';
+import '../screens/driver_registration_screen.dart';
+import '../utils/ui_utils.dart';
 
 class AppDrawer extends StatelessWidget {
   const AppDrawer({super.key});
@@ -73,7 +75,7 @@ class AppDrawer extends StatelessWidget {
               ],
             ),
           ),
-          ListTile(
+          ListTile( // Move "Profile" and other links up, before the driver button
             leading: const Icon(Icons.person),
             title: const Text("Profile"),
             onTap: () {
@@ -101,8 +103,54 @@ class AppDrawer extends StatelessWidget {
               );
             },
           ),
+          const Spacer(), // Push the driver button to the bottom
+          // "Become a Driver" or "Switch Role" Button
+          _buildDriverButton(context, user),
         ],
       ),
     );
   }
+
+  Widget _buildDriverButton(BuildContext context, User? user) {
+    return FutureBuilder<DocumentSnapshot>(
+      future: FirebaseFirestore.instance
+          .collection('drivers')
+          .doc(user?.uid)
+          .get(),
+      builder: (context, snapshot) {
+        String buttonText = "Become a Driver";
+        VoidCallback? onPressed;
+
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          buttonText = "Checking Driver Status...";
+        } else if (snapshot.hasData && snapshot.data!.exists) {
+          // User IS a driver, check their current role
+          final isDriverActive = snapshot.data!['is_active'] ?? false; // Example field
+          buttonText = isDriverActive ? "Switch to Customer" : "Switch to Driver";
+          onPressed = () {
+            // TODO: Implement role switching logic (e.g., update a 'role' field in the user or driver document)
+            // For now, just print a message
+            print("Role switch button pressed. Implement role switch here.");
+          };
+        } else {
+          // User is NOT a driver
+          onPressed = () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => DriverRegistrationScreen()),
+            );
+          };
+        }
+
+        return Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: ElevatedButton(
+            onPressed: onPressed,
+            child: Text(buttonText),
+          ),
+        );
+      },
+    );
+  }
 }
+

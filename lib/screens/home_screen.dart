@@ -3,8 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/user_service.dart';
 import '../models/user_model.dart';
-import '../theme/app_theme.dart';
-import '../utils/ui_utils.dart';
 import 'customer_home.dart';
 import 'driver_home.dart';
 import 'admin_home.dart';
@@ -162,11 +160,20 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     if (_userModel == null) {
-      return const Center(child: CircularProgressIndicator());
+      // Use Scaffold for consistent background
+      return Scaffold(
+        body: Center(child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary)),
+      );
     }
 
     if (_errorMessage != null) {
-      return Center(child: Text(_errorMessage!));
+      // Use Scaffold and theme colors/styles for error
+      return Scaffold(
+        body: Center(child: Text(
+          _errorMessage!,
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.error),
+        )),
+      );
     }
 
     if (_userModel!.role == null) {
@@ -181,13 +188,19 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           );
         });
-        return const Center(child: CircularProgressIndicator());
+        // Show loading indicator while navigating
+        return Scaffold(
+          body: Center(child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary)),
+        );
       }
-      return const Center(child: CircularProgressIndicator());
+      // Fallback loading indicator if navigation fails or is delayed
+      return Scaffold(
+        body: Center(child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary)),
+      );
     }
     return _buildMainScreen(_userModel!.role!);
   }
-
+  
     Widget _buildMainScreen(String role) {
       return Scaffold(
         drawer: const AppDrawer(),
@@ -195,16 +208,20 @@ class _HomeScreenState extends State<HomeScreen> {
         bottomNavigationBar: BottomNavigationBar(
           items: _getNavigationItems(role),
           currentIndex: _selectedIndex,
-          selectedItemColor: AppThemes.lightTheme.primaryColor,
-          unselectedItemColor: hintTextColor,
+          // Use theme colors
+          selectedItemColor: Theme.of(context).colorScheme.primary,
+          unselectedItemColor: Theme.of(context).hintColor, // Use theme hint color
           onTap: _onItemTapped,
-          backgroundColor: AppThemes.lightTheme.scaffoldBackgroundColor,
+          backgroundColor: Theme.of(context).colorScheme.surface, // Use theme surface color
+          type: BottomNavigationBarType.fixed, // Ensures background color is applied
         ),
         floatingActionButton: Builder(
           builder: (context) => FloatingActionButton(
             onPressed: () => Scaffold.of(context).openDrawer(),
+            // Use theme colors for FAB
+            backgroundColor: Theme.of(context).colorScheme.surface,
+            foregroundColor: Theme.of(context).colorScheme.onSurface,
             child: const Icon(Icons.menu),
-            backgroundColor: AppThemes.lightTheme.scaffoldBackgroundColor,
           ),
         ),
         floatingActionButtonLocation: FloatingActionButtonLocation.startTop,
