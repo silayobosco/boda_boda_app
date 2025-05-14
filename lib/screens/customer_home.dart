@@ -243,6 +243,8 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
     );
   }
 
+  //
+  // Load search history from SharedPreferences
   Future<void> _loadSearchHistory() async {
   final prefs = await SharedPreferences.getInstance();
   final List<String>? storedHistory = prefs.getStringList('search_history');
@@ -253,6 +255,18 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
       });
     }
   }
+
+  void _updateSearchHistory(String address) {
+    if (address.isNotEmpty && !_searchHistory.contains(address)) {
+      setState(() {
+        _searchHistory.insert(0, address);
+        if (_searchHistory.length > 8) {
+          _searchHistory.removeLast(); // Keep max 8 items
+        }
+      });
+      _saveSearchHistory();
+    }
+  } 
 
   Future<void> _saveSearchHistory() async {
   final prefs = await SharedPreferences.getInstance();
@@ -279,13 +293,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
         final Placemark place = placemarks.first;
         String address = _formatAddress(place);
         controller.text = address;
-        if (!_searchHistory.contains(address)) {
-          setState(() => _searchHistory.insert(0, address));
-        }
-        if (_searchHistory.length > 8) {
-          setState(() => _searchHistory.removeLast()); // Keep max 50 items
-        }
-        _saveSearchHistory(); // <--- CALL saving function here ✅
+             _updateSearchHistory(address); // <--- CALL saving function here ✅
       } else {
         throw Exception('No placemarks found');
       }
@@ -346,28 +354,28 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
         _markers.removeWhere((marker) => marker.markerId == const MarkerId('dropoff'));
         _markers.add(
           Marker(
-            markerId: const MarkerId('dropoff'),
+      markerId: const MarkerId('dropoff'),
             position: location,
             infoWindow: const InfoWindow(title: 'Drop-off'),
-            icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+      icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
           ),
         );
       });
     }
   }
-
+  
   void _updateStopMarker(int index, LatLng location) {
     setState(() {
       _markers.removeWhere((marker) => marker.markerId == MarkerId('stop_$index'));
       _markers.add(
         Marker(
-          markerId: MarkerId('stop_$index'),
+      markerId: MarkerId('stop_$index'),
           position: location,
           infoWindow: InfoWindow(title: 'Stop ${index + 1}'),
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
-          zIndex: index.toDouble(),
+      icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
+      zIndex: index.toDouble(),
         ),
-      );
+    );
     });
   }
 
@@ -417,17 +425,21 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
   Future<void> _drawRoute() async {
   if (_pickupLocation == null || _dropOffLocation == null) return;
 
+  // Format waypoints for the API
   final waypoints = _stops
       .where((s) => s.location != null)
       .map((s) => '${s.location!.latitude},${s.location!.longitude}')
-      .join('|'); // waypoints in Google format
+      .join('|');
 
   final origin = '${_pickupLocation!.latitude},${_pickupLocation!.longitude}';
   final destination = '${_dropOffLocation!.latitude},${_dropOffLocation!.longitude}';
-  
+
+  // Build the API URL
   final url = Uri.parse(
-    'https://maps.googleapis.com/maps/api/directions/json?origin=$origin&destination=$destination&key=$_googlePlacesApiKey'
-    + (waypoints.isNotEmpty ? '&waypoints=$waypoints' : ''),
+    'https://maps.googleapis.com/maps/api/directions/json?'
+    'origin=$origin&destination=$destination&key=$_googlePlacesApiKey'
+    '${waypoints.isNotEmpty ? '&waypoints=$waypoints' : ''}'
+    '&alternatives=true', // Request alternative routes
   );
 
   try {
@@ -435,28 +447,53 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body);
+
       if (data['status'] == 'OK') {
-        final List<LatLng> routePoints = _decodePolyline(data['routes'][0]['overview_polyline']['points']);
-        final route = data['routes'][0];
-        final leg = route['legs'][0];
+        final routes = data['routes'] as List;
 
         setState(() {
+          _polylines.clear(); // Clear existing polylines
           _isLoadingRoute = true;
-          _polylines.clear();
-          _polylines.add(Polyline(
-            polylineId: const PolylineId('route'), // Consider using Theme.of(context).primaryColor
-            color: Colors.blue,
-            width: 5,
-            points: routePoints,
-          ));
-          
-          _routeDistance = leg['distance']['text']; // e.g. "4.5 km"
-          _routeDuration = leg['duration']['text']; // e.g. "12 mins"
+
+          // Add all routes to the map
+          for (int i = 0; i < routes.length; i++) {
+            final route = routes[i];
+            final routePoints = _decodePolyline(route['overview_polyline']['points']);
+            final leg = route['legs'][0];
+
+            _polylines.add(Polyline(
+              polylineId: PolylineId('route_$i'),
+              color: i == 0 ? Colors.blue : Colors.grey, // Highlight the first route
+              width: i == 0 ? 6 : 4, // Make the primary route thicker
+              points: routePoints,
+              onTap: () {
+                // Handle route selection if needed
+                // print('Selected route $i');
+                setState(() {
+                  // Highlight the selected route
+                  _polylines.forEach((polyline) {
+                    polyline = polyline.copyWith(
+                      colorParam: polyline.polylineId == PolylineId('route_$i') ? Colors.blue : Colors.grey,
+                      widthParam: polyline.polylineId == PolylineId('route_$i') ? 6 : 4,
+                    );
+                  });
+                });
+              },
+            ));
+
+            // Update route distance and duration for the primary route
+            if (i == 0) {
+              _routeDistance = leg['distance']['text']; // e.g., "4.5 km"
+              _routeDuration = leg['duration']['text']; // e.g., "12 mins"
+            }
+          }
+
+          // Adjust the camera to fit all routes
+          final allPoints = routes
+              .expand((route) => _decodePolyline(route['overview_polyline']['points']))
+              .toList();
           _mapController?.animateCamera(
-            CameraUpdate.newLatLngBounds(
-              _boundsFromLatLngList(routePoints),
-              100,
-            ),
+            CameraUpdate.newLatLngBounds(_boundsFromLatLngList(allPoints), 100),
           );
         });
       } else {
@@ -470,10 +507,11 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
   }
   _checkRouteReady();
   setState(() {
-  _isLoadingRoute = false;
-});
- }
+    _isLoadingRoute = false;
+  });
+}
 
+  // Decode the polyline from the Directions API
  List<LatLng> _decodePolyline(String encoded) {
   List<LatLng> points = [];
   int index = 0, len = encoded.length;
@@ -570,6 +608,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
     if (placeDetails != null) {
       final latLng = ll.LatLng(placeDetails['latitude'], placeDetails['longitude']);
       final address = suggestion['description'] ?? '';
+
       setState(() {
         _dropOffLocation = latLng;
         _updateGoogleDropOffMarker(LatLng(latLng.latitude, latLng.longitude));
@@ -577,15 +616,9 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
         _destinationSuggestions = [];
         
        // 🔥 Insert into search history if not duplicate
-      if (address.isNotEmpty && !_searchHistory.contains(address)) {
-        _searchHistory.insert(0, address);
-        if (_searchHistory.length > 8) {
-          _searchHistory.removeLast(); // Keep max 8 items
-        }
-        _saveSearchHistory(); // <--- CALL saving function here ✅
-      }
+        _updateSearchHistory(address);
         _editingDestination = false;
-        _destinationFocusNode.unfocus();  
+        _destinationFocusNode.unfocus();
       });
       // Only reverse geocode if no description or too short
       if ((suggestion['description'] != null && (suggestion['description'] as String).length < 5)) {
@@ -595,9 +628,10 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
       _drawRoute();
       _collapseSheet();
     }
-    _checkRouteReady();
+      _checkRouteReady();
   }
 
+  // Handle pickup, drop-off, and stop selection
   Future<void> _handlePickupSelected(Map<String, dynamic> suggestion) async {
   final placeDetails = await _getPlaceDetails(suggestion['place_id']);
   if (placeDetails != null) {
@@ -610,13 +644,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
       _pickupSuggestions = [];
       
      // 🔥 Insert into search history if not duplicate
-      if (address.isNotEmpty && !_searchHistory.contains(address)) {
-        _searchHistory.insert(0, address);
-        if (_searchHistory.length > 8) {
-          _searchHistory.removeLast(); // Keep max 8 items
-        }
-        _saveSearchHistory(); // <--- CALL saving function here ✅
-      }
+        _updateSearchHistory(address);
         _editingPickup = false;
         _pickupFocusNode.unfocus();  
     });
@@ -645,13 +673,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
       _stopSuggestions = [];
       
        // 🔥 Insert into search history if not duplicate
-      if (address.isNotEmpty && !_searchHistory.contains(address)) {
-        _searchHistory.insert(0, address);
-        if (_searchHistory.length > 8) {
-          _searchHistory.removeLast(); // Keep max 8 items
-        }
-        _saveSearchHistory(); // <--- CALL saving function here ✅
-      }
+        _updateSearchHistory(address);
         _editingStopIndex = null;
         _destinationFocusNode.unfocus();
     });
@@ -1149,6 +1171,8 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                                       if (value.isNotEmpty) {
                                         final suggestions = await _getGooglePlacesSuggestions(value);
                                         setState(() => _pickupSuggestions = suggestions);
+                                      } else {
+                                        setState(() => _pickupSuggestions = []); // Show search history if empty
                                       }
                                     },
                                     onSubmitted: (_) {
@@ -1265,6 +1289,8 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                                       if (value.isNotEmpty) {
                                         final suggestions = await _getGooglePlacesSuggestions(value);
                                         setState(() => _destinationSuggestions = suggestions);
+                                      } else {
+                                        setState(() => _pickupSuggestions = []); // Show search history when empty
                                       }
                                     },
                                     onSubmitted: (_) {

@@ -1,0 +1,14 @@
+<component name="libraryTable">
+  <library name="Gradle: com.getkeepsafe.relinker:relinker:1.4.5@aar" external-system-id="GRADLE">
+    <CLASSES>
+      <root url="file://$PROJECT_DIR$/../../../../../Gradle/gradle-8.13-all/gradle-8.13/caches/8.11.1/transforms/453cc284fc0a855c4f6bf7faf9f778cd/transformed/jetified-relinker-1.4.5/AndroidManifest.xml" />
+      <root url="jar://$PROJECT_DIR$/../../../../../Gradle/gradle-8.13-all/gradle-8.13/caches/8.11.1/transforms/453cc284fc0a855c4f6bf7faf9f778cd/transformed/jetified-relinker-1.4.5/jars/classes.jar!/" />
+    </CLASSES>
+    <JAVADOC>
+      <root url="jar://$PROJECT_DIR$/../../../../../Gradle/gradle-8.13-all/gradle-8.13/caches/modules-2/files-2.1/com.getkeepsafe.relinker/relinker/1.4.5/cdc093763b523b5a92a6d0e6f57f6fab317768fa/relinker-1.4.5-javadoc.jar!/" />
+    </JAVADOC>
+    <SOURCES>
+      <root url="jar://$PROJECT_DIR$/../../../../../Gradle/gradle-8.13-all/gradle-8.13/caches/modules-2/files-2.1/com.getkeepsafe.relinker/relinker/1.4.5/2befb1e893cd0ae3bbc79ddd195722c4087714a4/relinker-1.4.5-sources.jar!/" />
+    </SOURCES>
+  </library>
+</component>

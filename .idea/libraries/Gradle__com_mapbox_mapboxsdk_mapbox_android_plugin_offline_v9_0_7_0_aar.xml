@@ -1,0 +1,13 @@
+<component name="libraryTable">
+  <library name="Gradle: com.mapbox.mapboxsdk:mapbox-android-plugin-offline-v9:0.7.0@aar" external-system-id="GRADLE">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/../../../../../Gradle/gradle-8.13-all/gradle-8.13/caches/8.11.1/transforms/0f6f6e586ea479d01bf71ccca2ddc4c3/transformed/jetified-mapbox-android-plugin-offline-v9-0.7.0/jars/classes.jar!/" />
+      <root url="file://$PROJECT_DIR$/../../../../../Gradle/gradle-8.13-all/gradle-8.13/caches/8.11.1/transforms/0f6f6e586ea479d01bf71ccca2ddc4c3/transformed/jetified-mapbox-android-plugin-offline-v9-0.7.0/res" />
+      <root url="file://$PROJECT_DIR$/../../../../../Gradle/gradle-8.13-all/gradle-8.13/caches/8.11.1/transforms/0f6f6e586ea479d01bf71ccca2ddc4c3/transformed/jetified-mapbox-android-plugin-offline-v9-0.7.0/AndroidManifest.xml" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES>
+      <root url="jar://$PROJECT_DIR$/../../../../../Gradle/gradle-8.13-all/gradle-8.13/caches/modules-2/files-2.1/com.mapbox.mapboxsdk/mapbox-android-plugin-offline-v9/0.7.0/fcd94b540dc12de6c77ed178628fb395afb17192/mapbox-android-plugin-offline-v9-0.7.0-sources.jar!/" />
+    </SOURCES>
+  </library>
+</component>

@@ -1,0 +1,16 @@
+<component name="libraryTable">
+  <library name="Gradle: com.google.firebase:firebase-messaging:24.1.1@aar" external-system-id="GRADLE">
+    <ANNOTATIONS>
+      <root url="jar://$PROJECT_DIR$/../../../../../Gradle/gradle-8.13-all/gradle-8.13/caches/8.11.1/transforms/0453692b55c9b986efb99d6fe4519974/transformed/jetified-firebase-messaging-24.1.1/annotations.zip!/" />
+    </ANNOTATIONS>
+    <CLASSES>
+      <root url="file://$PROJECT_DIR$/../../../../../Gradle/gradle-8.13-all/gradle-8.13/caches/8.11.1/transforms/0453692b55c9b986efb99d6fe4519974/transformed/jetified-firebase-messaging-24.1.1/res" />
+      <root url="file://$PROJECT_DIR$/../../../../../Gradle/gradle-8.13-all/gradle-8.13/caches/8.11.1/transforms/0453692b55c9b986efb99d6fe4519974/transformed/jetified-firebase-messaging-24.1.1/AndroidManifest.xml" />
+      <root url="jar://$PROJECT_DIR$/../../../../../Gradle/gradle-8.13-all/gradle-8.13/caches/8.11.1/transforms/0453692b55c9b986efb99d6fe4519974/transformed/jetified-firebase-messaging-24.1.1/jars/classes.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES>
+      <root url="jar://$PROJECT_DIR$/../../../../../Gradle/gradle-8.13-all/gradle-8.13/caches/modules-2/files-2.1/com.google.firebase/firebase-messaging/24.1.1/67217545fd51cebe54d1d8e052026c089e721df0/firebase-messaging-24.1.1-sources.jar!/" />
+    </SOURCES>
+  </library>
+</component>

@@ -18,37 +18,16 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   bool _navigatedToAdditionalInfo = false;
-  String? _errorMessage;
-  String? _userRole;
+  // String? _errorMessage; // Error will be handled by StreamBuilder
   int _selectedIndex = 0;
-  UserModel? _userModel;
+  // UserModel? _userModel; // UserModel will come from StreamBuilder
   final UserService _userService = UserService();
+  User? _currentUser; // Store the current Firebase user
 
   @override
   void initState() {
     super.initState();
-    _loadUserData();
-  }
-
-  Future<void> _loadUserData() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      try {
-        final userModel = await _userService.getUserModel(user.uid);
-        setState(() {
-          _userModel = userModel;
-        });
-      } catch (e) {
-        setState(() {
-          _errorMessage = "Error loading user data: $e";
-        });
-      }
-    } else {
-      // Handle the case where the user is not logged in
-      setState(() {
-        _errorMessage = "User not logged in";
-      });
-    }
+    _currentUser = FirebaseAuth.instance.currentUser;
   }
 
   List<BottomNavigationBarItem> _getNavigationItems(String role) {
@@ -159,46 +138,86 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_userModel == null) {
-      // Use Scaffold for consistent background
+    if (_currentUser == null) {
+      // This case should ideally be handled by a root-level auth listener
+      // that navigates to LoginScreen if no user is signed in.
+      // For now, providing a fallback UI.
       return Scaffold(
-        body: Center(child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary)),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text("Not authenticated. Please log in.", style: TextStyle(color: Theme.of(context).colorScheme.error)),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () {
+                  // Example: Navigate to login, adjust route as needed
+                  Navigator.of(context).pushReplacementNamed('/login'); // Ensure '/login' route exists
+                },
+                child: const Text("Go to Login"),
+              )
+            ],
+          ),
+        ),
       );
     }
 
-    if (_errorMessage != null) {
-      // Use Scaffold and theme colors/styles for error
-      return Scaffold(
-        body: Center(child: Text(
-          _errorMessage!,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.error),
-        )),
-      );
-    }
-
-    if (_userModel!.role == null) {
-      if (!_navigatedToAdditionalInfo) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _navigatedToAdditionalInfo = true;
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder:
-                  (context) => AdditionalInfoScreen(userUid: _userModel!.uid!),
-            ),
+    return StreamBuilder<UserModel?>(
+      stream: _userService.getUserModelStream(_currentUser!.uid),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Scaffold(
+            body: Center(child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary)),
           );
-        });
-        // Show loading indicator while navigating
-        return Scaffold(
-          body: Center(child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary)),
-        );
-      }
-      // Fallback loading indicator if navigation fails or is delayed
-      return Scaffold(
-        body: Center(child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary)),
-      );
-    }
-    return _buildMainScreen(_userModel!.role!);
+        }
+
+        if (snapshot.hasError) {
+          return Scaffold(
+            body: Center(child: Text(
+              "Error loading user data: ${snapshot.error}",
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.error),
+            )),
+          );
+        }
+
+        final userModel = snapshot.data;
+
+        if (userModel == null || userModel.uid == null) {
+          // User document doesn't exist or is incomplete.
+          // This could be a new user who needs to go to AdditionalInfoScreen,
+          // or an error state if a logged-in user has no Firestore doc.
+          // The logic below for userModel.role == null will handle AdditionalInfoScreen.
+          // If userModel is truly null (doc doesn't exist), you might want to create it
+          // or navigate to a specific "create profile" screen.
+          // For now, we let the role check handle it.
+        }
+
+        // Handle navigation to AdditionalInfoScreen if role is missing
+        if (userModel?.role == null) {
+          if (!_navigatedToAdditionalInfo) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) { // Ensure widget is still in the tree
+                _navigatedToAdditionalInfo = true;
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => AdditionalInfoScreen(userUid: _currentUser!.uid),
+                  ),
+                );
+              }
+            });
+          }
+          // Show loading indicator while navigating or if stuck
+          return Scaffold(
+            body: Center(child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary)),
+          );
+        }
+        // If role is present, reset the flag (in case user went back from AdditionalInfoScreen without completing)
+        _navigatedToAdditionalInfo = false;
+
+        return _buildMainScreen(userModel!.role!);
+      },
+    );
   }
   
     Widget _buildMainScreen(String role) {

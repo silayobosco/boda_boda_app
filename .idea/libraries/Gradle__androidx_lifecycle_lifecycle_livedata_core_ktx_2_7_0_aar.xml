@@ -1,0 +1,13 @@
+<component name="libraryTable">
+  <library name="Gradle: androidx.lifecycle:lifecycle-livedata-core-ktx:2.7.0@aar" external-system-id="GRADLE">
+    <CLASSES>
+      <root url="file://$PROJECT_DIR$/../../../../../Gradle/gradle-8.13-all/gradle-8.13/caches/8.11.1/transforms/b91e7066277fe050a5dbfde4c2be1dc7/transformed/jetified-lifecycle-livedata-core-ktx-2.7.0/res" />
+      <root url="jar://$PROJECT_DIR$/../../../../../Gradle/gradle-8.13-all/gradle-8.13/caches/8.11.1/transforms/b91e7066277fe050a5dbfde4c2be1dc7/transformed/jetified-lifecycle-livedata-core-ktx-2.7.0/jars/classes.jar!/" />
+      <root url="file://$PROJECT_DIR$/../../../../../Gradle/gradle-8.13-all/gradle-8.13/caches/8.11.1/transforms/b91e7066277fe050a5dbfde4c2be1dc7/transformed/jetified-lifecycle-livedata-core-ktx-2.7.0/AndroidManifest.xml" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES>
+      <root url="jar://$PROJECT_DIR$/../../../../../Gradle/gradle-8.13-all/gradle-8.13/caches/modules-2/files-2.1/androidx.lifecycle/lifecycle-livedata-core-ktx/2.7.0/679a0782faddfa90863d19babbe2b44ded7d13b/lifecycle-livedata-core-ktx-2.7.0-sources.jar!/" />
+    </SOURCES>
+  </library>
+</component>

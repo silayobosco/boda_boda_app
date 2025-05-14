@@ -11,17 +11,13 @@ module.exports = {
     "google",
   ],
   rules: {
-    "eol-last": 0,
-    "no-multiple-empty-lines": ["error", {"max": 1, "maxEOF": 0}],
-    "linebreak-style": ["error", "unix"],
-    "max-len": ["error", 80],
-    "require-jsdoc": "error",
-    "arrow-parens": ["error", "always"],
-    "comma-dangle": ["error", "always-multiline"],
-    "object-curly-spacing": ["error", "never"],
     "no-restricted-globals": ["error", "name", "length"],
     "prefer-arrow-callback": "error",
-    "quotes": ["error", "double", {"allowTemplateLiterals": true}],
+    "quotes": ["error", "double", { "allowTemplateLiterals": true }],
+    "eol-last": "off",
+    "max-len": ["warn", { "code": 120 }], // Allow lines up to 120 characters
+    // "indent": ["error", 2], // Enforce 2 spaces for indentation
+    "object-curly-spacing": ["error", "always"], // Enforce spacing inside curly braces
   },
   overrides: [
     {
@@ -29,15 +25,7 @@ module.exports = {
       env: {
         mocha: true,
       },
-      rules: {
-        "quotes": ["error", "double"],
-        "linebreak-style": ["error", "unix"],
-        "max-len": ["error", 80],
-        "require-jsdoc": "error",
-        "arrow-parens": ["error", "always"],
-        "comma-dangle": ["error", "always-multiline"],
-        "object-curly-spacing": ["error", "never"],
-      },
+      rules: {},
     },
   ],
   globals: {},

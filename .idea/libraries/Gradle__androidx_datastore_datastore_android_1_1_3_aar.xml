@@ -1,0 +1,13 @@
+<component name="libraryTable">
+  <library name="Gradle: androidx.datastore:datastore-android:1.1.3@aar" external-system-id="GRADLE">
+    <CLASSES>
+      <root url="file://$PROJECT_DIR$/../../../../../Gradle/gradle-8.13-all/gradle-8.13/caches/8.11.1/transforms/891f458d592f275090a21a03dd61173d/transformed/jetified-datastore-release/res" />
+      <root url="jar://$PROJECT_DIR$/../../../../../Gradle/gradle-8.13-all/gradle-8.13/caches/8.11.1/transforms/891f458d592f275090a21a03dd61173d/transformed/jetified-datastore-release/jars/classes.jar!/" />
+      <root url="file://$PROJECT_DIR$/../../../../../Gradle/gradle-8.13-all/gradle-8.13/caches/8.11.1/transforms/891f458d592f275090a21a03dd61173d/transformed/jetified-datastore-release/AndroidManifest.xml" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES>
+      <root url="jar://$PROJECT_DIR$/../../../../../Gradle/gradle-8.13-all/gradle-8.13/caches/modules-2/files-2.1/androidx.datastore/datastore-android/1.1.3/f373c2d607dac74728c3f15eb0fc9b70dae0964e/datastore-android-1.1.3-sources.jar!/" />
+    </SOURCES>
+  </library>
+</component>

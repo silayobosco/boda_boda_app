@@ -1,6 +1,5 @@
-const functions = require("firebase-functions");
+const { onDocumentCreated, onDocumentUpdated, onDocumentDeleted } = require("firebase-functions/v2/firestore");
 const admin = require("firebase-admin");
-admin.initializeApp();
 
 /**
  * Helper function to calculate distance (Haversine formula - simplified)
@@ -26,35 +25,68 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
 }
 
 /**
- * Helper function to find the nearest Kijiwes
- * @param {object} pickupLocation - Pickup location with latitude/longitude
- * @param {string} currentKijiweId - Current Kijiwe ID to exclude
+ * Helper function to find the nearest Kijiwes based on an address.
+ * This function uses the Geocoding API to convert the address to coordinates
+ * and then finds the nearest Kijiwes.
+ * @param {string} pickupAddress - Pickup address
  * @param {number} maxResults - Maximum results to return
  * @return {Promise<Array<string>>} Array of nearest Kijiwe IDs
  */
-async function findNearestKijiwes(
-    pickupLocation,
-    currentKijiweId,
-    maxResults = 3,
-) {
-  const kijiwesSnapshot = await admin.firestore().collection("Kijiwes").get();
-  const kijiwes = [];
-  kijiwesSnapshot.forEach((doc) => {
-    const kijiwe = doc.data();
-    if (doc.id !== currentKijiweId) {
-      // Don't include the current Kijiwe
-      const distance = calculateDistance(
+async function findNearestKijiwesByAddress(pickupAddress, maxResults = 3) {
+  try {
+    const geocodeResult = await admin.firestore().collection("geocoding").doc(pickupAddress).get();
+    let pickupLocation;
+    if (geocodeResult.exists && geocodeResult.data() && geocodeResult.data().latitude && geocodeResult.data().longitude) {
+      pickupLocation = {
+        latitude: geocodeResult.data().latitude,
+        longitude: geocodeResult.data().longitude,
+      };
+    } else {
+      // Geocoding API call to get coordinates from address
+      const apiKey = process.env.GOOGLE_MAPS_API_KEY; // Ensure you have this environment variable set
+      if (!apiKey) {
+        console.error("Google Maps API key not found in environment variables.");
+        return [];
+      }
+      const geocodingApiUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(pickupAddress)}&key=${apiKey}`;
+      const response = await fetch(geocodingApiUrl);
+      const data = await response.json();
+
+      if (data.results && data.results.length > 0) {
+        const location = data.results[0].geometry.location;
+        pickupLocation = {
+          latitude: location.lat,
+          longitude: location.lng,
+        };
+        // Cache the geocoding result
+        await admin.firestore().collection("geocoding").doc(pickupAddress).set(pickupLocation, { merge: true });
+      } else {
+        console.error("Geocoding failed for address:", pickupAddress, data.status, data.error_message);
+        return [];
+      }
+    }
+
+    const kijiwesSnapshot = await admin.firestore().collection("Kijiwes").get();
+    const kijiwes = [];
+    kijiwesSnapshot.forEach((doc) => {
+      const kijiwe = doc.data();
+      if (kijiwe.location && pickupLocation) {
+        const distance = calculateDistance(
           pickupLocation.latitude,
           pickupLocation.longitude,
           kijiwe.location.latitude,
           kijiwe.location.longitude,
-      );
-      kijiwes.push({id: doc.id, distance});
-    }
-  });
+        );
+        kijiwes.push({ id: doc.id, distance });
+      }
+    });
 
-  kijiwes.sort((a, b) => a.distance - b.distance); // Sort by distance
-  return kijiwes.slice(0, maxResults).map((k) => k.id); // Return only the IDs
+    kijiwes.sort((a, b) => a.distance - b.distance);
+    return kijiwes.slice(0, maxResults).map((k) => k.id);
+  } catch (error) {
+    console.error("Error finding nearest Kijiwes by address:", error);
+    return [];
+  }
 }
 
 /**
@@ -94,196 +126,142 @@ async function sendDriverNotification(userId, message) {
 
 /**
  * Cloud Function to match ride requests with available drivers
- * @type {functions.CloudFunction<functions.firestore.DocumentSnapshot>}
  */
-exports.matchRideRequest = functions.firestore
-    .document("/RideRequests/{rideRequestId}")
-    .onCreate(async (snap, context) => {
-      const rideRequestData = snap.data();
-      let currentKijiweId = rideRequestData.kijiweId;
-      let searchCount = 0;
-      const MAX_SEARCH_KIJIWES = 3; // Limit the search
+exports.matchRideRequest = onDocumentCreated("/RideRequests/{rideRequestId}", async (event) => {
+  const snap = event.data;
+  const rideRequestData = snap.data();
+  const pickupAddress = rideRequestData.pickupAddress;
+  let searchCount = 0;
+  const MAX_SEARCH_KIJIWES = 3;
 
-      while (searchCount < MAX_SEARCH_KIJIWES && currentKijiweId) {
-        const kijiweQueueRef = admin
-            .firestore()
-            .collection("KijiweQueues")
-            .doc(currentKijiweId);
-        const kijiweQueueDoc = await kijiweQueueRef.get();
+  const nearestKijiwes = await findNearestKijiwesByAddress(pickupAddress, MAX_SEARCH_KIJIWES);
+  let kijiweIndex = 0;
+  let assignedDriverId = null;
 
-        if (kijiweQueueDoc.exists) {
-          const driverIds = kijiweQueueDoc.data().driverIds || [];
-          for (let i = 0; i < driverIds.length; i++) {
-            // Explicitly iterate by index
-            const userId = driverIds[i]; // (from Users collection)
-            const userDoc = await admin.firestore()
-                .collection("Users").doc(userId).get();
+  while (kijiweIndex < nearestKijiwes.length && !assignedDriverId) {
+    const currentKijiweId = nearestKijiwes[kijiweIndex];
+    const kijiweQueueRef = admin.firestore().collection("KijiweQueues").doc(currentKijiweId);
+    const kijiweQueueDoc = await kijiweQueueRef.get();
 
-            if (
-              userDoc.exists &&
-              userDoc.data().role.includes("Driver") &&
-              userDoc.data().driverDetails &&
-              userDoc.data().driverDetails.available
-            ) {
-              // Match found!
-              await snap.ref.update({
-                status: "accepted",
-                assignedDriverId: userId,
-              });
+    if (kijiweQueueDoc.exists) {
+      const driverIds = kijiweQueueDoc.data().driverIds || [];
+      for (const userId of driverIds) {
+        const userDoc = await admin.firestore().collection("Users").doc(userId).get();
 
-              // Remove driver from queue (atomically)
-              await kijiweQueueRef.update({
-                driverIds: admin.firestore.FieldValue.arrayRemove(userId),
-              });
+        if (
+          userDoc.exists &&
+          userDoc.data().role.includes("Driver") &&
+          userDoc.data().driverDetails &&
+          userDoc.data().driverDetails.available
+        ) {
+          // Match found!
+          assignedDriverId = userId;
+          await snap.ref.update({
+            status: "accepted",
+            assignedDriverId: userId,
+          });
 
-              // Send notifications (using sendDriverNotification from above)
-              try {
-                await sendDriverNotification(
-                    userId,
-                    "You have a new ride request!",
-                );
-                // ... send customer notification (implement this function)
-              } catch (error) {
-                console.error("Error sending notifications:", error);
-              }
+          // Remove driver from queue
+          await kijiweQueueRef.update({
+            driverIds: admin.firestore.FieldValue.arrayRemove(userId),
+          });
 
-              return; // Exit the function
-            }
+          // Send notifications
+          try {
+            await sendDriverNotification(userId, "You have a new ride request!");
+            // ... send customer notification (implement this function)
+          } catch (error) {
+            console.error("Error sending notifications:", error);
           }
-
-          // No match in this Kijiwe - Notify Leader
-          const kijiweDoc = await admin.firestore()
-              .collection("Kijiwes")
-              .doc(currentKijiweId)
-              .get();
-          if (kijiweDoc.exists) {
-            const kijiweLeaderId = kijiweDoc.data().leaderId;
-            if (kijiweLeaderId) {
-              try {
-                await sendDriverNotification(
-                    kijiweLeaderId,
-                    "No driver available for a ride request at your Kijiwe!",
-                );
-              } catch (error) {
-                console.error("Error sending leader notification:", error);
-              }
-            }
-          }
-
-          // Calculate next nearest Kijiwe
-          const nearestKijiwes = await findNearestKijiwes(
-              rideRequestData.pickupLocation,
-              currentKijiweId,
-          );
-          currentKijiweId =
-            nearestKijiwes.length > 0 ? nearestKijiwes[0] : null;
-
-          if (currentKijiweId) {
-            searchCount++;
-          } else {
-            break; // No more Kijiwes to search
-          }
-        } else {
-          break; // Kijiwe doesn't exist (error condition)
+          break; // Exit the inner loop once a driver is assigned
         }
       }
 
-      // No match found after searching all Kijiwes
-      await snap.ref.update({status: "pending"});
-      // ... notify customer
-    });
+       }
+    kijiweIndex++;
+  }
+
+  // No match found after searching nearest Kijiwes
+  if (!assignedDriverId) {
+    await snap.ref.update({ status: "pending" });
+    // ... notify customer about no available drivers
+  }
+});
 
 /**
  * Cloud Function to handle ride request updates
- * @type {functions.CloudFunction<functions.firestore.DocumentSnapshot>}
  */
-exports.updateRideRequest = functions.firestore
-    .document("/RideRequests/{rideRequestId}")
-    .onUpdate(async (change, context) => {
-      const beforeData = change.before.data();
-      const afterData = change.after.data();
+exports.updateRideRequest = onDocumentUpdated("/RideRequests/{rideRequestId}", async (event) => {
+  const beforeData = event.data.before.data();
+  const afterData = event.data.after.data();
 
-      if (beforeData.status !== afterData.status) {
-        // Handle status change
-        if (afterData.status === "completed") {
-          // Notify customer and driver about ride completion
-          await sendDriverNotification(
-              afterData.assignedDriverId,
-              "Your ride has been completed!",
-          );
-          // ... notify customer
-        }
-      }
-    });
+  if (beforeData.status !== afterData.status) {
+    // Handle status change
+    if (afterData.status === "completed") {
+      // Notify customer and driver about ride completion
+      await sendDriverNotification(
+          afterData.assignedDriverId,
+          "Your ride has been completed!",
+      );
+      // ... notify customer
+    }
+  }
+});
 
 /**
  * Cloud Function to handle ride request deletions
- * @type {functions.CloudFunction<functions.firestore.DocumentSnapshot>}
  */
-exports.deleteRideRequest = functions.firestore
-    .document("/RideRequests/{rideRequestId}")
-    .onDelete(async (snap, context) => {
-      const rideRequestData = snap.data();
-      const assignedDriverId = rideRequestData.assignedDriverId;
+exports.deleteRideRequest = onDocumentDeleted("/RideRequests/{rideRequestId}", async (event) => {
+  const rideRequestData = event.data;
+  const assignedDriverId = rideRequestData.assignedDriverId;
 
-      if (assignedDriverId) {
-        // Notify driver about ride request deletion
-        await sendDriverNotification(
-            assignedDriverId,
-            "Your ride request has been deleted!",
-        );
-      }
-    });
+  if (assignedDriverId) {
+    // Notify driver about ride request deletion
+    await sendDriverNotification(
+        assignedDriverId,
+        "Your ride request has been deleted!",
+    );
+  }
+});
 
 /**
  * Cloud Function to handle Kijiwe queue updates
  * @type {functions.CloudFunction<functions.firestore.DocumentSnapshot>}
  */
-exports.updateKijiweQueue = functions.firestore
-    .document("/KijiweQueues/{kijiweId}")
-    .onUpdate(async (change, context) => {
-      const beforeData = change.before.data();
-      const afterData = change.after.data();
+exports.updateKijiweQueue = onDocumentUpdated("/KijiweQueues/{kijiweId}", async (event) => {
+  const beforeData = event.data.before.data();
+  const afterData = event.data.after.data();
 
-      if (beforeData.driverIds.length !== afterData.driverIds.length) {
-        // Handle driver queue changes
-        if (afterData.driverIds.length > beforeData.driverIds.length) {
-          // New driver added to the queue
-          const newDriverId = afterData.driverIds[
-              afterData.driverIds.length - 1
-          ];
-          await sendDriverNotification(
-              newDriverId,
-              "You have been added to the Kijiwe queue!",
-          );
-        } else {
-          // Driver removed from the queue
-          const removedDriverId = beforeData.driverIds[
-              beforeData.driverIds.length - 1
-          ];
-          await sendDriverNotification(
-              removedDriverId,
-              "You have been removed from the Kijiwe queue!",
-          );
-        }
-      }
-    });
+  if (beforeData.driverIds.length !== afterData.driverIds.length) {
+    // Handle driver queue changes
+    if (afterData.driverIds.length > beforeData.driverIds.length) {
+      // New driver added to the queue
+      const newDriverId = afterData.driverIds[afterData.driverIds.length - 1];
+      await sendDriverNotification(
+          newDriverId,
+          "You have been added to the Kijiwe queue!",
+      );
+    } else {
+      // Driver removed from the queue
+      const removedDriverId = beforeData.driverIds[beforeData.driverIds.length - 1];
+      await sendDriverNotification(
+          removedDriverId,
+          "You have been removed from the Kijiwe queue!",
+      );
+    }
+  }
+});
 
-/**
- * Cloud Function to handle Kijiwe updates
- * @type {functions.CloudFunction<functions.firestore.DocumentSnapshot>}
- */
-exports.updateKijiwe = functions.firestore
-    .document("/Kijiwes/{kijiweId}")
-    .onUpdate(async (change, context) => {
-      const beforeData = change.before.data();
-      const afterData = change.after.data();
+exports.updateKijiwe = onDocumentUpdated("/Kijiwes/{kijiweId}", async (event) => {
+  const beforeData = event.data.before.data();
+  const afterData = event.data.after.data();
 
-      if (beforeData.leaderId !== afterData.leaderId) {
-        // Handle Kijiwe leader change
-        await sendDriverNotification(
-            afterData.leaderId,
-            "You are now the leader of this Kijiwe!",
-        );
-      }
-    });
+  if (beforeData.leaderId !== afterData.leaderId) {
+    // Handle Kijiwe leader change
+    await sendDriverNotification(
+        afterData.leaderId,
+        "You are now the leader of this Kijiwe!",
+    );
+  }
+});
+// Add a blank line here

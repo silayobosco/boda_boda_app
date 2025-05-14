@@ -11,6 +11,7 @@
     - unionId: String
     - leaderId: String (userId from Users collection)
     - permanentMembers: Array of Strings (userIds from Users collection)
+    - ueues: Array of maps ( driverId as String of userIDs from Users collection, where role includes "Driver"  and joinedAt as timestamp)
 
 /Users/{userId}  //  Unified User Collection
     - createdAt: Timestamp
@@ -47,6 +48,3 @@
     - kijiweId: String
     - unionId: String
     - fare: Number
-
-/KijiweQueues/{kijiweId}
-    - driverIds: Array of Strings (userIDs from Users collection, where role includes "Driver")

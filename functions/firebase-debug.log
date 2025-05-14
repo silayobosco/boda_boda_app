@@ -1,0 +1,703 @@
+[debug] [2025-05-12T14:21:57.239Z] ----------------------------------------------------------------------
+[debug] [2025-05-12T14:21:57.249Z] Command:       C:\nvm4w\nodejs\node.exe C:\nvm4w\nodejs\node_modules\firebase-tools\lib\bin\firebase.js deploy --only functions
+[debug] [2025-05-12T14:21:57.249Z] CLI Version:   14.3.1
+[debug] [2025-05-12T14:21:57.250Z] Platform:      win32
+[debug] [2025-05-12T14:21:57.250Z] Node Version:  v20.19.1
+[debug] [2025-05-12T14:21:57.250Z] Time:          Mon May 12 2025 17:21:57 GMT+0300 (East Africa Time)
+[debug] [2025-05-12T14:21:57.250Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2025-05-12T14:21:57.532Z] Object "" in "firebase.json" has unknown property: {"additionalProperty":"flutter"}
+[debug] [2025-05-12T14:21:57.539Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2025-05-12T14:21:57.540Z] > authorizing via signed-in user (johnboscosilayo@gmail.com)
+[debug] [2025-05-12T14:21:57.540Z] [iam] checking project bodaboda-b5aa8 for permissions ["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]
+[debug] [2025-05-12T14:21:57.542Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:21:57.543Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:21:57.544Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/bodaboda-b5aa8:testIamPermissions [none]
+[debug] [2025-05-12T14:21:57.545Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/bodaboda-b5aa8:testIamPermissions x-goog-quota-user=projects/bodaboda-b5aa8
+[debug] [2025-05-12T14:21:57.545Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/bodaboda-b5aa8:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]}
+[debug] [2025-05-12T14:21:59.175Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/bodaboda-b5aa8:testIamPermissions 200
+[debug] [2025-05-12T14:21:59.175Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/bodaboda-b5aa8:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]}
+[debug] [2025-05-12T14:21:59.176Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:21:59.176Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:21:59.176Z] >>> [apiv2][query] POST https://iam.googleapis.com/v1/projects/bodaboda-b5aa8/serviceAccounts/bodaboda-b5aa8@appspot.gserviceaccount.com:testIamPermissions [none]
+[debug] [2025-05-12T14:21:59.177Z] >>> [apiv2][body] POST https://iam.googleapis.com/v1/projects/bodaboda-b5aa8/serviceAccounts/bodaboda-b5aa8@appspot.gserviceaccount.com:testIamPermissions {"permissions":["iam.serviceAccounts.actAs"]}
+[debug] [2025-05-12T14:22:00.806Z] <<< [apiv2][status] POST https://iam.googleapis.com/v1/projects/bodaboda-b5aa8/serviceAccounts/bodaboda-b5aa8@appspot.gserviceaccount.com:testIamPermissions 200
+[debug] [2025-05-12T14:22:00.807Z] <<< [apiv2][body] POST https://iam.googleapis.com/v1/projects/bodaboda-b5aa8/serviceAccounts/bodaboda-b5aa8@appspot.gserviceaccount.com:testIamPermissions {"permissions":["iam.serviceAccounts.actAs"]}
+[info] 
+[info] === Deploying to 'bodaboda-b5aa8'...
+[info] 
+[info] i  deploying functions 
+[info] Running command: npm --prefix "$RESOURCE_DIR" run lint
+[info] +  functions: Finished running predeploy script. 
+[debug] [2025-05-12T14:22:02.698Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:02.698Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:02.698Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/bodaboda-b5aa8/services/cloudresourcemanager.googleapis.com [none]
+[debug] [2025-05-12T14:22:02.698Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/bodaboda-b5aa8/services/cloudresourcemanager.googleapis.com x-goog-quota-user=projects/bodaboda-b5aa8
+[debug] [2025-05-12T14:22:04.542Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/bodaboda-b5aa8/services/cloudresourcemanager.googleapis.com 200
+[debug] [2025-05-12T14:22:04.542Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/bodaboda-b5aa8/services/cloudresourcemanager.googleapis.com [omitted]
+[debug] [2025-05-12T14:22:04.543Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:04.543Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:04.543Z] >>> [apiv2][query] GET https://cloudresourcemanager.googleapis.com/v1/projects/bodaboda-b5aa8 [none]
+[debug] [2025-05-12T14:22:05.031Z] <<< [apiv2][status] GET https://cloudresourcemanager.googleapis.com/v1/projects/bodaboda-b5aa8 200
+[debug] [2025-05-12T14:22:05.031Z] <<< [apiv2][body] GET https://cloudresourcemanager.googleapis.com/v1/projects/bodaboda-b5aa8 {"projectNumber":"157804352950","projectId":"bodaboda-b5aa8","lifecycleState":"ACTIVE","name":"BodabodaApp","labels":{"firebase":"enabled","firebase-core":"disabled"},"createTime":"2025-03-02T20:06:41.975832Z"}
+[info] i  functions: preparing codebase default for deployment 
+[info] i  functions: ensuring required API cloudfunctions.googleapis.com is enabled... 
+[debug] [2025-05-12T14:22:05.033Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:05.034Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:05.034Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:05.034Z] Checked if tokens are valid: true, expires at: 1747060874961
+[info] i  functions: ensuring required API cloudbuild.googleapis.com is enabled... 
+[debug] [2025-05-12T14:22:05.035Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:05.035Z] Checked if tokens are valid: true, expires at: 1747060874961
+[info] i  artifactregistry: ensuring required API artifactregistry.googleapis.com is enabled... 
+[debug] [2025-05-12T14:22:05.036Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:05.036Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:05.037Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/bodaboda-b5aa8/services/cloudfunctions.googleapis.com [none]
+[debug] [2025-05-12T14:22:05.037Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/bodaboda-b5aa8/services/cloudfunctions.googleapis.com x-goog-quota-user=projects/bodaboda-b5aa8
+[debug] [2025-05-12T14:22:05.038Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/bodaboda-b5aa8/services/runtimeconfig.googleapis.com [none]
+[debug] [2025-05-12T14:22:05.038Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/bodaboda-b5aa8/services/runtimeconfig.googleapis.com x-goog-quota-user=projects/bodaboda-b5aa8
+[debug] [2025-05-12T14:22:05.041Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/bodaboda-b5aa8/services/cloudbuild.googleapis.com [none]
+[debug] [2025-05-12T14:22:05.041Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/bodaboda-b5aa8/services/cloudbuild.googleapis.com x-goog-quota-user=projects/bodaboda-b5aa8
+[debug] [2025-05-12T14:22:05.044Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/bodaboda-b5aa8/services/artifactregistry.googleapis.com [none]
+[debug] [2025-05-12T14:22:05.044Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/bodaboda-b5aa8/services/artifactregistry.googleapis.com x-goog-quota-user=projects/bodaboda-b5aa8
+[debug] [2025-05-12T14:22:06.684Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/bodaboda-b5aa8/services/cloudfunctions.googleapis.com 200
+[debug] [2025-05-12T14:22:06.685Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/bodaboda-b5aa8/services/cloudfunctions.googleapis.com [omitted]
+[info] +  functions: required API cloudfunctions.googleapis.com is enabled 
+[debug] [2025-05-12T14:22:06.863Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/bodaboda-b5aa8/services/cloudbuild.googleapis.com 200
+[debug] [2025-05-12T14:22:06.863Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/bodaboda-b5aa8/services/cloudbuild.googleapis.com [omitted]
+[info] +  functions: required API cloudbuild.googleapis.com is enabled 
+[debug] [2025-05-12T14:22:06.865Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/bodaboda-b5aa8/services/runtimeconfig.googleapis.com 200
+[debug] [2025-05-12T14:22:06.865Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/bodaboda-b5aa8/services/runtimeconfig.googleapis.com [omitted]
+[debug] [2025-05-12T14:22:06.876Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/bodaboda-b5aa8/services/artifactregistry.googleapis.com 200
+[debug] [2025-05-12T14:22:06.876Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/bodaboda-b5aa8/services/artifactregistry.googleapis.com [omitted]
+[info] +  artifactregistry: required API artifactregistry.googleapis.com is enabled 
+[debug] [2025-05-12T14:22:06.877Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:06.877Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:06.877Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/bodaboda-b5aa8/adminSdkConfig [none]
+[debug] [2025-05-12T14:22:07.950Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/bodaboda-b5aa8/adminSdkConfig 200
+[debug] [2025-05-12T14:22:07.950Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/bodaboda-b5aa8/adminSdkConfig {"projectId":"bodaboda-b5aa8","storageBucket":"bodaboda-b5aa8.firebasestorage.app"}
+[debug] [2025-05-12T14:22:07.950Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:07.951Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:07.951Z] >>> [apiv2][query] GET https://runtimeconfig.googleapis.com/v1beta1/projects/bodaboda-b5aa8/configs [none]
+[debug] [2025-05-12T14:22:08.621Z] <<< [apiv2][status] GET https://runtimeconfig.googleapis.com/v1beta1/projects/bodaboda-b5aa8/configs 200
+[debug] [2025-05-12T14:22:08.621Z] <<< [apiv2][body] GET https://runtimeconfig.googleapis.com/v1beta1/projects/bodaboda-b5aa8/configs {}
+[debug] [2025-05-12T14:22:08.624Z] Validating nodejs source
+[debug] [2025-05-12T14:22:10.602Z] > [functions] package.json contents: {
+  "name": "functions",
+  "description": "Cloud Functions for Firebase",
+  "scripts": {
+    "lint": "eslint .",
+    "serve": "firebase emulators:start --only functions",
+    "shell": "firebase functions:shell",
+    "start": "npm run shell",
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log"
+  },
+  "engines": {
+    "node": "22"
+  },
+  "main": "index.js",
+  "dependencies": {
+    "firebase-admin": "^12.6.0",
+    "firebase-functions": "^6.0.1"
+  },
+  "devDependencies": {
+    "eslint": "^8.15.0",
+    "eslint-config-google": "^0.14.0",
+    "firebase-functions-test": "^3.1.0"
+  },
+  "private": true
+}
+[debug] [2025-05-12T14:22:10.602Z] Building nodejs source
+[info] i  functions: Loading and analyzing source code for codebase default to determine what to deploy 
+[debug] [2025-05-12T14:22:10.605Z] Could not find functions.yaml. Must use http discovery
+[debug] [2025-05-12T14:22:10.617Z] Found firebase-functions binary at 'C:\Users\johnb\AndroidStudioProjects\MyApplication\boda_boda_app\functions\node_modules\.bin\firebase-functions'
+[info] Serving at port 8843
+
+[debug] [2025-05-12T14:22:12.197Z] Got response from /__/functions.yaml {"endpoints":{"matchRideRequest":{"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","labels":{},"eventTrigger":{"eventType":"google.cloud.firestore.document.v1.created","eventFilters":{"database":"(default)","namespace":"(default)"},"eventFilterPathPatterns":{"document":"RideRequests/{rideRequestId}"},"retry":false},"entryPoint":"matchRideRequest"},"updateRideRequest":{"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","labels":{},"eventTrigger":{"eventType":"google.cloud.firestore.document.v1.updated","eventFilters":{"database":"(default)","namespace":"(default)"},"eventFilterPathPatterns":{"document":"RideRequests/{rideRequestId}"},"retry":false},"entryPoint":"updateRideRequest"},"deleteRideRequest":{"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","labels":{},"eventTrigger":{"eventType":"google.cloud.firestore.document.v1.deleted","eventFilters":{"database":"(default)","namespace":"(default)"},"eventFilterPathPatterns":{"document":"RideRequests/{rideRequestId}"},"retry":false},"entryPoint":"deleteRideRequest"},"updateKijiweQueue":{"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","labels":{},"eventTrigger":{"eventType":"google.cloud.firestore.document.v1.updated","eventFilters":{"database":"(default)","namespace":"(default)"},"eventFilterPathPatterns":{"document":"KijiweQueues/{kijiweId}"},"retry":false},"entryPoint":"updateKijiweQueue"},"updateKijiwe":{"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","labels":{},"eventTrigger":{"eventType":"google.cloud.firestore.document.v1.updated","eventFilters":{"database":"(default)","namespace":"(default)"},"eventFilterPathPatterns":{"document":"Kijiwes/{kijiweId}"},"retry":false},"entryPoint":"updateKijiwe"}},"specVersion":"v1alpha1","requiredAPIs":[],"extensions":{}}
+[info] i  extensions: ensuring required API firebaseextensions.googleapis.com is enabled... 
+[debug] [2025-05-12T14:22:16.256Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:16.256Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:16.257Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/bodaboda-b5aa8/services/firebaseextensions.googleapis.com [none]
+[debug] [2025-05-12T14:22:16.257Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/bodaboda-b5aa8/services/firebaseextensions.googleapis.com x-goog-quota-user=projects/bodaboda-b5aa8
+[debug] [2025-05-12T14:22:17.924Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/bodaboda-b5aa8/services/firebaseextensions.googleapis.com 200
+[debug] [2025-05-12T14:22:17.924Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/bodaboda-b5aa8/services/firebaseextensions.googleapis.com [omitted]
+[info] +  extensions: required API firebaseextensions.googleapis.com is enabled 
+[debug] [2025-05-12T14:22:17.925Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2025-05-12T14:22:17.925Z] > authorizing via signed-in user (johnboscosilayo@gmail.com)
+[debug] [2025-05-12T14:22:17.925Z] [iam] checking project bodaboda-b5aa8 for permissions ["firebase.projects.get","firebaseextensions.instances.list"]
+[debug] [2025-05-12T14:22:17.925Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:17.925Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:17.925Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/bodaboda-b5aa8:testIamPermissions [none]
+[debug] [2025-05-12T14:22:17.925Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/bodaboda-b5aa8:testIamPermissions x-goog-quota-user=projects/bodaboda-b5aa8
+[debug] [2025-05-12T14:22:17.926Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/bodaboda-b5aa8:testIamPermissions {"permissions":["firebase.projects.get","firebaseextensions.instances.list"]}
+[debug] [2025-05-12T14:22:19.373Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/bodaboda-b5aa8:testIamPermissions 200
+[debug] [2025-05-12T14:22:19.373Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/bodaboda-b5aa8:testIamPermissions {"permissions":["firebase.projects.get","firebaseextensions.instances.list"]}
+[debug] [2025-05-12T14:22:19.374Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:19.374Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:19.375Z] >>> [apiv2][query] GET https://firebaseextensions.googleapis.com/v1beta/projects/bodaboda-b5aa8/instances pageSize=100&pageToken=
+[debug] [2025-05-12T14:22:21.101Z] <<< [apiv2][status] GET https://firebaseextensions.googleapis.com/v1beta/projects/bodaboda-b5aa8/instances 200
+[debug] [2025-05-12T14:22:21.101Z] <<< [apiv2][body] GET https://firebaseextensions.googleapis.com/v1beta/projects/bodaboda-b5aa8/instances {}
+[info] i  functions: preparing functions directory for uploading... 
+[info] i  functions: packaged C:\Users\johnb\AndroidStudioProjects\MyApplication\boda_boda_app\functions (73.57 KB) for uploading 
+[debug] [2025-05-12T14:22:21.161Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:21.161Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:21.162Z] >>> [apiv2][query] GET https://cloudfunctions.googleapis.com/v1/projects/bodaboda-b5aa8/locations/-/functions [none]
+[debug] [2025-05-12T14:22:22.199Z] <<< [apiv2][status] GET https://cloudfunctions.googleapis.com/v1/projects/bodaboda-b5aa8/locations/-/functions 200
+[debug] [2025-05-12T14:22:22.199Z] <<< [apiv2][body] GET https://cloudfunctions.googleapis.com/v1/projects/bodaboda-b5aa8/locations/-/functions {}
+[debug] [2025-05-12T14:22:22.200Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:22.200Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:22.200Z] >>> [apiv2][query] GET https://cloudfunctions.googleapis.com/v2/projects/bodaboda-b5aa8/locations/-/functions filter=environment%3D%22GEN_2%22
+[debug] [2025-05-12T14:22:23.363Z] <<< [apiv2][status] GET https://cloudfunctions.googleapis.com/v2/projects/bodaboda-b5aa8/locations/-/functions 200
+[debug] [2025-05-12T14:22:23.364Z] <<< [apiv2][body] GET https://cloudfunctions.googleapis.com/v2/projects/bodaboda-b5aa8/locations/-/functions {}
+[debug] [2025-05-12T14:22:23.365Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:23.365Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:23.365Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:23.365Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:23.366Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:23.366Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:23.366Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:23.366Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:23.366Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:23.366Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:23.366Z] >>> [apiv2][query] GET https://firestore.googleapis.com/v1/projects/bodaboda-b5aa8/databases/(default) [none]
+[debug] [2025-05-12T14:22:23.368Z] >>> [apiv2][query] GET https://firestore.googleapis.com/v1/projects/bodaboda-b5aa8/databases/(default) [none]
+[debug] [2025-05-12T14:22:23.369Z] >>> [apiv2][query] GET https://firestore.googleapis.com/v1/projects/bodaboda-b5aa8/databases/(default) [none]
+[debug] [2025-05-12T14:22:23.371Z] >>> [apiv2][query] GET https://firestore.googleapis.com/v1/projects/bodaboda-b5aa8/databases/(default) [none]
+[debug] [2025-05-12T14:22:23.372Z] >>> [apiv2][query] GET https://firestore.googleapis.com/v1/projects/bodaboda-b5aa8/databases/(default) [none]
+[debug] [2025-05-12T14:22:24.992Z] <<< [apiv2][status] GET https://firestore.googleapis.com/v1/projects/bodaboda-b5aa8/databases/(default) 200
+[debug] [2025-05-12T14:22:24.992Z] <<< [apiv2][body] GET https://firestore.googleapis.com/v1/projects/bodaboda-b5aa8/databases/(default) {"name":"projects/bodaboda-b5aa8/databases/(default)","uid":"9c7f206f-3d5f-4981-90c7-57c2d90d0f50","createTime":"2025-03-06T19:36:57.217634Z","updateTime":"2025-03-06T19:36:57.217634Z","locationId":"nam5","type":"FIRESTORE_NATIVE","concurrencyMode":"PESSIMISTIC","versionRetentionPeriod":"3600s","earliestVersionTime":"2025-05-12T13:22:24.832194Z","appEngineIntegrationMode":"DISABLED","keyPrefix":"s","pointInTimeRecoveryEnablement":"POINT_IN_TIME_RECOVERY_DISABLED","deleteProtectionState":"DELETE_PROTECTION_DISABLED","databaseEdition":"STANDARD","freeTier":true,"etag":"INbw99uQno0DMOr3grmPqYwD"}
+[debug] [2025-05-12T14:22:26.333Z] <<< [apiv2][status] GET https://firestore.googleapis.com/v1/projects/bodaboda-b5aa8/databases/(default) 200
+[debug] [2025-05-12T14:22:26.333Z] <<< [apiv2][body] GET https://firestore.googleapis.com/v1/projects/bodaboda-b5aa8/databases/(default) {"name":"projects/bodaboda-b5aa8/databases/(default)","uid":"9c7f206f-3d5f-4981-90c7-57c2d90d0f50","createTime":"2025-03-06T19:36:57.217634Z","updateTime":"2025-03-06T19:36:57.217634Z","locationId":"nam5","type":"FIRESTORE_NATIVE","concurrencyMode":"PESSIMISTIC","versionRetentionPeriod":"3600s","earliestVersionTime":"2025-05-12T13:22:26.173273Z","appEngineIntegrationMode":"DISABLED","keyPrefix":"s","pointInTimeRecoveryEnablement":"POINT_IN_TIME_RECOVERY_DISABLED","deleteProtectionState":"DELETE_PROTECTION_DISABLED","databaseEdition":"STANDARD","freeTier":true,"etag":"ILHfydyQno0DMOr3grmPqYwD"}
+[debug] [2025-05-12T14:22:26.334Z] <<< [apiv2][status] GET https://firestore.googleapis.com/v1/projects/bodaboda-b5aa8/databases/(default) 200
+[debug] [2025-05-12T14:22:26.334Z] <<< [apiv2][body] GET https://firestore.googleapis.com/v1/projects/bodaboda-b5aa8/databases/(default) {"name":"projects/bodaboda-b5aa8/databases/(default)","uid":"9c7f206f-3d5f-4981-90c7-57c2d90d0f50","createTime":"2025-03-06T19:36:57.217634Z","updateTime":"2025-03-06T19:36:57.217634Z","locationId":"nam5","type":"FIRESTORE_NATIVE","concurrencyMode":"PESSIMISTIC","versionRetentionPeriod":"3600s","earliestVersionTime":"2025-05-12T13:22:26.174463Z","appEngineIntegrationMode":"DISABLED","keyPrefix":"s","pointInTimeRecoveryEnablement":"POINT_IN_TIME_RECOVERY_DISABLED","deleteProtectionState":"DELETE_PROTECTION_DISABLED","databaseEdition":"STANDARD","freeTier":true,"etag":"IMXoydyQno0DMOr3grmPqYwD"}
+[debug] [2025-05-12T14:22:26.368Z] <<< [apiv2][status] GET https://firestore.googleapis.com/v1/projects/bodaboda-b5aa8/databases/(default) 200
+[debug] [2025-05-12T14:22:26.368Z] <<< [apiv2][body] GET https://firestore.googleapis.com/v1/projects/bodaboda-b5aa8/databases/(default) {"name":"projects/bodaboda-b5aa8/databases/(default)","uid":"9c7f206f-3d5f-4981-90c7-57c2d90d0f50","createTime":"2025-03-06T19:36:57.217634Z","updateTime":"2025-03-06T19:36:57.217634Z","locationId":"nam5","type":"FIRESTORE_NATIVE","concurrencyMode":"PESSIMISTIC","versionRetentionPeriod":"3600s","earliestVersionTime":"2025-05-12T13:22:26.197782Z","appEngineIntegrationMode":"DISABLED","keyPrefix":"s","pointInTimeRecoveryEnablement":"POINT_IN_TIME_RECOVERY_DISABLED","deleteProtectionState":"DELETE_PROTECTION_DISABLED","databaseEdition":"STANDARD","freeTier":true,"etag":"IKGdy9yQno0DMOr3grmPqYwD"}
+[debug] [2025-05-12T14:22:26.368Z] <<< [apiv2][status] GET https://firestore.googleapis.com/v1/projects/bodaboda-b5aa8/databases/(default) 200
+[debug] [2025-05-12T14:22:26.369Z] <<< [apiv2][body] GET https://firestore.googleapis.com/v1/projects/bodaboda-b5aa8/databases/(default) {"name":"projects/bodaboda-b5aa8/databases/(default)","uid":"9c7f206f-3d5f-4981-90c7-57c2d90d0f50","createTime":"2025-03-06T19:36:57.217634Z","updateTime":"2025-03-06T19:36:57.217634Z","locationId":"nam5","type":"FIRESTORE_NATIVE","concurrencyMode":"PESSIMISTIC","versionRetentionPeriod":"3600s","earliestVersionTime":"2025-05-12T13:22:26.198009Z","appEngineIntegrationMode":"DISABLED","keyPrefix":"s","pointInTimeRecoveryEnablement":"POINT_IN_TIME_RECOVERY_DISABLED","deleteProtectionState":"DELETE_PROTECTION_DISABLED","databaseEdition":"STANDARD","freeTier":true,"etag":"IKShy9yQno0DMOr3grmPqYwD"}
+[info] i  functions: ensuring required API run.googleapis.com is enabled... 
+[debug] [2025-05-12T14:22:26.371Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:26.371Z] Checked if tokens are valid: true, expires at: 1747060874961
+[info] i  functions: ensuring required API eventarc.googleapis.com is enabled... 
+[debug] [2025-05-12T14:22:26.372Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:26.372Z] Checked if tokens are valid: true, expires at: 1747060874961
+[info] i  functions: ensuring required API pubsub.googleapis.com is enabled... 
+[debug] [2025-05-12T14:22:26.372Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:26.372Z] Checked if tokens are valid: true, expires at: 1747060874961
+[info] i  functions: ensuring required API storage.googleapis.com is enabled... 
+[debug] [2025-05-12T14:22:26.373Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:26.373Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:26.373Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/bodaboda-b5aa8/services/run.googleapis.com [none]
+[debug] [2025-05-12T14:22:26.373Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/bodaboda-b5aa8/services/run.googleapis.com x-goog-quota-user=projects/bodaboda-b5aa8
+[debug] [2025-05-12T14:22:26.375Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/bodaboda-b5aa8/services/eventarc.googleapis.com [none]
+[debug] [2025-05-12T14:22:26.376Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/bodaboda-b5aa8/services/eventarc.googleapis.com x-goog-quota-user=projects/bodaboda-b5aa8
+[debug] [2025-05-12T14:22:26.378Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/bodaboda-b5aa8/services/pubsub.googleapis.com [none]
+[debug] [2025-05-12T14:22:26.378Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/bodaboda-b5aa8/services/pubsub.googleapis.com x-goog-quota-user=projects/bodaboda-b5aa8
+[debug] [2025-05-12T14:22:26.381Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/bodaboda-b5aa8/services/storage.googleapis.com [none]
+[debug] [2025-05-12T14:22:26.381Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/bodaboda-b5aa8/services/storage.googleapis.com x-goog-quota-user=projects/bodaboda-b5aa8
+[debug] [2025-05-12T14:22:28.073Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/bodaboda-b5aa8/services/eventarc.googleapis.com 200
+[debug] [2025-05-12T14:22:28.073Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/bodaboda-b5aa8/services/eventarc.googleapis.com [omitted]
+[info] +  functions: required API eventarc.googleapis.com is enabled 
+[debug] [2025-05-12T14:22:28.113Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/bodaboda-b5aa8/services/storage.googleapis.com 200
+[debug] [2025-05-12T14:22:28.113Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/bodaboda-b5aa8/services/storage.googleapis.com [omitted]
+[info] +  functions: required API storage.googleapis.com is enabled 
+[debug] [2025-05-12T14:22:28.117Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/bodaboda-b5aa8/services/run.googleapis.com 200
+[debug] [2025-05-12T14:22:28.117Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/bodaboda-b5aa8/services/run.googleapis.com [omitted]
+[info] +  functions: required API run.googleapis.com is enabled 
+[debug] [2025-05-12T14:22:28.124Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/bodaboda-b5aa8/services/pubsub.googleapis.com 200
+[debug] [2025-05-12T14:22:28.125Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/bodaboda-b5aa8/services/pubsub.googleapis.com [omitted]
+[info] +  functions: required API pubsub.googleapis.com is enabled 
+[info] i  functions: generating the service identity for pubsub.googleapis.com... 
+[debug] [2025-05-12T14:22:28.126Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:28.126Z] Checked if tokens are valid: true, expires at: 1747060874961
+[info] i  functions: generating the service identity for eventarc.googleapis.com... 
+[debug] [2025-05-12T14:22:28.126Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:28.126Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:28.126Z] >>> [apiv2][query] POST https://serviceusage.googleapis.com/v1beta1/projects/157804352950/services/pubsub.googleapis.com:generateServiceIdentity [none]
+[debug] [2025-05-12T14:22:28.127Z] >>> [apiv2][query] POST https://serviceusage.googleapis.com/v1beta1/projects/157804352950/services/eventarc.googleapis.com:generateServiceIdentity [none]
+[debug] [2025-05-12T14:22:28.564Z] <<< [apiv2][status] POST https://serviceusage.googleapis.com/v1beta1/projects/157804352950/services/pubsub.googleapis.com:generateServiceIdentity 200
+[debug] [2025-05-12T14:22:28.564Z] <<< [apiv2][body] POST https://serviceusage.googleapis.com/v1beta1/projects/157804352950/services/pubsub.googleapis.com:generateServiceIdentity {"name":"operations/finished.DONE_OPERATION","done":true,"response":{"@type":"type.googleapis.com/google.api.serviceusage.v1beta1.ServiceIdentity","email":"service-157804352950@gcp-sa-pubsub.iam.gserviceaccount.com","uniqueId":"116836313520101411124"}}
+[debug] [2025-05-12T14:22:29.589Z] <<< [apiv2][status] POST https://serviceusage.googleapis.com/v1beta1/projects/157804352950/services/eventarc.googleapis.com:generateServiceIdentity 200
+[debug] [2025-05-12T14:22:29.589Z] <<< [apiv2][body] POST https://serviceusage.googleapis.com/v1beta1/projects/157804352950/services/eventarc.googleapis.com:generateServiceIdentity {"name":"operations/finished.DONE_OPERATION","done":true,"response":{"@type":"type.googleapis.com/google.api.serviceusage.v1beta1.ServiceIdentity","email":"service-157804352950@gcp-sa-eventarc.iam.gserviceaccount.com","uniqueId":"109780656250379142510"}}
+[debug] [2025-05-12T14:22:29.593Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:29.593Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:29.593Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/157804352950:getIamPolicy [none]
+[debug] [2025-05-12T14:22:31.096Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/157804352950:getIamPolicy 200
+[debug] [2025-05-12T14:22:31.096Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/157804352950:getIamPolicy {"version":1,"etag":"BwY08Qj9aW0=","bindings":[{"role":"roles/cloudbuild.builds.builder","members":["serviceAccount:157804352950@cloudbuild.gserviceaccount.com","serviceAccount:firebase-adminsdk-fbsvc@bodaboda-b5aa8.iam.gserviceaccount.com"]},{"role":"roles/cloudbuild.serviceAgent","members":["serviceAccount:service-157804352950@gcp-sa-cloudbuild.iam.gserviceaccount.com"]},{"role":"roles/cloudfunctions.admin","members":["serviceAccount:firebase-adminsdk-fbsvc@bodaboda-b5aa8.iam.gserviceaccount.com"]},{"role":"roles/cloudfunctions.serviceAgent","members":["serviceAccount:service-157804352950@gcf-admin-robot.iam.gserviceaccount.com"]},{"role":"roles/containerregistry.ServiceAgent","members":["serviceAccount:service-157804352950@containerregistry.iam.gserviceaccount.com"]},{"role":"roles/editor","members":["serviceAccount:157804352950-compute@developer.gserviceaccount.com","serviceAccount:157804352950@cloudservices.gserviceaccount.com","serviceAccount:bodaboda-b5aa8@appspot.gserviceaccount.com"]},{"role":"roles/firebase.admin","members":["serviceAccount:firebase-adminsdk-fbsvc@bodaboda-b5aa8.iam.gserviceaccount.com"]},{"role":"roles/firebase.managementServiceAgent","members":["serviceAccount:service-157804352950@gcp-sa-firebase.iam.gserviceaccount.com"]},{"role":"roles/firebase.sdkAdminServiceAgent","members":["serviceAccount:firebase-adminsdk-fbsvc@bodaboda-b5aa8.iam.gserviceaccount.com"]},{"role":"roles/firebaseappcheck.admin","members":["serviceAccount:firebase-adminsdk-fbsvc@bodaboda-b5aa8.iam.gserviceaccount.com"]},{"role":"roles/firebaseappcheck.serviceAgent","members":["serviceAccount:service-157804352950@gcp-sa-firebaseappcheck.iam.gserviceaccount.com"]},{"role":"roles/firebaseauth.admin","members":["serviceAccount:firebase-adminsdk-fbsvc@bodaboda-b5aa8.iam.gserviceaccount.com"]},{"role":"roles/firebasemods.serviceAgent","members":["serviceAccount:service-157804352950@gcp-sa-firebasemods.iam.gserviceaccount.com"]},{"role":"roles/firebaserules.system","members":["serviceAccount:service-157804352950@firebase-rules.iam.gserviceaccount.com"]},{"role":"roles/firestore.serviceAgent","members":["serviceAccount:service-157804352950@gcp-sa-firestore.iam.gserviceaccount.com"]},{"role":"roles/iam.serviceAccountTokenCreator","members":["serviceAccount:firebase-adminsdk-fbsvc@bodaboda-b5aa8.iam.gserviceaccount.com"]},{"role":"roles/owner","members":["user:johnboscosilayo@gmail.com"]},{"role":"roles/run.serviceAgent","members":["serviceAccount:service-157804352950@serverless-robot-prod.iam.gserviceaccount.com"]}]}
+[debug] [2025-05-12T14:22:31.097Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:31.097Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:31.097Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/157804352950:setIamPolicy [none]
+[debug] [2025-05-12T14:22:31.097Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/157804352950:setIamPolicy {"policy":{"version":1,"etag":"BwY08Qj9aW0=","bindings":[{"role":"roles/cloudbuild.builds.builder","members":["serviceAccount:157804352950@cloudbuild.gserviceaccount.com","serviceAccount:firebase-adminsdk-fbsvc@bodaboda-b5aa8.iam.gserviceaccount.com"]},{"role":"roles/cloudbuild.serviceAgent","members":["serviceAccount:service-157804352950@gcp-sa-cloudbuild.iam.gserviceaccount.com"]},{"role":"roles/cloudfunctions.admin","members":["serviceAccount:firebase-adminsdk-fbsvc@bodaboda-b5aa8.iam.gserviceaccount.com"]},{"role":"roles/cloudfunctions.serviceAgent","members":["serviceAccount:service-157804352950@gcf-admin-robot.iam.gserviceaccount.com"]},{"role":"roles/containerregistry.ServiceAgent","members":["serviceAccount:service-157804352950@containerregistry.iam.gserviceaccount.com"]},{"role":"roles/editor","members":["serviceAccount:157804352950-compute@developer.gserviceaccount.com","serviceAccount:157804352950@cloudservices.gserviceaccount.com","serviceAccount:bodaboda-b5aa8@appspot.gserviceaccount.com"]},{"role":"roles/firebase.admin","members":["serviceAccount:firebase-adminsdk-fbsvc@bodaboda-b5aa8.iam.gserviceaccount.com"]},{"role":"roles/firebase.managementServiceAgent","members":["serviceAccount:service-157804352950@gcp-sa-firebase.iam.gserviceaccount.com"]},{"role":"roles/firebase.sdkAdminServiceAgent","members":["serviceAccount:firebase-adminsdk-fbsvc@bodaboda-b5aa8.iam.gserviceaccount.com"]},{"role":"roles/firebaseappcheck.admin","members":["serviceAccount:firebase-adminsdk-fbsvc@bodaboda-b5aa8.iam.gserviceaccount.com"]},{"role":"roles/firebaseappcheck.serviceAgent","members":["serviceAccount:service-157804352950@gcp-sa-firebaseappcheck.iam.gserviceaccount.com"]},{"role":"roles/firebaseauth.admin","members":["serviceAccount:firebase-adminsdk-fbsvc@bodaboda-b5aa8.iam.gserviceaccount.com"]},{"role":"roles/firebasemods.serviceAgent","members":["serviceAccount:service-157804352950@gcp-sa-firebasemods.iam.gserviceaccount.com"]},{"role":"roles/firebaserules.system","members":["serviceAccount:service-157804352950@firebase-rules.iam.gserviceaccount.com"]},{"role":"roles/firestore.serviceAgent","members":["serviceAccount:service-157804352950@gcp-sa-firestore.iam.gserviceaccount.com"]},{"role":"roles/iam.serviceAccountTokenCreator","members":["serviceAccount:firebase-adminsdk-fbsvc@bodaboda-b5aa8.iam.gserviceaccount.com","serviceAccount:service-157804352950@gcp-sa-pubsub.iam.gserviceaccount.com"]},{"role":"roles/owner","members":["user:johnboscosilayo@gmail.com"]},{"role":"roles/run.serviceAgent","members":["serviceAccount:service-157804352950@serverless-robot-prod.iam.gserviceaccount.com"]},{"role":"roles/run.invoker","members":["serviceAccount:157804352950-compute@developer.gserviceaccount.com"]},{"role":"roles/eventarc.eventReceiver","members":["serviceAccount:157804352950-compute@developer.gserviceaccount.com"]}]},"updateMask":"bindings"}
+[debug] [2025-05-12T14:22:32.109Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/157804352950:setIamPolicy 200
+[debug] [2025-05-12T14:22:32.109Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/157804352950:setIamPolicy {"version":1,"etag":"BwY08QvqIf4=","bindings":[{"role":"roles/cloudbuild.builds.builder","members":["serviceAccount:157804352950@cloudbuild.gserviceaccount.com","serviceAccount:firebase-adminsdk-fbsvc@bodaboda-b5aa8.iam.gserviceaccount.com"]},{"role":"roles/cloudbuild.serviceAgent","members":["serviceAccount:service-157804352950@gcp-sa-cloudbuild.iam.gserviceaccount.com"]},{"role":"roles/cloudfunctions.admin","members":["serviceAccount:firebase-adminsdk-fbsvc@bodaboda-b5aa8.iam.gserviceaccount.com"]},{"role":"roles/cloudfunctions.serviceAgent","members":["serviceAccount:service-157804352950@gcf-admin-robot.iam.gserviceaccount.com"]},{"role":"roles/containerregistry.ServiceAgent","members":["serviceAccount:service-157804352950@containerregistry.iam.gserviceaccount.com"]},{"role":"roles/editor","members":["serviceAccount:157804352950-compute@developer.gserviceaccount.com","serviceAccount:157804352950@cloudservices.gserviceaccount.com","serviceAccount:bodaboda-b5aa8@appspot.gserviceaccount.com"]},{"role":"roles/eventarc.eventReceiver","members":["serviceAccount:157804352950-compute@developer.gserviceaccount.com"]},{"role":"roles/firebase.admin","members":["serviceAccount:firebase-adminsdk-fbsvc@bodaboda-b5aa8.iam.gserviceaccount.com"]},{"role":"roles/firebase.managementServiceAgent","members":["serviceAccount:service-157804352950@gcp-sa-firebase.iam.gserviceaccount.com"]},{"role":"roles/firebase.sdkAdminServiceAgent","members":["serviceAccount:firebase-adminsdk-fbsvc@bodaboda-b5aa8.iam.gserviceaccount.com"]},{"role":"roles/firebaseappcheck.admin","members":["serviceAccount:firebase-adminsdk-fbsvc@bodaboda-b5aa8.iam.gserviceaccount.com"]},{"role":"roles/firebaseappcheck.serviceAgent","members":["serviceAccount:service-157804352950@gcp-sa-firebaseappcheck.iam.gserviceaccount.com"]},{"role":"roles/firebaseauth.admin","members":["serviceAccount:firebase-adminsdk-fbsvc@bodaboda-b5aa8.iam.gserviceaccount.com"]},{"role":"roles/firebasemods.serviceAgent","members":["serviceAccount:service-157804352950@gcp-sa-firebasemods.iam.gserviceaccount.com"]},{"role":"roles/firebaserules.system","members":["serviceAccount:service-157804352950@firebase-rules.iam.gserviceaccount.com"]},{"role":"roles/firestore.serviceAgent","members":["serviceAccount:service-157804352950@gcp-sa-firestore.iam.gserviceaccount.com"]},{"role":"roles/iam.serviceAccountTokenCreator","members":["serviceAccount:firebase-adminsdk-fbsvc@bodaboda-b5aa8.iam.gserviceaccount.com","serviceAccount:service-157804352950@gcp-sa-pubsub.iam.gserviceaccount.com"]},{"role":"roles/owner","members":["user:johnboscosilayo@gmail.com"]},{"role":"roles/run.invoker","members":["serviceAccount:157804352950-compute@developer.gserviceaccount.com"]},{"role":"roles/run.serviceAgent","members":["serviceAccount:service-157804352950@serverless-robot-prod.iam.gserviceaccount.com"]}]}
+[debug] [2025-05-12T14:22:32.110Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:32.110Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:32.110Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/bodaboda-b5aa8/services/cloudresourcemanager.googleapis.com [none]
+[debug] [2025-05-12T14:22:32.110Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/bodaboda-b5aa8/services/cloudresourcemanager.googleapis.com x-goog-quota-user=projects/bodaboda-b5aa8
+[debug] [2025-05-12T14:22:32.588Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/bodaboda-b5aa8/services/cloudresourcemanager.googleapis.com 200
+[debug] [2025-05-12T14:22:32.588Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/bodaboda-b5aa8/services/cloudresourcemanager.googleapis.com [omitted]
+[debug] [2025-05-12T14:22:32.588Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:32.588Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:32.589Z] >>> [apiv2][query] GET https://cloudresourcemanager.googleapis.com/v1/projects/bodaboda-b5aa8 [none]
+[debug] [2025-05-12T14:22:32.898Z] <<< [apiv2][status] GET https://cloudresourcemanager.googleapis.com/v1/projects/bodaboda-b5aa8 200
+[debug] [2025-05-12T14:22:32.898Z] <<< [apiv2][body] GET https://cloudresourcemanager.googleapis.com/v1/projects/bodaboda-b5aa8 {"projectNumber":"157804352950","projectId":"bodaboda-b5aa8","lifecycleState":"ACTIVE","name":"BodabodaApp","labels":{"firebase":"enabled","firebase-core":"disabled"},"createTime":"2025-03-02T20:06:41.975832Z"}
+[debug] [2025-05-12T14:22:32.901Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:32.901Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:32.901Z] >>> [apiv2][query] GET https://cloudbilling.googleapis.com/v1/projects/bodaboda-b5aa8/billingInfo [none]
+[debug] [2025-05-12T14:22:33.546Z] <<< [apiv2][status] GET https://cloudbilling.googleapis.com/v1/projects/bodaboda-b5aa8/billingInfo 200
+[debug] [2025-05-12T14:22:33.547Z] <<< [apiv2][body] GET https://cloudbilling.googleapis.com/v1/projects/bodaboda-b5aa8/billingInfo {"name":"projects/bodaboda-b5aa8/billingInfo","projectId":"bodaboda-b5aa8","billingAccountName":"billingAccounts/01D03C-EC60DD-7D3287","billingEnabled":true}
+[debug] [2025-05-12T14:22:33.550Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:33.550Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:33.550Z] >>> [apiv2][query] POST https://cloudfunctions.googleapis.com/v2/projects/bodaboda-b5aa8/locations/us-central1/functions:generateUploadUrl [none]
+[debug] [2025-05-12T14:22:35.616Z] <<< [apiv2][status] POST https://cloudfunctions.googleapis.com/v2/projects/bodaboda-b5aa8/locations/us-central1/functions:generateUploadUrl 200
+[debug] [2025-05-12T14:22:35.616Z] <<< [apiv2][body] POST https://cloudfunctions.googleapis.com/v2/projects/bodaboda-b5aa8/locations/us-central1/functions:generateUploadUrl {"uploadUrl":"https://storage.googleapis.com/gcf-v2-uploads-157804352950.us-central1.cloudfunctions.appspot.com/dd7ae4ed-fc86-495b-94c1-289ab81ac488.zip?GoogleAccessId=service-157804352950@gcf-admin-robot.iam.gserviceaccount.com&Expires=1747061555&Signature=SVxJyCd5cSprFuXa0s6J1huU2cwdZaeKjileriu99APcZ5qHJbA46150B6UC9avEte8WoJEm2bQDtCLOrHgRFMTGHdacyS7yDVA8pjRrgtQ8Nsi9UVZh%2F3ZYsQeZc%2B3fbfa%2BnjBero67CCPZ05LptsJlwl1TTzJYlctMGSHGYQ%2FOhZ8qesjRo%2BHOrb93WmwlnthWdRi%2FxbxzeI1mfWeMkvaqsv7T7HvFZXgklLdLi%2FAJHUslb2cMZ6nkBGij8uXKaKFCmHf%2BiLckca21HhonFw1L8JZDqvx3F4vsV9IpirBeWmOc%2FMGGjDrJmT8t%2F0dLVhcHWa3ltbSalZ0XVMgYhg%3D%3D","storageSource":{"bucket":"gcf-v2-uploads-157804352950.us-central1.cloudfunctions.appspot.com","object":"dd7ae4ed-fc86-495b-94c1-289ab81ac488.zip"}}
+[debug] [2025-05-12T14:22:35.618Z] >>> [apiv2][query] PUT https://storage.googleapis.com/gcf-v2-uploads-157804352950.us-central1.cloudfunctions.appspot.com/dd7ae4ed-fc86-495b-94c1-289ab81ac488.zip GoogleAccessId=service-157804352950%40gcf-admin-robot.iam.gserviceaccount.com&Expires=1747061555&Signature=SVxJyCd5cSprFuXa0s6J1huU2cwdZaeKjileriu99APcZ5qHJbA46150B6UC9avEte8WoJEm2bQDtCLOrHgRFMTGHdacyS7yDVA8pjRrgtQ8Nsi9UVZh%2F3ZYsQeZc%2B3fbfa%2BnjBero67CCPZ05LptsJlwl1TTzJYlctMGSHGYQ%2FOhZ8qesjRo%2BHOrb93WmwlnthWdRi%2FxbxzeI1mfWeMkvaqsv7T7HvFZXgklLdLi%2FAJHUslb2cMZ6nkBGij8uXKaKFCmHf%2BiLckca21HhonFw1L8JZDqvx3F4vsV9IpirBeWmOc%2FMGGjDrJmT8t%2F0dLVhcHWa3ltbSalZ0XVMgYhg%3D%3D
+[debug] [2025-05-12T14:22:35.618Z] >>> [apiv2][body] PUT https://storage.googleapis.com/gcf-v2-uploads-157804352950.us-central1.cloudfunctions.appspot.com/dd7ae4ed-fc86-495b-94c1-289ab81ac488.zip [stream]
+[debug] [2025-05-12T14:22:36.715Z] <<< [apiv2][status] PUT https://storage.googleapis.com/gcf-v2-uploads-157804352950.us-central1.cloudfunctions.appspot.com/dd7ae4ed-fc86-495b-94c1-289ab81ac488.zip 200
+[debug] [2025-05-12T14:22:36.715Z] <<< [apiv2][body] PUT https://storage.googleapis.com/gcf-v2-uploads-157804352950.us-central1.cloudfunctions.appspot.com/dd7ae4ed-fc86-495b-94c1-289ab81ac488.zip [omitted]
+[info] +  functions: functions folder uploaded successfully 
+[info] i  functions: creating Node.js 22 (2nd Gen) function matchRideRequest(us-central1)... 
+[info] i  functions: creating Node.js 22 (2nd Gen) function updateRideRequest(us-central1)... 
+[info] i  functions: creating Node.js 22 (2nd Gen) function deleteRideRequest(us-central1)... 
+[info] i  functions: creating Node.js 22 (2nd Gen) function updateKijiweQueue(us-central1)... 
+[info] i  functions: creating Node.js 22 (2nd Gen) function updateKijiwe(us-central1)... 
+[debug] [2025-05-12T14:22:36.724Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:36.724Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:36.724Z] >>> [apiv2][query] POST https://cloudfunctions.googleapis.com/v2/projects/bodaboda-b5aa8/locations/us-central1/functions functionId=matchRideRequest
+[debug] [2025-05-12T14:22:36.724Z] >>> [apiv2][body] POST https://cloudfunctions.googleapis.com/v2/projects/bodaboda-b5aa8/locations/us-central1/functions {"name":"projects/bodaboda-b5aa8/locations/us-central1/functions/matchRideRequest","buildConfig":{"runtime":"nodejs22","entryPoint":"matchRideRequest","source":{"storageSource":{"bucket":"gcf-v2-uploads-157804352950.us-central1.cloudfunctions.appspot.com","object":"dd7ae4ed-fc86-495b-94c1-289ab81ac488.zip"}},"environmentVariables":{"GOOGLE_NODE_RUN_SCRIPTS":""}},"serviceConfig":{"environmentVariables":{"FIREBASE_CONFIG":"{\"projectId\":\"bodaboda-b5aa8\",\"storageBucket\":\"bodaboda-b5aa8.firebasestorage.app\"}","GCLOUD_PROJECT":"bodaboda-b5aa8","EVENTARC_CLOUD_EVENT_SOURCE":"projects/bodaboda-b5aa8/locations/us-central1/services/matchRideRequest","FUNCTION_SIGNATURE_TYPE":"cloudevent","FUNCTION_TARGET":"matchRideRequest","LOG_EXECUTION_ID":"true"},"ingressSettings":null,"timeoutSeconds":null,"serviceAccountEmail":null,"availableMemory":"256Mi","minInstanceCount":null,"maxInstanceCount":null,"maxInstanceRequestConcurrency":80,"availableCpu":"1","vpcConnector":null,"vpcConnectorEgressSettings":null},"labels":{"deployment-tool":"cli-firebase","firebase-functions-hash":"73fd8a703a019e995bf0dac7f61d87b79589ad68"},"eventTrigger":{"eventType":"google.cloud.firestore.document.v1.created","retryPolicy":"RETRY_POLICY_DO_NOT_RETRY","eventFilters":[{"attribute":"database","value":"(default)"},{"attribute":"namespace","value":"(default)"},{"attribute":"document","value":"RideRequests/{rideRequestId}","operator":"match-path-pattern"}],"triggerRegion":"nam5"}}
+[debug] [2025-05-12T14:22:53.400Z] <<< [apiv2][status] POST https://cloudfunctions.googleapis.com/v2/projects/bodaboda-b5aa8/locations/us-central1/functions 400
+[debug] [2025-05-12T14:22:53.400Z] <<< [apiv2][body] POST https://cloudfunctions.googleapis.com/v2/projects/bodaboda-b5aa8/locations/us-central1/functions {"error":{"code":400,"message":"Validation failed for trigger projects/bodaboda-b5aa8/locations/nam5/triggers/matchriderequest-115464: Invalid resource state for \"\": Permission denied while using the Eventarc Service Agent. If you recently started to use Eventarc, it may take a few minutes before all necessary permissions are propagated to the Service Agent. Otherwise, verify that it has Eventarc Service Agent role.","status":"FAILED_PRECONDITION"}}
+[warn] !  functions: Request to https://cloudfunctions.googleapis.com/v2/projects/bodaboda-b5aa8/locations/us-central1/functions?functionId=matchRideRequest had HTTP Error: 400, Validation failed for trigger projects/bodaboda-b5aa8/locations/nam5/triggers/matchriderequest-115464: Invalid resource state for "": Permission denied while using the Eventarc Service Agent. If you recently started to use Eventarc, it may take a few minutes before all necessary permissions are propagated to the Service Agent. Otherwise, verify that it has Eventarc Service Agent role. 
+[warn] !  functions: Since this is your first time using 2nd gen functions, we need a little bit longer to finish setting everything up. Retry the deployment in a few minutes. 
+[warn] !  functions:  failed to create function projects/bodaboda-b5aa8/locations/us-central1/functions/matchRideRequest 
+[error] Failed to create function projects/bodaboda-b5aa8/locations/us-central1/functions/matchRideRequest
+[debug] [2025-05-12T14:22:53.403Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:53.403Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:53.403Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:53.403Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:53.404Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:53.404Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:53.404Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:53.404Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:22:53.404Z] >>> [apiv2][query] POST https://cloudfunctions.googleapis.com/v2/projects/bodaboda-b5aa8/locations/us-central1/functions functionId=updateRideRequest
+[debug] [2025-05-12T14:22:53.404Z] >>> [apiv2][body] POST https://cloudfunctions.googleapis.com/v2/projects/bodaboda-b5aa8/locations/us-central1/functions {"name":"projects/bodaboda-b5aa8/locations/us-central1/functions/updateRideRequest","buildConfig":{"runtime":"nodejs22","entryPoint":"updateRideRequest","source":{"storageSource":{"bucket":"gcf-v2-uploads-157804352950.us-central1.cloudfunctions.appspot.com","object":"dd7ae4ed-fc86-495b-94c1-289ab81ac488.zip"}},"environmentVariables":{"GOOGLE_NODE_RUN_SCRIPTS":""}},"serviceConfig":{"environmentVariables":{"FIREBASE_CONFIG":"{\"projectId\":\"bodaboda-b5aa8\",\"storageBucket\":\"bodaboda-b5aa8.firebasestorage.app\"}","GCLOUD_PROJECT":"bodaboda-b5aa8","EVENTARC_CLOUD_EVENT_SOURCE":"projects/bodaboda-b5aa8/locations/us-central1/services/updateRideRequest","FUNCTION_SIGNATURE_TYPE":"cloudevent","FUNCTION_TARGET":"updateRideRequest","LOG_EXECUTION_ID":"true"},"ingressSettings":null,"timeoutSeconds":null,"serviceAccountEmail":null,"availableMemory":"256Mi","minInstanceCount":null,"maxInstanceCount":null,"maxInstanceRequestConcurrency":80,"availableCpu":"1","vpcConnector":null,"vpcConnectorEgressSettings":null},"labels":{"deployment-tool":"cli-firebase","firebase-functions-hash":"73fd8a703a019e995bf0dac7f61d87b79589ad68"},"eventTrigger":{"eventType":"google.cloud.firestore.document.v1.updated","retryPolicy":"RETRY_POLICY_DO_NOT_RETRY","eventFilters":[{"attribute":"database","value":"(default)"},{"attribute":"namespace","value":"(default)"},{"attribute":"document","value":"RideRequests/{rideRequestId}","operator":"match-path-pattern"}],"triggerRegion":"nam5"}}
+[debug] [2025-05-12T14:22:53.405Z] >>> [apiv2][query] POST https://cloudfunctions.googleapis.com/v2/projects/bodaboda-b5aa8/locations/us-central1/functions functionId=deleteRideRequest
+[debug] [2025-05-12T14:22:53.405Z] >>> [apiv2][body] POST https://cloudfunctions.googleapis.com/v2/projects/bodaboda-b5aa8/locations/us-central1/functions {"name":"projects/bodaboda-b5aa8/locations/us-central1/functions/deleteRideRequest","buildConfig":{"runtime":"nodejs22","entryPoint":"deleteRideRequest","source":{"storageSource":{"bucket":"gcf-v2-uploads-157804352950.us-central1.cloudfunctions.appspot.com","object":"dd7ae4ed-fc86-495b-94c1-289ab81ac488.zip"}},"environmentVariables":{"GOOGLE_NODE_RUN_SCRIPTS":""}},"serviceConfig":{"environmentVariables":{"FIREBASE_CONFIG":"{\"projectId\":\"bodaboda-b5aa8\",\"storageBucket\":\"bodaboda-b5aa8.firebasestorage.app\"}","GCLOUD_PROJECT":"bodaboda-b5aa8","EVENTARC_CLOUD_EVENT_SOURCE":"projects/bodaboda-b5aa8/locations/us-central1/services/deleteRideRequest","FUNCTION_SIGNATURE_TYPE":"cloudevent","FUNCTION_TARGET":"deleteRideRequest","LOG_EXECUTION_ID":"true"},"ingressSettings":null,"timeoutSeconds":null,"serviceAccountEmail":null,"availableMemory":"256Mi","minInstanceCount":null,"maxInstanceCount":null,"maxInstanceRequestConcurrency":80,"availableCpu":"1","vpcConnector":null,"vpcConnectorEgressSettings":null},"labels":{"deployment-tool":"cli-firebase","firebase-functions-hash":"73fd8a703a019e995bf0dac7f61d87b79589ad68"},"eventTrigger":{"eventType":"google.cloud.firestore.document.v1.deleted","retryPolicy":"RETRY_POLICY_DO_NOT_RETRY","eventFilters":[{"attribute":"database","value":"(default)"},{"attribute":"namespace","value":"(default)"},{"attribute":"document","value":"RideRequests/{rideRequestId}","operator":"match-path-pattern"}],"triggerRegion":"nam5"}}
+[debug] [2025-05-12T14:22:53.407Z] >>> [apiv2][query] POST https://cloudfunctions.googleapis.com/v2/projects/bodaboda-b5aa8/locations/us-central1/functions functionId=updateKijiweQueue
+[debug] [2025-05-12T14:22:53.407Z] >>> [apiv2][body] POST https://cloudfunctions.googleapis.com/v2/projects/bodaboda-b5aa8/locations/us-central1/functions {"name":"projects/bodaboda-b5aa8/locations/us-central1/functions/updateKijiweQueue","buildConfig":{"runtime":"nodejs22","entryPoint":"updateKijiweQueue","source":{"storageSource":{"bucket":"gcf-v2-uploads-157804352950.us-central1.cloudfunctions.appspot.com","object":"dd7ae4ed-fc86-495b-94c1-289ab81ac488.zip"}},"environmentVariables":{"GOOGLE_NODE_RUN_SCRIPTS":""}},"serviceConfig":{"environmentVariables":{"FIREBASE_CONFIG":"{\"projectId\":\"bodaboda-b5aa8\",\"storageBucket\":\"bodaboda-b5aa8.firebasestorage.app\"}","GCLOUD_PROJECT":"bodaboda-b5aa8","EVENTARC_CLOUD_EVENT_SOURCE":"projects/bodaboda-b5aa8/locations/us-central1/services/updateKijiweQueue","FUNCTION_SIGNATURE_TYPE":"cloudevent","FUNCTION_TARGET":"updateKijiweQueue","LOG_EXECUTION_ID":"true"},"ingressSettings":null,"timeoutSeconds":null,"serviceAccountEmail":null,"availableMemory":"256Mi","minInstanceCount":null,"maxInstanceCount":null,"maxInstanceRequestConcurrency":80,"availableCpu":"1","vpcConnector":null,"vpcConnectorEgressSettings":null},"labels":{"deployment-tool":"cli-firebase","firebase-functions-hash":"73fd8a703a019e995bf0dac7f61d87b79589ad68"},"eventTrigger":{"eventType":"google.cloud.firestore.document.v1.updated","retryPolicy":"RETRY_POLICY_DO_NOT_RETRY","eventFilters":[{"attribute":"database","value":"(default)"},{"attribute":"namespace","value":"(default)"},{"attribute":"document","value":"KijiweQueues/{kijiweId}","operator":"match-path-pattern"}],"triggerRegion":"nam5"}}
+[debug] [2025-05-12T14:22:53.409Z] >>> [apiv2][query] POST https://cloudfunctions.googleapis.com/v2/projects/bodaboda-b5aa8/locations/us-central1/functions functionId=updateKijiwe
+[debug] [2025-05-12T14:22:53.410Z] >>> [apiv2][body] POST https://cloudfunctions.googleapis.com/v2/projects/bodaboda-b5aa8/locations/us-central1/functions {"name":"projects/bodaboda-b5aa8/locations/us-central1/functions/updateKijiwe","buildConfig":{"runtime":"nodejs22","entryPoint":"updateKijiwe","source":{"storageSource":{"bucket":"gcf-v2-uploads-157804352950.us-central1.cloudfunctions.appspot.com","object":"dd7ae4ed-fc86-495b-94c1-289ab81ac488.zip"}},"environmentVariables":{"GOOGLE_NODE_RUN_SCRIPTS":""}},"serviceConfig":{"environmentVariables":{"FIREBASE_CONFIG":"{\"projectId\":\"bodaboda-b5aa8\",\"storageBucket\":\"bodaboda-b5aa8.firebasestorage.app\"}","GCLOUD_PROJECT":"bodaboda-b5aa8","EVENTARC_CLOUD_EVENT_SOURCE":"projects/bodaboda-b5aa8/locations/us-central1/services/updateKijiwe","FUNCTION_SIGNATURE_TYPE":"cloudevent","FUNCTION_TARGET":"updateKijiwe","LOG_EXECUTION_ID":"true"},"ingressSettings":null,"timeoutSeconds":null,"serviceAccountEmail":null,"availableMemory":"256Mi","minInstanceCount":null,"maxInstanceCount":null,"maxInstanceRequestConcurrency":80,"availableCpu":"1","vpcConnector":null,"vpcConnectorEgressSettings":null},"labels":{"deployment-tool":"cli-firebase","firebase-functions-hash":"73fd8a703a019e995bf0dac7f61d87b79589ad68"},"eventTrigger":{"eventType":"google.cloud.firestore.document.v1.updated","retryPolicy":"RETRY_POLICY_DO_NOT_RETRY","eventFilters":[{"attribute":"database","value":"(default)"},{"attribute":"namespace","value":"(default)"},{"attribute":"document","value":"Kijiwes/{kijiweId}","operator":"match-path-pattern"}],"triggerRegion":"nam5"}}
+[debug] [2025-05-12T14:23:09.416Z] <<< [apiv2][status] POST https://cloudfunctions.googleapis.com/v2/projects/bodaboda-b5aa8/locations/us-central1/functions 400
+[debug] [2025-05-12T14:23:09.416Z] <<< [apiv2][body] POST https://cloudfunctions.googleapis.com/v2/projects/bodaboda-b5aa8/locations/us-central1/functions {"error":{"code":400,"message":"Validation failed for trigger projects/bodaboda-b5aa8/locations/nam5/triggers/updateriderequest-157575: Invalid resource state for \"\": Permission denied while using the Eventarc Service Agent. If you recently started to use Eventarc, it may take a few minutes before all necessary permissions are propagated to the Service Agent. Otherwise, verify that it has Eventarc Service Agent role.","status":"FAILED_PRECONDITION"}}
+[warn] !  functions: Request to https://cloudfunctions.googleapis.com/v2/projects/bodaboda-b5aa8/locations/us-central1/functions?functionId=updateRideRequest had HTTP Error: 400, Validation failed for trigger projects/bodaboda-b5aa8/locations/nam5/triggers/updateriderequest-157575: Invalid resource state for "": Permission denied while using the Eventarc Service Agent. If you recently started to use Eventarc, it may take a few minutes before all necessary permissions are propagated to the Service Agent. Otherwise, verify that it has Eventarc Service Agent role. 
+[warn] !  functions: Since this is your first time using 2nd gen functions, we need a little bit longer to finish setting everything up. Retry the deployment in a few minutes. 
+[warn] !  functions:  failed to create function projects/bodaboda-b5aa8/locations/us-central1/functions/updateRideRequest 
+[error] Failed to create function projects/bodaboda-b5aa8/locations/us-central1/functions/updateRideRequest
+[debug] [2025-05-12T14:23:09.420Z] <<< [apiv2][status] POST https://cloudfunctions.googleapis.com/v2/projects/bodaboda-b5aa8/locations/us-central1/functions 400
+[debug] [2025-05-12T14:23:09.420Z] <<< [apiv2][body] POST https://cloudfunctions.googleapis.com/v2/projects/bodaboda-b5aa8/locations/us-central1/functions {"error":{"code":400,"message":"Validation failed for trigger projects/bodaboda-b5aa8/locations/nam5/triggers/updatekijiwequeue-005322: Invalid resource state for \"\": Permission denied while using the Eventarc Service Agent. If you recently started to use Eventarc, it may take a few minutes before all necessary permissions are propagated to the Service Agent. Otherwise, verify that it has Eventarc Service Agent role.","status":"FAILED_PRECONDITION"}}
+[warn] !  functions: Request to https://cloudfunctions.googleapis.com/v2/projects/bodaboda-b5aa8/locations/us-central1/functions?functionId=updateKijiweQueue had HTTP Error: 400, Validation failed for trigger projects/bodaboda-b5aa8/locations/nam5/triggers/updatekijiwequeue-005322: Invalid resource state for "": Permission denied while using the Eventarc Service Agent. If you recently started to use Eventarc, it may take a few minutes before all necessary permissions are propagated to the Service Agent. Otherwise, verify that it has Eventarc Service Agent role. 
+[warn] !  functions: Since this is your first time using 2nd gen functions, we need a little bit longer to finish setting everything up. Retry the deployment in a few minutes. 
+[warn] !  functions:  failed to create function projects/bodaboda-b5aa8/locations/us-central1/functions/updateKijiweQueue 
+[error] Failed to create function projects/bodaboda-b5aa8/locations/us-central1/functions/updateKijiweQueue
+[debug] [2025-05-12T14:23:09.507Z] <<< [apiv2][status] POST https://cloudfunctions.googleapis.com/v2/projects/bodaboda-b5aa8/locations/us-central1/functions 400
+[debug] [2025-05-12T14:23:09.507Z] <<< [apiv2][body] POST https://cloudfunctions.googleapis.com/v2/projects/bodaboda-b5aa8/locations/us-central1/functions {"error":{"code":400,"message":"Validation failed for trigger projects/bodaboda-b5aa8/locations/nam5/triggers/deleteriderequest-916873: Invalid resource state for \"\": Permission denied while using the Eventarc Service Agent. If you recently started to use Eventarc, it may take a few minutes before all necessary permissions are propagated to the Service Agent. Otherwise, verify that it has Eventarc Service Agent role.","status":"FAILED_PRECONDITION"}}
+[warn] !  functions: Request to https://cloudfunctions.googleapis.com/v2/projects/bodaboda-b5aa8/locations/us-central1/functions?functionId=deleteRideRequest had HTTP Error: 400, Validation failed for trigger projects/bodaboda-b5aa8/locations/nam5/triggers/deleteriderequest-916873: Invalid resource state for "": Permission denied while using the Eventarc Service Agent. If you recently started to use Eventarc, it may take a few minutes before all necessary permissions are propagated to the Service Agent. Otherwise, verify that it has Eventarc Service Agent role. 
+[warn] !  functions: Since this is your first time using 2nd gen functions, we need a little bit longer to finish setting everything up. Retry the deployment in a few minutes. 
+[warn] !  functions:  failed to create function projects/bodaboda-b5aa8/locations/us-central1/functions/deleteRideRequest 
+[error] Failed to create function projects/bodaboda-b5aa8/locations/us-central1/functions/deleteRideRequest
+[debug] [2025-05-12T14:23:09.510Z] <<< [apiv2][status] POST https://cloudfunctions.googleapis.com/v2/projects/bodaboda-b5aa8/locations/us-central1/functions 400
+[debug] [2025-05-12T14:23:09.510Z] <<< [apiv2][body] POST https://cloudfunctions.googleapis.com/v2/projects/bodaboda-b5aa8/locations/us-central1/functions {"error":{"code":400,"message":"Validation failed for trigger projects/bodaboda-b5aa8/locations/nam5/triggers/updatekijiwe-655157: Invalid resource state for \"\": Permission denied while using the Eventarc Service Agent. If you recently started to use Eventarc, it may take a few minutes before all necessary permissions are propagated to the Service Agent. Otherwise, verify that it has Eventarc Service Agent role.","status":"FAILED_PRECONDITION"}}
+[warn] !  functions: Request to https://cloudfunctions.googleapis.com/v2/projects/bodaboda-b5aa8/locations/us-central1/functions?functionId=updateKijiwe had HTTP Error: 400, Validation failed for trigger projects/bodaboda-b5aa8/locations/nam5/triggers/updatekijiwe-655157: Invalid resource state for "": Permission denied while using the Eventarc Service Agent. If you recently started to use Eventarc, it may take a few minutes before all necessary permissions are propagated to the Service Agent. Otherwise, verify that it has Eventarc Service Agent role. 
+[warn] !  functions: Since this is your first time using 2nd gen functions, we need a little bit longer to finish setting everything up. Retry the deployment in a few minutes. 
+[warn] !  functions:  failed to create function projects/bodaboda-b5aa8/locations/us-central1/functions/updateKijiwe 
+[error] Failed to create function projects/bodaboda-b5aa8/locations/us-central1/functions/updateKijiwe
+[debug] [2025-05-12T14:23:09.524Z] Total Function Deployment time: 32793
+[debug] [2025-05-12T14:23:09.525Z] 5 Functions Deployed
+[debug] [2025-05-12T14:23:09.525Z] 5 Functions Errored
+[debug] [2025-05-12T14:23:09.525Z] 0 Function Deployments Aborted
+[debug] [2025-05-12T14:23:09.525Z] Average Function Deployment time: 29532.6
+[info] 
+[info] Functions deploy had errors with the following functions:
+	deleteRideRequest(us-central1)
+	matchRideRequest(us-central1)
+	updateKijiwe(us-central1)
+	updateKijiweQueue(us-central1)
+	updateRideRequest(us-central1)
+[debug] [2025-05-12T14:23:09.953Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:23:09.953Z] Checked if tokens are valid: true, expires at: 1747060874961
+[debug] [2025-05-12T14:23:09.953Z] >>> [apiv2][query] GET https://artifactregistry.googleapis.com/v1/projects/bodaboda-b5aa8/locations/us-central1/repositories/gcf-artifacts [none]
+[debug] [2025-05-12T14:23:11.391Z] <<< [apiv2][status] GET https://artifactregistry.googleapis.com/v1/projects/bodaboda-b5aa8/locations/us-central1/repositories/gcf-artifacts 404
+[debug] [2025-05-12T14:23:11.391Z] <<< [apiv2][body] GET https://artifactregistry.googleapis.com/v1/projects/bodaboda-b5aa8/locations/us-central1/repositories/gcf-artifacts {"error":{"code":404,"message":"Requested entity was not found.","status":"NOT_FOUND"}}
+[debug] [2025-05-12T14:23:11.392Z] Failed to check artifact cleanup policy for region us-central1: Request to https://artifactregistry.googleapis.com/v1/projects/bodaboda-b5aa8/locations/us-central1/repositories/gcf-artifacts had HTTP Error: 404, Requested entity was not found. {"name":"FirebaseError","children":[],"context":{"body":{"error":{"code":404,"message":"Requested entity was not found.","status":"NOT_FOUND"}},"response":{"statusCode":404}},"exit":1,"message":"Request to https://artifactregistry.googleapis.com/v1/projects/bodaboda-b5aa8/locations/us-central1/repositories/gcf-artifacts had HTTP Error: 404, Requested entity was not found.","status":404}
+[debug] [2025-05-12T14:23:11.392Z] Functions deploy failed.
+[debug] [2025-05-12T14:23:11.392Z] {
+  "endpoint": {
+    "id": "matchRideRequest",
+    "project": "bodaboda-b5aa8",
+    "region": "us-central1",
+    "entryPoint": "matchRideRequest",
+    "platform": "gcfv2",
+    "runtime": "nodejs22",
+    "eventTrigger": {
+      "eventType": "google.cloud.firestore.document.v1.created",
+      "retry": false,
+      "eventFilters": {
+        "database": "(default)",
+        "namespace": "(default)"
+      },
+      "eventFilterPathPatterns": {
+        "document": "RideRequests/{rideRequestId}"
+      },
+      "region": "nam5"
+    },
+    "labels": {
+      "deployment-tool": "cli-firebase"
+    },
+    "serviceAccount": null,
+    "ingressSettings": null,
+    "availableMemoryMb": null,
+    "timeoutSeconds": null,
+    "maxInstances": null,
+    "minInstances": null,
+    "concurrency": 80,
+    "vpc": null,
+    "environmentVariables": {
+      "FIREBASE_CONFIG": "{\"projectId\":\"bodaboda-b5aa8\",\"storageBucket\":\"bodaboda-b5aa8.firebasestorage.app\"}",
+      "GCLOUD_PROJECT": "bodaboda-b5aa8",
+      "EVENTARC_CLOUD_EVENT_SOURCE": "projects/bodaboda-b5aa8/locations/us-central1/services/matchRideRequest"
+    },
+    "codebase": "default",
+    "cpu": 1,
+    "targetedByOnly": false,
+    "hash": "73fd8a703a019e995bf0dac7f61d87b79589ad68"
+  },
+  "op": "create",
+  "original": {
+    "name": "FirebaseError",
+    "children": [],
+    "context": {
+      "function": "projects/bodaboda-b5aa8/locations/us-central1/functions/matchRideRequest"
+    },
+    "exit": 1,
+    "message": "Failed to create function projects/bodaboda-b5aa8/locations/us-central1/functions/matchRideRequest",
+    "original": {
+      "name": "FirebaseError",
+      "children": [],
+      "context": {
+        "body": {
+          "error": {
+            "code": 400,
+            "message": "Validation failed for trigger projects/bodaboda-b5aa8/locations/nam5/triggers/matchriderequest-115464: Invalid resource state for \"\": Permission denied while using the Eventarc Service Agent. If you recently started to use Eventarc, it may take a few minutes before all necessary permissions are propagated to the Service Agent. Otherwise, verify that it has Eventarc Service Agent role.",
+            "status": "FAILED_PRECONDITION"
+          }
+        },
+        "response": {
+          "statusCode": 400
+        }
+      },
+      "exit": 1,
+      "message": "Request to https://cloudfunctions.googleapis.com/v2/projects/bodaboda-b5aa8/locations/us-central1/functions?functionId=matchRideRequest had HTTP Error: 400, Validation failed for trigger projects/bodaboda-b5aa8/locations/nam5/triggers/matchriderequest-115464: Invalid resource state for \"\": Permission denied while using the Eventarc Service Agent. If you recently started to use Eventarc, it may take a few minutes before all necessary permissions are propagated to the Service Agent. Otherwise, verify that it has Eventarc Service Agent role.",
+      "status": 400
+    },
+    "status": 400,
+    "code": 400
+  }
+}
+[debug] [2025-05-12T14:23:11.392Z] {
+  "endpoint": {
+    "id": "updateRideRequest",
+    "project": "bodaboda-b5aa8",
+    "region": "us-central1",
+    "entryPoint": "updateRideRequest",
+    "platform": "gcfv2",
+    "runtime": "nodejs22",
+    "eventTrigger": {
+      "eventType": "google.cloud.firestore.document.v1.updated",
+      "retry": false,
+      "eventFilters": {
+        "database": "(default)",
+        "namespace": "(default)"
+      },
+      "eventFilterPathPatterns": {
+        "document": "RideRequests/{rideRequestId}"
+      },
+      "region": "nam5"
+    },
+    "labels": {
+      "deployment-tool": "cli-firebase"
+    },
+    "serviceAccount": null,
+    "ingressSettings": null,
+    "availableMemoryMb": null,
+    "timeoutSeconds": null,
+    "maxInstances": null,
+    "minInstances": null,
+    "concurrency": 80,
+    "vpc": null,
+    "environmentVariables": {
+      "FIREBASE_CONFIG": "{\"projectId\":\"bodaboda-b5aa8\",\"storageBucket\":\"bodaboda-b5aa8.firebasestorage.app\"}",
+      "GCLOUD_PROJECT": "bodaboda-b5aa8",
+      "EVENTARC_CLOUD_EVENT_SOURCE": "projects/bodaboda-b5aa8/locations/us-central1/services/updateRideRequest"
+    },
+    "codebase": "default",
+    "cpu": 1,
+    "targetedByOnly": false,
+    "hash": "73fd8a703a019e995bf0dac7f61d87b79589ad68"
+  },
+  "op": "create",
+  "original": {
+    "name": "FirebaseError",
+    "children": [],
+    "context": {
+      "function": "projects/bodaboda-b5aa8/locations/us-central1/functions/updateRideRequest"
+    },
+    "exit": 1,
+    "message": "Failed to create function projects/bodaboda-b5aa8/locations/us-central1/functions/updateRideRequest",
+    "original": {
+      "name": "FirebaseError",
+      "children": [],
+      "context": {
+        "body": {
+          "error": {
+            "code": 400,
+            "message": "Validation failed for trigger projects/bodaboda-b5aa8/locations/nam5/triggers/updateriderequest-157575: Invalid resource state for \"\": Permission denied while using the Eventarc Service Agent. If you recently started to use Eventarc, it may take a few minutes before all necessary permissions are propagated to the Service Agent. Otherwise, verify that it has Eventarc Service Agent role.",
+            "status": "FAILED_PRECONDITION"
+          }
+        },
+        "response": {
+          "statusCode": 400
+        }
+      },
+      "exit": 1,
+      "message": "Request to https://cloudfunctions.googleapis.com/v2/projects/bodaboda-b5aa8/locations/us-central1/functions?functionId=updateRideRequest had HTTP Error: 400, Validation failed for trigger projects/bodaboda-b5aa8/locations/nam5/triggers/updateriderequest-157575: Invalid resource state for \"\": Permission denied while using the Eventarc Service Agent. If you recently started to use Eventarc, it may take a few minutes before all necessary permissions are propagated to the Service Agent. Otherwise, verify that it has Eventarc Service Agent role.",
+      "status": 400
+    },
+    "status": 400,
+    "code": 400
+  }
+}
+[debug] [2025-05-12T14:23:11.392Z] {
+  "endpoint": {
+    "id": "updateKijiweQueue",
+    "project": "bodaboda-b5aa8",
+    "region": "us-central1",
+    "entryPoint": "updateKijiweQueue",
+    "platform": "gcfv2",
+    "runtime": "nodejs22",
+    "eventTrigger": {
+      "eventType": "google.cloud.firestore.document.v1.updated",
+      "retry": false,
+      "eventFilters": {
+        "database": "(default)",
+        "namespace": "(default)"
+      },
+      "eventFilterPathPatterns": {
+        "document": "KijiweQueues/{kijiweId}"
+      },
+      "region": "nam5"
+    },
+    "labels": {
+      "deployment-tool": "cli-firebase"
+    },
+    "serviceAccount": null,
+    "ingressSettings": null,
+    "availableMemoryMb": null,
+    "timeoutSeconds": null,
+    "maxInstances": null,
+    "minInstances": null,
+    "concurrency": 80,
+    "vpc": null,
+    "environmentVariables": {
+      "FIREBASE_CONFIG": "{\"projectId\":\"bodaboda-b5aa8\",\"storageBucket\":\"bodaboda-b5aa8.firebasestorage.app\"}",
+      "GCLOUD_PROJECT": "bodaboda-b5aa8",
+      "EVENTARC_CLOUD_EVENT_SOURCE": "projects/bodaboda-b5aa8/locations/us-central1/services/updateKijiweQueue"
+    },
+    "codebase": "default",
+    "cpu": 1,
+    "targetedByOnly": false,
+    "hash": "73fd8a703a019e995bf0dac7f61d87b79589ad68"
+  },
+  "op": "create",
+  "original": {
+    "name": "FirebaseError",
+    "children": [],
+    "context": {
+      "function": "projects/bodaboda-b5aa8/locations/us-central1/functions/updateKijiweQueue"
+    },
+    "exit": 1,
+    "message": "Failed to create function projects/bodaboda-b5aa8/locations/us-central1/functions/updateKijiweQueue",
+    "original": {
+      "name": "FirebaseError",
+      "children": [],
+      "context": {
+        "body": {
+          "error": {
+            "code": 400,
+            "message": "Validation failed for trigger projects/bodaboda-b5aa8/locations/nam5/triggers/updatekijiwequeue-005322: Invalid resource state for \"\": Permission denied while using the Eventarc Service Agent. If you recently started to use Eventarc, it may take a few minutes before all necessary permissions are propagated to the Service Agent. Otherwise, verify that it has Eventarc Service Agent role.",
+            "status": "FAILED_PRECONDITION"
+          }
+        },
+        "response": {
+          "statusCode": 400
+        }
+      },
+      "exit": 1,
+      "message": "Request to https://cloudfunctions.googleapis.com/v2/projects/bodaboda-b5aa8/locations/us-central1/functions?functionId=updateKijiweQueue had HTTP Error: 400, Validation failed for trigger projects/bodaboda-b5aa8/locations/nam5/triggers/updatekijiwequeue-005322: Invalid resource state for \"\": Permission denied while using the Eventarc Service Agent. If you recently started to use Eventarc, it may take a few minutes before all necessary permissions are propagated to the Service Agent. Otherwise, verify that it has Eventarc Service Agent role.",
+      "status": 400
+    },
+    "status": 400,
+    "code": 400
+  }
+}
+[debug] [2025-05-12T14:23:11.393Z] {
+  "endpoint": {
+    "id": "deleteRideRequest",
+    "project": "bodaboda-b5aa8",
+    "region": "us-central1",
+    "entryPoint": "deleteRideRequest",
+    "platform": "gcfv2",
+    "runtime": "nodejs22",
+    "eventTrigger": {
+      "eventType": "google.cloud.firestore.document.v1.deleted",
+      "retry": false,
+      "eventFilters": {
+        "database": "(default)",
+        "namespace": "(default)"
+      },
+      "eventFilterPathPatterns": {
+        "document": "RideRequests/{rideRequestId}"
+      },
+      "region": "nam5"
+    },
+    "labels": {
+      "deployment-tool": "cli-firebase"
+    },
+    "serviceAccount": null,
+    "ingressSettings": null,
+    "availableMemoryMb": null,
+    "timeoutSeconds": null,
+    "maxInstances": null,
+    "minInstances": null,
+    "concurrency": 80,
+    "vpc": null,
+    "environmentVariables": {
+      "FIREBASE_CONFIG": "{\"projectId\":\"bodaboda-b5aa8\",\"storageBucket\":\"bodaboda-b5aa8.firebasestorage.app\"}",
+      "GCLOUD_PROJECT": "bodaboda-b5aa8",
+      "EVENTARC_CLOUD_EVENT_SOURCE": "projects/bodaboda-b5aa8/locations/us-central1/services/deleteRideRequest"
+    },
+    "codebase": "default",
+    "cpu": 1,
+    "targetedByOnly": false,
+    "hash": "73fd8a703a019e995bf0dac7f61d87b79589ad68"
+  },
+  "op": "create",
+  "original": {
+    "name": "FirebaseError",
+    "children": [],
+    "context": {
+      "function": "projects/bodaboda-b5aa8/locations/us-central1/functions/deleteRideRequest"
+    },
+    "exit": 1,
+    "message": "Failed to create function projects/bodaboda-b5aa8/locations/us-central1/functions/deleteRideRequest",
+    "original": {
+      "name": "FirebaseError",
+      "children": [],
+      "context": {
+        "body": {
+          "error": {
+            "code": 400,
+            "message": "Validation failed for trigger projects/bodaboda-b5aa8/locations/nam5/triggers/deleteriderequest-916873: Invalid resource state for \"\": Permission denied while using the Eventarc Service Agent. If you recently started to use Eventarc, it may take a few minutes before all necessary permissions are propagated to the Service Agent. Otherwise, verify that it has Eventarc Service Agent role.",
+            "status": "FAILED_PRECONDITION"
+          }
+        },
+        "response": {
+          "statusCode": 400
+        }
+      },
+      "exit": 1,
+      "message": "Request to https://cloudfunctions.googleapis.com/v2/projects/bodaboda-b5aa8/locations/us-central1/functions?functionId=deleteRideRequest had HTTP Error: 400, Validation failed for trigger projects/bodaboda-b5aa8/locations/nam5/triggers/deleteriderequest-916873: Invalid resource state for \"\": Permission denied while using the Eventarc Service Agent. If you recently started to use Eventarc, it may take a few minutes before all necessary permissions are propagated to the Service Agent. Otherwise, verify that it has Eventarc Service Agent role.",
+      "status": 400
+    },
+    "status": 400,
+    "code": 400
+  }
+}
+[debug] [2025-05-12T14:23:11.393Z] {
+  "endpoint": {
+    "id": "updateKijiwe",
+    "project": "bodaboda-b5aa8",
+    "region": "us-central1",
+    "entryPoint": "updateKijiwe",
+    "platform": "gcfv2",
+    "runtime": "nodejs22",
+    "eventTrigger": {
+      "eventType": "google.cloud.firestore.document.v1.updated",
+      "retry": false,
+      "eventFilters": {
+        "database": "(default)",
+        "namespace": "(default)"
+      },
+      "eventFilterPathPatterns": {
+        "document": "Kijiwes/{kijiweId}"
+      },
+      "region": "nam5"
+    },
+    "labels": {
+      "deployment-tool": "cli-firebase"
+    },
+    "serviceAccount": null,
+    "ingressSettings": null,
+    "availableMemoryMb": null,
+    "timeoutSeconds": null,
+    "maxInstances": null,
+    "minInstances": null,
+    "concurrency": 80,
+    "vpc": null,
+    "environmentVariables": {
+      "FIREBASE_CONFIG": "{\"projectId\":\"bodaboda-b5aa8\",\"storageBucket\":\"bodaboda-b5aa8.firebasestorage.app\"}",
+      "GCLOUD_PROJECT": "bodaboda-b5aa8",
+      "EVENTARC_CLOUD_EVENT_SOURCE": "projects/bodaboda-b5aa8/locations/us-central1/services/updateKijiwe"
+    },
+    "codebase": "default",
+    "cpu": 1,
+    "targetedByOnly": false,
+    "hash": "73fd8a703a019e995bf0dac7f61d87b79589ad68"
+  },
+  "op": "create",
+  "original": {
+    "name": "FirebaseError",
+    "children": [],
+    "context": {
+      "function": "projects/bodaboda-b5aa8/locations/us-central1/functions/updateKijiwe"
+    },
+    "exit": 1,
+    "message": "Failed to create function projects/bodaboda-b5aa8/locations/us-central1/functions/updateKijiwe",
+    "original": {
+      "name": "FirebaseError",
+      "children": [],
+      "context": {
+        "body": {
+          "error": {
+            "code": 400,
+            "message": "Validation failed for trigger projects/bodaboda-b5aa8/locations/nam5/triggers/updatekijiwe-655157: Invalid resource state for \"\": Permission denied while using the Eventarc Service Agent. If you recently started to use Eventarc, it may take a few minutes before all necessary permissions are propagated to the Service Agent. Otherwise, verify that it has Eventarc Service Agent role.",
+            "status": "FAILED_PRECONDITION"
+          }
+        },
+        "response": {
+          "statusCode": 400
+        }
+      },
+      "exit": 1,
+      "message": "Request to https://cloudfunctions.googleapis.com/v2/projects/bodaboda-b5aa8/locations/us-central1/functions?functionId=updateKijiwe had HTTP Error: 400, Validation failed for trigger projects/bodaboda-b5aa8/locations/nam5/triggers/updatekijiwe-655157: Invalid resource state for \"\": Permission denied while using the Eventarc Service Agent. If you recently started to use Eventarc, it may take a few minutes before all necessary permissions are propagated to the Service Agent. Otherwise, verify that it has Eventarc Service Agent role.",
+      "status": 400
+    },
+    "status": 400,
+    "code": 400
+  }
+}
+[error] Error: There was an error deploying functions:
+[error] - Error Failed to create function matchRideRequest in region us-central1
+[error] - Error Failed to create function updateRideRequest in region us-central1
+[error] - Error Failed to create function updateKijiweQueue in region us-central1
+[error] - Error Failed to create function deleteRideRequest in region us-central1
+[error] - Error Failed to create function updateKijiwe in region us-central1

@@ -1,0 +1,1 @@
+ C:\\Users\\johnb\\AndroidStudioProjects\\MyApplication\\boda_boda_app\\.dart_tool\\flutter_build\\2bbb38cd78c4f781342043c71490c862\\native_assets.json: 

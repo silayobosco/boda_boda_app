@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../screens/home_screen.dart';
 import '../screens/profile_screen.dart';
 import '../screens/login_screen.dart';
 import '../screens/driver_registration_screen.dart';
@@ -105,52 +106,113 @@ class AppDrawer extends StatelessWidget {
           ),
           const Spacer(), // Push the driver button to the bottom
           // "Become a Driver" or "Switch Role" Button
-          _buildDriverButton(context, user),
+          _buildDriverButton(context),
         ],
       ),
     );
   }
 
-  Widget _buildDriverButton(BuildContext context, User? user) {
-    return FutureBuilder<DocumentSnapshot>(
-      future: FirebaseFirestore.instance
-          .collection('drivers')
-          .doc(user?.uid)
-          .get(),
-      builder: (context, snapshot) {
-        String buttonText = "Become a Driver";
-        VoidCallback? onPressed;
+    Widget _buildDriverButton(BuildContext context) {
+    final currentUser = FirebaseAuth.instance.currentUser;
 
+    if (currentUser == null) {
+      // Or return a disabled button, or nothing
+      return const SizedBox.shrink();
+    }
+
+    return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      future: FirebaseFirestore.instance.collection('users').doc(currentUser.uid).get(),
+      builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          buttonText = "Checking Driver Status...";
-        } else if (snapshot.hasData && snapshot.data!.exists) {
-          // User IS a driver, check their current role
-          final isDriverActive = snapshot.data!['is_active'] ?? false; // Example field
-          buttonText = isDriverActive ? "Switch to Customer" : "Switch to Driver";
-          onPressed = () {
-            // TODO: Implement role switching logic (e.g., update a 'role' field in the user or driver document)
-            // For now, just print a message
-            print("Role switch button pressed. Implement role switch here.");
-          };
-        } else {
-          // User is NOT a driver
-          onPressed = () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => DriverRegistrationScreen()),
-            );
-          };
+          return const ListTile(
+            leading: Icon(Icons.hourglass_empty),
+            title: Text("Loading..."),
+            enabled: false,
+          );
         }
 
-        return Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: ElevatedButton(
-            onPressed: onPressed,
-            child: Text(buttonText),
-          ),
+        if (snapshot.hasError) {
+          debugPrint("Error fetching user for drawer button: ${snapshot.error}");
+          return const ListTile(
+            leading: Icon(Icons.error_outline),
+            title: Text("Error loading status"),
+            enabled: false,
+          );
+        }
+
+        String currentRole = 'Customer'; // Default role
+        Map<String, dynamic>? driverProfile;
+
+        if (snapshot.hasData && snapshot.data!.exists) {
+          final userData = snapshot.data!.data();
+          if (userData != null) {
+            currentRole = userData['role'] as String? ?? 'Customer';
+            if (userData.containsKey('driverProfile') && userData['driverProfile'] is Map) {
+              driverProfile = userData['driverProfile'] as Map<String, dynamic>?;
+            }
+          }
+        }
+        // If snapshot.data doesn't exist, user is treated as 'Customer'.
+
+        final bool isCurrentlyDriver = currentRole == 'Driver';
+        final String buttonTitle = isCurrentlyDriver ? 'Switch to Customer' : 'Become a Driver';
+
+        return ListTile(
+          leading: const Icon(Icons.switch_account),
+          title: Text(buttonTitle),
+          onTap: () async {
+            // Close the drawer first if it's open
+            if (Navigator.of(context).canPop()) {
+              Navigator.of(context).pop();
+            }
+
+            final userDocRef = FirebaseFirestore.instance.collection('users').doc(currentUser.uid);
+
+            try {
+              if (isCurrentlyDriver) {
+                // Action: Switch from Driver to Customer
+                await userDocRef.update({'role': 'Customer'});
+                if (context.mounted) {
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(builder: (context) => const HomeScreen()),
+                  );
+                }
+              } else {
+                // Action: Become a Driver (or switch from Customer to Driver)
+                // Check for kijiweId in driverProfile
+                final String? kijiweId = driverProfile?['kijiweId'] as String?;
+
+                if (kijiweId != null && kijiweId.isNotEmpty) {
+                  // Driver profile seems complete enough, just switch role
+                  await userDocRef.update({'role': 'Driver'});
+                  if (context.mounted) {
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(builder: (context) => const HomeScreen()),
+                    );
+                  }
+                } else {
+                  // Incomplete driver profile or no profile, navigate to registration
+                  if (context.mounted) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const DriverRegistrationScreen()),
+                    );
+                  }
+                }
+              }
+            } catch (e) {
+              debugPrint("Error switching role: $e");
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Failed to switch role: ${e.toString()}')),
+                );
+              }
+            }
+          },
         );
       },
     );
   }
 }
-

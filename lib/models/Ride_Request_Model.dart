@@ -38,7 +38,7 @@ class RideRequestModel {
       stops: (json['stops'] as List<dynamic>)
           .map((stop) => {
                 'name': stop['name'],
-                'address': stop['address'],
+                //'address': stop['address'],
                 'location': LatLng(
                   (stop['location']['latitude'] as num).toDouble(),
                   (stop['location']['longitude'] as num).toDouble(),
@@ -59,7 +59,7 @@ class RideRequestModel {
       'stops': stops
           .map((stop) => {
                 'name': stop['name'],
-                'address': stop['address'],
+                //'address': stop['address'],
                 'location': {
                   'latitude': stop['location'].latitude,
                   'longitude': stop['location'].longitude,
@@ -140,7 +140,7 @@ class RideHistoryModel {
       stops: (json['stops'] as List<dynamic>)
           .map((stop) => {
                 'name': stop['name'],
-                'address': stop['address'],
+                //'address': stop['address'],
                 'location': LatLng(
                   (stop['location']['latitude'] as num).toDouble(),
                   (stop['location']['longitude'] as num).toDouble(),
@@ -162,7 +162,7 @@ class RideHistoryModel {
       'stops': stops
           .map((stop) => {
                 'name': stop['name'],
-                'address': stop['address'],
+                //'address': stop['address'],
                 'location': {
                   'latitude': stop['location'].latitude,
                   'longitude': stop['location'].longitude,

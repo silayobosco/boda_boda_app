@@ -1,0 +1,15 @@
+<component name="libraryTable">
+  <library name="Gradle: com.google.maps.android:android-maps-utils:3.6.0@aar" external-system-id="GRADLE">
+    <CLASSES>
+      <root url="file://$PROJECT_DIR$/../../../../../Gradle/gradle-8.13-all/gradle-8.13/caches/8.11.1/transforms/827c8fe25a38b00425a0e9070cfd5840/transformed/jetified-android-maps-utils-3.6.0/res" />
+      <root url="file://$PROJECT_DIR$/../../../../../Gradle/gradle-8.13-all/gradle-8.13/caches/8.11.1/transforms/827c8fe25a38b00425a0e9070cfd5840/transformed/jetified-android-maps-utils-3.6.0/AndroidManifest.xml" />
+      <root url="jar://$PROJECT_DIR$/../../../../../Gradle/gradle-8.13-all/gradle-8.13/caches/8.11.1/transforms/827c8fe25a38b00425a0e9070cfd5840/transformed/jetified-android-maps-utils-3.6.0/jars/classes.jar!/" />
+    </CLASSES>
+    <JAVADOC>
+      <root url="jar://$PROJECT_DIR$/../../../../../Gradle/gradle-8.13-all/gradle-8.13/caches/modules-2/files-2.1/com.google.maps.android/android-maps-utils/3.6.0/eddfa416ea635d13201a22fd4ca3c208ecbc4a61/android-maps-utils-3.6.0-javadoc.jar!/" />
+    </JAVADOC>
+    <SOURCES>
+      <root url="jar://$PROJECT_DIR$/../../../../../Gradle/gradle-8.13-all/gradle-8.13/caches/modules-2/files-2.1/com.google.maps.android/android-maps-utils/3.6.0/68a5d27ebd41a255ad5cf34cedc6cc591ed2372/android-maps-utils-3.6.0-sources.jar!/" />
+    </SOURCES>
+  </library>
+</component>

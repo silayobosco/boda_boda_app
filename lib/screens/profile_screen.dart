@@ -278,29 +278,41 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                      Center(
-                        child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          GestureDetector(
-                          onTap: _pickImage, // Always allow image picking
-                          child: CircleAvatar(
-                            radius: 60,
-                            backgroundColor:
-                              Colors.grey[300], // Fallback background color
-                            backgroundImage:
-                              _photoURL != null && _photoURL!.isNotEmpty
-                                ? NetworkImage(_photoURL!)
-                                : null, // Use null if no image is available
-                            child: (_photoURL == null || _photoURL!.isEmpty)
-                              ? const Icon(
-                                Icons.person,
-                                size: 60,
-                                color: Colors.white,
-                              )
-                              : null, // Show an icon only if no image is available
-                          ),
-                          ),
+                        Center(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              GestureDetector(
+                                onTap:
+                                    _isEditing
+                                        ? _pickImage
+                                        : null, // Allow image picking only in edit mode
+                                child: CircleAvatar(
+                                  radius: 60,
+                                  backgroundColor:
+                                      Colors
+                                          .grey[300], // Fallback background color
+                                  backgroundImage:
+                                      _photoURL != null && _photoURL!.isNotEmpty
+                                          ? NetworkImage(_photoURL!)
+                                              as ImageProvider
+                                          : const AssetImage("assets/icon.png"),
+                                  onBackgroundImageError: (_, __) {
+                                    setState(() {
+                                      _photoURL =
+                                          null; // Reset photoURL to trigger default avatar
+                                    });
+                                  },
+                                  child:
+                                      (_photoURL == null || _photoURL!.isEmpty)
+                                          ? const Icon(
+                                            Icons.person,
+                                            size: 60,
+                                            color: Colors.white,
+                                          )
+                                          : null, // Show an icon if no image is available
+                                ),
+                              ),
                               const SizedBox(height: 16),
                               Text(
                                 " ${_role ?? "N/A"}",
