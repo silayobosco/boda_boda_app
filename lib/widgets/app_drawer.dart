@@ -5,7 +5,6 @@ import '../screens/home_screen.dart';
 import '../screens/profile_screen.dart';
 import '../screens/login_screen.dart';
 import '../screens/driver_registration_screen.dart';
-import '../utils/ui_utils.dart';
 
 class AppDrawer extends StatelessWidget {
   const AppDrawer({super.key});
@@ -154,8 +153,15 @@ class AppDrawer extends StatelessWidget {
         }
         // If snapshot.data doesn't exist, user is treated as 'Customer'.
 
-        final bool isCurrentlyDriver = currentRole == 'Driver';
-        final String buttonTitle = isCurrentlyDriver ? 'Switch to Customer' : 'Become a Driver';
+        final bool isCurrentlyDriver = currentRole == 'Driver'; // Check if the current role is 'Driver'
+        // Check if they have a completed driver profile (using kijiweId as indicator)
+        final bool hasCompletedDriverProfile = driverProfile?['kijiweId'] != null && (driverProfile!['kijiweId'] as String).isNotEmpty;
+
+        final String buttonTitle = isCurrentlyDriver
+            ? 'Switch to Customer' // If currently a Driver, offer to switch to Customer
+            : hasCompletedDriverProfile // If not currently Driver, check if they have a completed profile
+                ? 'Switch to Driver' // If they have a profile, offer to switch to Driver role
+                : 'Become a Driver'; // If no profile, offer to register as a Driver
 
         return ListTile(
           leading: const Icon(Icons.switch_account),

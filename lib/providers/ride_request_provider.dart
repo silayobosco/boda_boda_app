@@ -71,22 +71,6 @@ class RideRequestProvider extends ChangeNotifier {
     });
   }
 
-  Future<void> joinQueue(String kijiweId) async {
-    final userId = FirebaseAuth.instance.currentUser?.uid;
-    if (userId != null) {
-      await _firestoreService.joinKijiweQueue(kijiweId, userId);
-      await _firestoreService.updateDriverAvailability(userId, true);
-    }
-  }
-
-  Future<void> leaveQueue(String kijiweId) async {
-    final userId = FirebaseAuth.instance.currentUser?.uid;
-    if (userId != null) {
-      await _firestoreService.leaveKijiweQueue(kijiweId, userId);
-      await _firestoreService.updateDriverAvailability(userId, false);
-    }
-  }
-
   //get rideId
   Future<String?> getRideId(String kijiweId) async {
     final userId = FirebaseAuth.instance.currentUser?.uid;

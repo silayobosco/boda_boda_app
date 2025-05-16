@@ -6,45 +6,56 @@
     - contactPhone: String
 
 /Kijiwes/{kijiweId}
-    - name: String
     - location: GeoPoint
-    - unionId: String
-    - leaderId: String (userId from Users collection)
+    - adminId: String (userId from Users collection)
+    - createdAt: timestamp
+    - name: String
     - permanentMembers: Array of Strings (userIds from Users collection)
-    - ueues: Array of maps ( driverId as String of userIDs from Users collection, where role includes "Driver"  and joinedAt as timestamp)
+    - unionId: String
+    - position: Map  // For GeoFlutterFirePlus
+        - geohash: String
+        - geoPoint: GeoPoint
+    - queue: Array of maps
+        - driverId: String
+        - joinedAt: Timestamp
 
 /Users/{userId}  //  Unified User Collection
+    - customerId: String (userId from Users collection)
     - createdAt: Timestamp
     - dob: String
-    - email: String
+    - driverProfile: Map  //  Optional - Only present if role includes "Driver"
+        - approved: Boolean  // Whether they've been approved as a driver by an admin
+        - isOnline: Boolean  // Whether they are currently available for rides and should be in the Kijiwe queue
+        - kijiweId: String
+        - licenseNumber: String
+        - registeredAt: Timestamp
+        - vehicleType: String
+        - currentLocation: GeoPoint (Driver's active location)
+        - rating: Number
+        - status: String ("offline", "waitingForRide", "goingToPickup", "arrivedAtPickup", "onRide", "returningToKijiwe") // Example statuses
+        - completedRides: Number // Counter for completed rides    - email: String
+    - emailVerified: Boolean
+    - fcmToken: String
     - gender: String
     - location: GeoPoint (General user location - can be used before driver status)
     - name: String
-    - password: String
-    - phone: String
     - phoneNumber: String
-    - photoURL: String
+    - profileImageUrl: String
     - role: String  // "Customer", "Driver", "Both", "Kijiwe Leader", "Union Official"
     - uid: String  // Firebase Auth UID (This is the key identifier)
-    - fcmToken: String
-    - driverDetails: Map  //  Optional - Only present if role includes "Driver"
-        - vehicle: String
-        - currentLocation: GeoPoint (Driver's active location)
-        - kijiweId: String
-        - unionId: String
-        - available: Boolean
-        - rating: Number
-        - status: String ("available", "en_route_pickup", etc.)
+    - photoURL: String
+    
 
 /RideRequests/{rideRequestId}
     - customerId: String (userId from Users collection)
-    - pickupLocation: GeoPoint
-    - dropOffLocation: GeoPoint
-    - pickupAddress: String
-    - dropOffAddress: String
-    - requestTime: Timestamp
-    - status: String
     - assignedDriverId: String (userId from Users collection)
+    - dropOff: GeoPoint
+    - pickup: GeoPoint
+    - status: String
+    - stops: Array of GeoPoints
+    - requestTime: Timestamp
+    - acceptedTime: Timestamp
+    - completedTime: Timestamp
+    - route: Array of GeoPoints
     - kijiweId: String
-    - unionId: String
     - fare: Number

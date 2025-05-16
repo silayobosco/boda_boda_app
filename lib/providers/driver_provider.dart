@@ -4,7 +4,8 @@ import '../services/firestore_service.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../screens/home_screen.dart'; // Import HomeScreen
 import 'package:cloud_firestore/cloud_firestore.dart';
-
+import 'package:geoflutterfire3/geoflutterfire3.dart'; // Import geoflutterfire3
+import 'package:latlong2/latlong.dart' as latlong2; // Import for latlong2.LatLng
 
 class DriverProvider extends ChangeNotifier {
   final AuthService _authService = AuthService();
@@ -40,7 +41,6 @@ class DriverProvider extends ChangeNotifier {
       }
 
       // Optimistically update the local state for immediate UI feedback
-      final originalOnlineStatus = _isOnline;
       _isOnline = newOnlineStatus;
       notifyListeners();
 
@@ -71,6 +71,29 @@ class DriverProvider extends ChangeNotifier {
     }
   }
 
+  // New private method to handle direct Firestore updates for driver profile status
+  Future<void> _updateDriverProfileInFirestore({
+    required String userId,
+    required bool isOnline,
+    String? statusString,
+    String? kijiweId, // Only update if provided
+  }) async {
+    final Map<String, dynamic> profileUpdateData = {
+      'isOnline': isOnline,
+      if (statusString != null) 'status': statusString,
+      if (kijiweId != null) 'kijiweId': kijiweId,
+    };
+
+    // Remove null values to avoid overwriting fields with null if not provided
+    profileUpdateData.removeWhere((key, value) => value == null);
+
+    if (profileUpdateData.isNotEmpty) {
+      await FirebaseFirestore.instance.collection('users').doc(userId).update({
+        'driverProfile': profileUpdateData, // Update within the driverProfile map
+      });
+    }
+  }
+
   // Renamed and refactored internal method to handle Firestore updates for online status
   Future<void> _updateFirestoreAndQueueForOnlineStatus(
     BuildContext context,
@@ -83,9 +106,10 @@ class DriverProvider extends ChangeNotifier {
     }
 
     try {
-      await _firestoreService.updateDriverStatus(
+      await _updateDriverProfileInFirestore( // Call internal method
         userId: userId,
-        available: newStatus,
+        isOnline: newStatus,
+        statusString: newStatus ? "waitingForRide" : "offline", // Set status string
         kijiweId: kijiweId,
       );
 
@@ -127,6 +151,7 @@ class DriverProvider extends ChangeNotifier {
   setLoading(true);
   try {
     final firestore = FirebaseFirestore.instance;
+    final geo = GeoFlutterFire(); // Initialize Geoflutterfire from geoflutterfire3
     String kijiweIdToUse;
     String kijiweNameToDisplay = "";
 
@@ -134,18 +159,30 @@ class DriverProvider extends ChangeNotifier {
       if (newKijiweName == null || newKijiweName.trim().isEmpty || newKijiweLocation == null) {
         throw ArgumentError("New Kijiwe name and location are required when creating a new Kijiwe.");
       }
+
+      // Check for Kijiwe name uniqueness
+      final trimmedKijiweName = newKijiweName.trim();
+      final existingKijiweQuery = await firestore.collection('kijiwe').where('name', isEqualTo: trimmedKijiweName).limit(1).get();
+      if (existingKijiweQuery.docs.isNotEmpty) {
+        throw Exception("A Kijiwe with the name '$trimmedKijiweName' already exists. Please choose a different name or select the existing one.");
+      }
+
+      // Create GeoPoint for GeoFlutterFire
+      GeoPoint geoPoint = GeoPoint(newKijiweLocation.latitude, newKijiweLocation.longitude);
+      GeoFirePoint geoFirePoint = geo.point(latitude: newKijiweLocation.latitude, longitude: newKijiweLocation.longitude);
+
       // Create the new Kijiwe
       final newKijiweDocRef = firestore.collection('kijiwe').doc();
       await newKijiweDocRef.set({
-        'name': newKijiweName.trim(),
-        'location': GeoPoint(newKijiweLocation.latitude, newKijiweLocation.longitude),
+        'name': trimmedKijiweName,
+        'position': geoFirePoint.data, // Store geohash and geopoint
         'unionId': null, // As per your example structure
         'adminId': userId, // The driver creating it becomes the admin
         'permanentMembers': [userId], // Driver is the first permanent member
         'createdAt': FieldValue.serverTimestamp(),
       });
       kijiweIdToUse = newKijiweDocRef.id;
-      kijiweNameToDisplay = newKijiweName.trim();
+      kijiweNameToDisplay = trimmedKijiweName;
     } else {
       if (existingKijiweId == null) {
         throw ArgumentError("Existing Kijiwe ID is required when not creating a new Kijiwe.");
@@ -167,6 +204,7 @@ class DriverProvider extends ChangeNotifier {
       'registeredAt': FieldValue.serverTimestamp(),
       'approved': true,
       'isOnline': true, // Driver will be online and in queue immediately
+      'status': 'waitingForRide', // Initial status when registering and going online
     };
 
     // 2. Update user document: set role to 'Driver' and add/update driverProfile
@@ -185,10 +223,13 @@ class DriverProvider extends ChangeNotifier {
 
     // 4. Add to kijiwe queue if 'isOnline' is true in their profile
     // (We've set it to true in driverProfilePayload)
+    // The driver is added to an array field (e.g., 'ueues') in the Kijiwe document.
     if (driverProfilePayload['isOnline'] == true) {
-      await kijiweRef.collection('queue').doc(userId).set({
-        'driverId': userId,
-        'timestamp': FieldValue.serverTimestamp(),
+      await kijiweRef.update({
+        'queue': FieldValue.arrayUnion([{ // Using 'ueues' as per your Kijiwe structure
+          'driverId': userId,
+          'joinedAt': Timestamp.now(), // Use client-generated timestamp to avoid error with arrayUnion
+        }])
       });
     }
 
@@ -224,67 +265,124 @@ class DriverProvider extends ChangeNotifier {
 
   Future<void> updateDriverPosition(LatLng position) async {
     // Implement your backend API call to update driver position
+    final userId = _authService.currentUser?.uid;
+    if (userId == null) return;
     try {
-      // Example:
-      // await ApiService.updateDriverPosition(position);
+      // Convert google_maps_flutter.LatLng to latlong2.LatLng
+      final latlong2Position = latlong2.LatLng(
+        position.latitude,
+        position.longitude,
+      );
+      await _firestoreService.updateUserLocation(userId, latlong2Position);
       notifyListeners();
     } catch (e) {
       throw Exception('Failed to update position: $e');
     }
   }
 
-  Future<void> acceptRideRequest(String rideId) async {
+  Future<void> acceptRideRequest(String rideId, String customerId) async {
+    final userId = _authService.currentUser?.uid;
+    if (userId == null) throw Exception('Driver not logged in');
+    setLoading(true);
     try {
-      // await ApiService.acceptRide(rideId);
-      // Update your provider state
+      // Update RideRequest status in Firestore (via RideRequestProvider or directly if simpler for now)
+      // For now, let's assume RideRequestProvider handles this or it's done elsewhere.
+      // Here, we focus on updating the driver's own status.
+      await _updateDriverProfileInFirestore( // Call internal method
+        userId: userId,
+        isOnline: true, // Still online
+        statusString: "goingToPickup",
+      );
+      // Potentially update local state if needed for UI
       notifyListeners();
     } catch (e) {
       throw Exception('Failed to accept ride: $e');
+    } finally {
+      setLoading(false);
     }
   }
 
-  Future<void> declineRideRequest(String rideId) async {
-    try {
-      // await ApiService.declineRide(rideId);
-      notifyListeners();
-    } catch (e) {
-      throw Exception('Failed to decline ride: $e');
-    }
+  Future<void> declineRideRequest(String rideId, String customerId) async {
+    // No change to driver's own status typically, they just become available for other requests.
+    // The RideRequest document itself would be updated (e.g., to 'declined' or re-queued).
+    // For simplicity, we assume the driver remains 'waitingForRide'.
+    notifyListeners();
   }
 
-  Future<void> confirmArrival(String rideId) async {
+  Future<void> confirmArrival(String rideId, String customerId) async {
+    final userId = _authService.currentUser?.uid;
+    if (userId == null) throw Exception('Driver not logged in');
+    setLoading(true);
     try {
-      // await ApiService.confirmArrival(rideId);
+      await _updateDriverProfileInFirestore( // Call internal method
+        userId: userId,
+        isOnline: true, // Still online
+        statusString: "arrivedAtPickup",
+      );
       notifyListeners();
     } catch (e) {
       throw Exception('Failed to confirm arrival: $e');
+    } finally {
+      setLoading(false);
     }
   }
 
-  Future<void> startRide(String rideId) async {
+  Future<void> startRide(String rideId, String customerId) async {
+    final userId = _authService.currentUser?.uid;
+    if (userId == null) throw Exception('Driver not logged in');
+    setLoading(true);
     try {
-      // await ApiService.startRide(rideId);
+      await _updateDriverProfileInFirestore( // Call internal method
+        userId: userId,
+        isOnline: true, // Still online
+        statusString: "onRide",
+      );
       notifyListeners();
     } catch (e) {
       throw Exception('Failed to start ride: $e');
+    } finally {
+      setLoading(false);
     }
   }
 
-  Future<void> completeRide(String rideId) async {
+  Future<void> completeRide(String rideId, String customerId) async {
+    final userId = _authService.currentUser?.uid;
+    if (userId == null) throw Exception('Driver not logged in');
+    setLoading(true);
     try {
-      // await ApiService.completeRide(rideId);
+      await _updateDriverProfileInFirestore( // Call internal method
+        userId: userId,
+        isOnline: true, // Still online, ready for next ride
+        statusString: "waitingForRide", // Or "returningToKijiwe" then "waitingForRide"
+      );
+      // Increment completedRides
+      await FirebaseFirestore.instance.collection('users').doc(userId).update({
+        'driverProfile.completedRides': FieldValue.increment(1),
+      });
       notifyListeners();
     } catch (e) {
       throw Exception('Failed to complete ride: $e');
+    } finally {
+      setLoading(false);
     }
   }
 
-  Future<void> cancelRide(String rideId) async {
+  Future<void> cancelRide(String rideId, String customerId) async {
+    final userId = _authService.currentUser?.uid;
+    if (userId == null) throw Exception('Driver not logged in');
+    setLoading(true);
     try {
-      // await ApiService.cancelRide(rideId);
+      // Update driver's status back to available or as appropriate
+      await _updateDriverProfileInFirestore( // Call internal method
+        userId: userId,
+        isOnline: true, // Still online
+        statusString: "waitingForRide",
+      );
       notifyListeners();
     } catch (e) {
       throw Exception('Failed to cancel ride: $e');
+    } finally {
+      setLoading(false);
     }
   }
   Future<void> rateRide(String rideId, double rating) async {

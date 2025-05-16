@@ -299,8 +299,15 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
                       child: ElevatedButton(
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.green),
-                        child: const Text('Complete Ride'),
-                        onPressed: () => _completeRide(_currentRide?['rideId']),
+                        child: const Text('Complete Ride'), // Ensure _currentRide and its rideId are not null
+                        onPressed: () {
+                          final rideId = _currentRide?['rideId'] as String?;
+                          if (rideId != null) {
+                            _completeRide(rideId);
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error: Ride ID is missing.')));
+                          }
+                        },
                       ),
                     ),
                   ],
@@ -348,15 +355,25 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
                 children: [
                   Expanded(
                     child: OutlinedButton(
-                      child: Text('Decline'),
-                      onPressed: () => _declineRide(),
+                      child: const Text('Decline'),
+                      onPressed: () {
+                        // TODO: Replace placeholders with actual rideId and customerId from the incoming ride request data.
+                        // This data would typically be available when the ride request sheet is displayed.
+                        // For example, if you have state variables _pendingRideId and _pendingCustomerId:
+                        _declineRide('placeholder_ride_id', 'placeholder_customer_id');
+                      },
                     ),
                   ),
                   SizedBox(width: 16),
                   Expanded(
                     child: ElevatedButton(
                       child: const Text('Accept'),
-                      onPressed: () => _acceptRide(), // Call without arguments
+                      onPressed: () {
+                        // TODO: Replace placeholders with actual rideId and customerId from the incoming ride request data.
+                        // This data would typically be available when the ride request sheet is displayed.
+                        // For example, if you have state variables _pendingRideId and _pendingCustomerId:
+                        _acceptRide('placeholder_ride_id', 'placeholder_customer_id');
+                      },
                     ),
                   ),
                 ],
@@ -366,6 +383,12 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
         ),
       ),
     );
+  }
+  // Helper method to get current ride details safely
+  Map<String, String?> _getCurrentRideDetails() {
+    final rideId = _currentRide?['rideId'] as String?;
+    final customerId = _currentRide?['customerId'] as String?;
+    return {'rideId': rideId, 'customerId': customerId};
   }
 
   Set<Marker> _buildDriverMarker(LocationProvider locationProvider) {
@@ -467,22 +490,21 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
     };
   }
 
-  void _acceptRide() async {
+  void _acceptRide(String rideId, String customerId) async {
   final driverProvider = Provider.of<DriverProvider>(context, listen: false);
   try {
-    // In a real app, you would call your backend service here
-    await driverProvider.acceptRideRequest('rideId');
+    await driverProvider.acceptRideRequest(rideId, customerId);
     
     setState(() {
       _hasActiveRide = true;
       _currentRide = {
-        //'customer': 'John D.',
-        //'rating': 4.8,
-        'rideId': _currentRide?['rideId'] ?? 'unknown',
-        'status': 'accepted',
-        'pickup': '123 Main St',
-        'destination': '456 Park Ave',
-        'fare': 12.50,
+        'rideId': rideId,
+        'customerId': customerId, // Store customerId
+        'status': 'accepted', // This status should ideally be driven by provider/backend
+        // TODO: Populate these with actual data from the ride request
+        'pickup': 'Placeholder Pickup',
+        'destination': 'Placeholder Destination',
+        'fare': 0.0,
       };
     });
     ScaffoldMessenger.of(context).showSnackBar(
@@ -495,12 +517,12 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
   }
 }
 
-void _declineRide() async {
+void _declineRide(String rideId, String customerId) async {
   final driverProvider = Provider.of<DriverProvider>(context, listen: false);
   try {
-    // In a real app, you would call your backend service here
-    await driverProvider.declineRideRequest('rideId');
+    await driverProvider.declineRideRequest(rideId, customerId);
     
+    // TODO: Clear pending ride request details from UI state if any
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Ride declined')),
     );
@@ -513,10 +535,16 @@ void _declineRide() async {
 
   void _navigateToPickup() async {
   if (_currentRide == null) return;
-  
-  // Get the pickup location - in a real app this would come from the ride data
-  final pickupLocation = LatLng(0.0, 0.0); // Replace with actual coordinates
-  
+
+  // TODO: Get the actual pickup coordinates from _currentRide or a navigation service
+  // For example, if _currentRide stores pickup LatLng:
+  // final LatLng pickupLocation = _currentRide!['pickupCoordinates'] as LatLng;
+  // Using placeholder coordinates for now.
+  final pickupLat = _currentRide!['pickupLat'] ?? 0.0; // Example, replace with actual data
+  final pickupLng = _currentRide!['pickupLng'] ?? 0.0; // Example, replace with actual data
+
+  final pickupLocation = LatLng(pickupLat as double, pickupLng as double);
+
   // Open in external maps app
   final uri = Uri.parse(
     'https://www.google.com/maps/dir/?api=1&destination=${pickupLocation.latitude},${pickupLocation.longitude}&travelmode=driving',
@@ -532,13 +560,19 @@ void _declineRide() async {
 }
 
 void _confirmArrival() async {
+  final details = _getCurrentRideDetails();
+  final rideId = details['rideId'];
+  final customerId = details['customerId'];
+
+  if (rideId == null || customerId == null) {
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error: Ride details missing for arrival confirmation.')));
+    return;
+  }
+
   final driverProvider = Provider.of<DriverProvider>(context, listen: false);
   try {
-    // In a real app, you would call your backend service here
-    await driverProvider.confirmArrival('rideId');
-    
+    await driverProvider.confirmArrival(rideId, customerId);
     setState(() {
-      // Update UI to show next step (pickup completed, now navigating to destination)
       _currentRide?['status'] = 'arrived';
     });
   } catch (e) {
@@ -549,9 +583,17 @@ void _confirmArrival() async {
 }
 
   void _startRide() async {
+    final details = _getCurrentRideDetails();
+    final rideId = details['rideId'];
+    final customerId = details['customerId'];
+
+    if (rideId == null || customerId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error: Ride details missing for starting ride.')));
+      return;
+    }
     final driverProvider = Provider.of<DriverProvider>(context, listen: false);
     try {
-      await driverProvider.startRide('rideId');
+      await driverProvider.startRide(rideId, customerId);
       setState(() {
         _currentRide?['status'] = 'in_progress';
       });
@@ -563,10 +605,18 @@ void _confirmArrival() async {
   }
 
   void _completeRide(String rideId) async {
+  // rideId is passed from the button, ensure customerId is available from _currentRide
+  final customerId = _currentRide?['customerId'] as String?;
+
+  if (customerId == null) {
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error: Customer ID not found for this ride.')));
+    return;
+  }
+
   final driverProvider = Provider.of<DriverProvider>(context, listen: false);
 
   try {
-    await driverProvider.completeRide(rideId);
+    await driverProvider.completeRide(rideId, customerId);
     setState(() {
       _hasActiveRide = false;
       _currentRide = null;
@@ -582,9 +632,17 @@ void _confirmArrival() async {
   }
 }
   void _cancelRide() async {
+    final details = _getCurrentRideDetails();
+    final rideId = details['rideId'];
+    final customerId = details['customerId'];
+
+    if (rideId == null || customerId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error: Ride details missing for cancellation.')));
+      return;
+    }
     final driverProvider = Provider.of<DriverProvider>(context, listen: false);
     try {
-      await driverProvider.cancelRide('rideId');
+      await driverProvider.cancelRide(rideId, customerId);
       setState(() {
         _hasActiveRide = false;
         _currentRide = null;

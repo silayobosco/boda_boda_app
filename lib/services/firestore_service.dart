@@ -142,12 +142,6 @@ Stream<DocumentSnapshot> getKijiweQueueStream(String kijiweId) {
   return _firestore.collection('KijiweQueues').doc(kijiweId).snapshots();
 }
 
-Future<void> updateDriverAvailability(String userId, bool available) async {
-  await _firestore.collection('Users').doc(userId).update({
-    'driverDetails.available': available
-  });
-}
-
 // Add this method to get the queue for a specific Kijiwe
   Future<List<DocumentSnapshot>> getKijiweQueue(String kijiweId) async {
     final queueCollection = FirebaseFirestore.instance
@@ -176,41 +170,6 @@ Future<void> updateDriverAvailability(String userId, bool available) async {
       print('Error fetching ride ID: $e');
       return null;
     }
-  }
-
-  // Register as driver
-  // This function updates the user's role to 'driver' and adds driver details to Firestore
-  Future<void> registerAsDriver({
-    required String userId,
-    required String vehicleType,
-    required String licenseNumber,
-    required String kijiweId,
-  }) async {
-    await _firestore.collection('users').doc(userId).update({
-      'role': 'Driver',
-      'driverDetails': {
-        'vehicle': vehicleType,
-        'licenseNumber': licenseNumber,
-        'kijiweId': kijiweId,
-        'available': false,
-        'rating': 0,
-        'status': 'offline'
-      }
-    });
-  }
-
-  Future<void> updateDriverStatus({
-    required String userId,
-    required bool available,
-    String? kijiweId,
-  }) async {
-    final updateData = {
-      'driverDetails.available': available,
-      'driverDetails.status': available ? 'available' : 'offline',
-      if (kijiweId != null) 'driverDetails.kijiweId': kijiweId,
-    };
-
-    await _firestore.collection('users').doc(userId).update(updateData);
   }
 
   // Get user role
