@@ -15,29 +15,58 @@ class DriverHome extends StatefulWidget {
 
 class _DriverHomeState extends State<DriverHome> {
   GoogleMapController? _mapController;
-  bool _isOnline = false;
+  // bool _isOnline = false; // Will use DriverProvider.isOnline directly
   bool _hasActiveRide = false;
   Map<String, dynamic>? _currentRide;
   double? _currentHeading;
   BitmapDescriptor? _bodaIcon; // Define _carIcon
   LatLng? _lastPosition; // Define _lastPosition
+  bool _isIconLoaded = false; // New flag
+
+    // Define the listener method
+  void _locationProviderListener() {
+    final locationProvider = Provider.of<LocationProvider>(context, listen: false);
+    if (mounted && locationProvider.currentLocation != null) { // Check if mounted before calling setState
+      _updateDriverLocationAndMap(locationProvider);
+    }
+  }
+
 
   @override
-  void initState() {
-    super.initState();
-    _loadCustomMarker();
-    _initializeLocation();
-  }
+void initState() {
+  super.initState();
+  _loadCustomMarker().then((_) { // Ensure marker is loaded, then initialize state
+    if (mounted) {
+      setState(() {
+        _isIconLoaded = true;
+      });
+    }
+    _initializeDriverStateAndLocation();
+  });
+  // Add listener for LocationProvider
+  Provider.of<LocationProvider>(context, listen: false).addListener(_locationProviderListener);
+}
 
   Future<void> _loadCustomMarker() async {
-    _bodaIcon = await BitmapDescriptor.fromAssetImage(
-      const ImageConfiguration(size: Size(48, 48)),
-      'assets/images/boda_marker.png', // Create this asset
-    );
+    try {
+      _bodaIcon = await BitmapDescriptor.fromAssetImage(
+        const ImageConfiguration(size: Size(48, 48)),
+        'assets/boda_marker.png',
+      );
+    } catch (e) {
+      debugPrint("Error loading custom marker: $e");
+      // _bodaIcon will remain null, default marker will be used by _buildDriverMarker
+    }
   }
+  
 
-  Future<void> _initializeLocation() async {
+  Future<void> _initializeDriverStateAndLocation() async {
     final locationProvider = Provider.of<LocationProvider>(context, listen: false);
+    final driverProvider = Provider.of<DriverProvider>(context, listen: false);
+
+    // Load persisted driver data first
+    await driverProvider.loadDriverData();
+
     await locationProvider.updateLocation();
     if (locationProvider.currentLocation != null && _mapController != null) {
       _centerMapOnDriver();
@@ -67,7 +96,7 @@ class _DriverHomeState extends State<DriverHome> {
               _centerMapOnDriver();
             },
             myLocationEnabled: false, // We'll use custom marker
-            markers: _buildDriverMarker(locationProvider),
+            markers: _isIconLoaded ? _buildDriverMarker(locationProvider) : {},
             onCameraMove: (position) {
               _currentHeading = position.bearing;
             },
@@ -80,7 +109,7 @@ class _DriverHomeState extends State<DriverHome> {
             right: 16,
             child: FloatingActionButton(
               mini: true,
-              backgroundColor: _isOnline ? Colors.green : Colors.grey,
+              backgroundColor: driverProvider.isOnline ? Colors.green : Colors.grey,
               onPressed: _toggleOnlineStatus,
               child: Icon(
                 Icons.offline_bolt,
@@ -90,7 +119,7 @@ class _DriverHomeState extends State<DriverHome> {
           ),
 
           // Driver Info Card
-          if (_isOnline)
+          if (driverProvider.isOnline) // Use provider's state
             Positioned(
               top: MediaQuery.of(context).padding.top + 16,
               right: 16, // Only right alignment needed now
@@ -101,7 +130,7 @@ class _DriverHomeState extends State<DriverHome> {
           if (_hasActiveRide) _buildActiveRideSheet(),
 
           // Ride Request Notification (appears when a ride comes in)
-          if (_isOnline && !_hasActiveRide) _buildRideRequestSheet(),
+          if (driverProvider.isOnline && !_hasActiveRide && _currentRide == null) _buildRideRequestSheet(), // Added check for _currentRide
         ],
       ),
     );
@@ -183,7 +212,7 @@ Widget _buildOfflineButton(DriverProvider driverProvider) {
     key: ValueKey('offline-button'),
     mini: true,
     backgroundColor: Colors.grey,
-    onPressed: () => driverProvider.toggleOnlineStatus(context),
+    onPressed: () => driverProvider.toggleOnlineStatus(),
     child: driverProvider.isLoading
         ? CircularProgressIndicator(
             valueColor: AlwaysStoppedAnimation(Colors.white),
@@ -206,7 +235,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
           )
         : Icon(Icons.power_settings_new, size: 20),
     color: Colors.red,
-    onPressed: () => driverProvider.toggleOnlineStatus(context),
+    onPressed: () => driverProvider.toggleOnlineStatus(),
   );
 }
 
@@ -426,52 +455,54 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
   void _toggleOnlineStatus() async {
     final driverProvider = Provider.of<DriverProvider>(context, listen: false);
 
-    try {
-      await driverProvider.toggleOnlineStatus(context);
-      setState(() {
-        _isOnline = driverProvider.isOnline;
-      });
-    } catch (e) {
+    // Store the current online status before toggling to determine success message
+    final bool wasOnline = driverProvider.isOnline;
+    final String? errorMessage = await driverProvider.toggleOnlineStatus();
+
+    if (!mounted) return; // Check if widget is still in the tree
+
+    if (errorMessage != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to toggle status: $e')),
+        SnackBar(content: Text(errorMessage)),
+      );
+    } else {
+      // Success, UI already updated by provider's notifyListeners
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(wasOnline ? 'You are now offline.' : 'You are now online.')),
       );
     }
   }
 
-  // Add listener for position updates
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final locationProvider = Provider.of<LocationProvider>(context);
-    
-    // Listen for location updates
-    locationProvider.addListener(() {
-      if (locationProvider.currentLocation != null) {
-        try {
-          setState(() {
-            _lastPosition = LatLng(
-              locationProvider.currentLocation!.latitude,
-              locationProvider.currentLocation!.longitude,
-            );
-            _currentHeading = locationProvider.heading;
-          });
-          
-        if (_isOnline && _mapController != null) {
-            _mapController?.animateCamera(
-              CameraUpdate.newLatLng(_lastPosition!),
-            );
-          }
-          
-          // In a real app, you would update driver's position in backend
-          if (_isOnline) {
-            final driverProvider = Provider.of<DriverProvider>(context, listen: false);
-            driverProvider.updateDriverPosition(_lastPosition!);
-          }
-        } catch (e) {
-          debugPrint('Error updating location: $e');
-        }
+ // This method will be called by the listener
+  void _updateDriverLocationAndMap(LocationProvider locationProvider) {
+    if (!mounted) return; // Ensure widget is still mounted
+
+    try {
+      setState(() {
+        _lastPosition = LatLng(
+          locationProvider.currentLocation!.latitude,
+          locationProvider.currentLocation!.longitude,
+        );
+        _currentHeading = locationProvider.heading;
+      });
+
+      final driverProvider = Provider.of<DriverProvider>(context, listen: false);
+      if (driverProvider.isOnline && _mapController != null && _lastPosition != null) {
+        _mapController?.animateCamera(
+          CameraUpdate.newLatLng(_lastPosition!),
+        );
       }
-    });
+
+      if (driverProvider.isOnline && _lastPosition != null) {
+        driverProvider.updateDriverPosition(_lastPosition!).catchError((e) {
+          // Catch errors from async operation updateDriverPosition
+          debugPrint('Error in driverProvider.updateDriverPosition: $e');
+        });
+      }
+    } catch (e) {
+      // This catch block is for synchronous errors within this method
+      debugPrint('Error in _updateDriverLocationAndMap: $e');
+        }
   }
 
 
@@ -657,7 +688,8 @@ void _confirmArrival() async {
   void dispose() {
     _mapController?.dispose();
     final locationProvider = Provider.of<LocationProvider>(context, listen: false);
-    locationProvider.removeListener(() {});
+    // Remove the specific listener instance
+    locationProvider.removeListener(_locationProviderListener);
     super.dispose();
   }
 }

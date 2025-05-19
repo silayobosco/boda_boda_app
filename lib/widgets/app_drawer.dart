@@ -111,11 +111,10 @@ class AppDrawer extends StatelessWidget {
     );
   }
 
-    Widget _buildDriverButton(BuildContext context) {
+  Widget _buildDriverButton(BuildContext context) {
     final currentUser = FirebaseAuth.instance.currentUser;
 
     if (currentUser == null) {
-      // Or return a disabled button, or nothing
       return const SizedBox.shrink();
     }
 
@@ -130,53 +129,60 @@ class AppDrawer extends StatelessWidget {
           );
         }
 
-        if (snapshot.hasError) {
-          debugPrint("Error fetching user for drawer button: ${snapshot.error}");
+        if (snapshot.hasError || !snapshot.hasData || !snapshot.data!.exists) {
+          // If there's an error or no data, don't allow switching roles
           return const ListTile(
             leading: Icon(Icons.error_outline),
-            title: Text("Error loading status"),
+            title: Text("Unable to load driver status"),
             enabled: false,
           );
         }
 
-        String currentRole = 'Customer'; // Default role
+        String currentRole = 'Customer';
         Map<String, dynamic>? driverProfile;
 
-        if (snapshot.hasData && snapshot.data!.exists) {
-          final userData = snapshot.data!.data();
-          if (userData != null) {
-            currentRole = userData['role'] as String? ?? 'Customer';
-            if (userData.containsKey('driverProfile') && userData['driverProfile'] is Map) {
-              driverProfile = userData['driverProfile'] as Map<String, dynamic>?;
-            }
+        final userData = snapshot.data!.data();
+        if (userData != null) {
+          currentRole = userData['role'] as String? ?? 'Customer';
+          if (userData.containsKey('driverProfile') && userData['driverProfile'] is Map) {
+            driverProfile = userData['driverProfile'] as Map<String, dynamic>?;
           }
         }
-        // If snapshot.data doesn't exist, user is treated as 'Customer'.
 
-        final bool isCurrentlyDriver = currentRole == 'Driver'; // Check if the current role is 'Driver'
-        // Check if they have a completed driver profile (using kijiweId as indicator)
+        final bool isCurrentlyDriver = currentRole == 'Driver';
         final bool hasCompletedDriverProfile = driverProfile?['kijiweId'] != null && (driverProfile!['kijiweId'] as String).isNotEmpty;
 
         final String buttonTitle = isCurrentlyDriver
-            ? 'Switch to Customer' // If currently a Driver, offer to switch to Customer
-            : hasCompletedDriverProfile // If not currently Driver, check if they have a completed profile
-                ? 'Switch to Driver' // If they have a profile, offer to switch to Driver role
-                : 'Become a Driver'; // If no profile, offer to register as a Driver
+            ? 'Switch to Customer'
+            : hasCompletedDriverProfile
+                ? 'Switch to Driver'
+                : 'Become a Driver';
+
+        // Only show the button if the user has a completed driver profile or is already a driver
+        if (!isCurrentlyDriver && !hasCompletedDriverProfile) {
+          // Only allow registration, not switching, if not completed
+          return ListTile(
+            leading: const Icon(Icons.directions_bike),
+            title: const Text('Become a Driver'),
+            onTap: () {
+              if (Navigator.of(context).canPop()) Navigator.of(context).pop();
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const DriverRegistrationScreen()),
+              );
+            },
+          );
+        }
 
         return ListTile(
           leading: const Icon(Icons.switch_account),
           title: Text(buttonTitle),
           onTap: () async {
-            // Close the drawer first if it's open
-            if (Navigator.of(context).canPop()) {
-              Navigator.of(context).pop();
-            }
-
+            if (Navigator.of(context).canPop()) Navigator.of(context).pop();
             final userDocRef = FirebaseFirestore.instance.collection('users').doc(currentUser.uid);
 
             try {
               if (isCurrentlyDriver) {
-                // Action: Switch from Driver to Customer
                 await userDocRef.update({'role': 'Customer'});
                 if (context.mounted) {
                   Navigator.pushReplacement(
@@ -185,27 +191,12 @@ class AppDrawer extends StatelessWidget {
                   );
                 }
               } else {
-                // Action: Become a Driver (or switch from Customer to Driver)
-                // Check for kijiweId in driverProfile
-                final String? kijiweId = driverProfile?['kijiweId'] as String?;
-
-                if (kijiweId != null && kijiweId.isNotEmpty) {
-                  // Driver profile seems complete enough, just switch role
-                  await userDocRef.update({'role': 'Driver'});
-                  if (context.mounted) {
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(builder: (context) => const HomeScreen()),
-                    );
-                  }
-                } else {
-                  // Incomplete driver profile or no profile, navigate to registration
-                  if (context.mounted) {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => const DriverRegistrationScreen()),
-                    );
-                  }
+                await userDocRef.update({'role': 'Driver'});
+                if (context.mounted) {
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(builder: (context) => const HomeScreen()),
+                  );
                 }
               }
             } catch (e) {

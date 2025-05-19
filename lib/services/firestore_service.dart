@@ -3,10 +3,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/user_model.dart'; // Import the UserModel class
 import 'package:latlong2/latlong.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
+import 'package:geoflutterfire3/geoflutterfire3.dart';
 
 class FirestoreService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance; // Add this line
+  final GeoFlutterFire geo = GeoFlutterFire();
 
   // Create (Add a new user)
   Future<void> createUser(UserModel user) async {
@@ -51,10 +54,11 @@ class FirestoreService {
       rethrow;
     }
   }
-Future<void> createRideRequest(RideRequestModel rideRequest) async {
+Future<String> createRideRequest(RideRequestModel rideRequest) async {
     try {
-      await _firestore.collection('rideRequests').add(rideRequest.toJson());
-    } catch (e) {
+      DocumentReference docRef = await _firestore.collection('rideRequests').add(rideRequest.toJson());
+      return docRef.id; // Return the ID of the newly created document  
+      } catch (e) {
       print('Error creating ride request: $e');
       rethrow;
     }
@@ -66,11 +70,14 @@ Future<void> createRideRequest(RideRequestModel rideRequest) async {
     });
   }
 
-  Future<void> updateRideRequestStatus(String rideRequestId, String status, {String? driverId}) async {
+  Future<void> updateRideRequestStatus(String rideRequestId, String status, {String? driverId, String? kijiweId}) async {
     try {
       Map<String, dynamic> updateData = {'status': status};
       if (driverId != null) {
         updateData['driverId'] = driverId;
+      }
+      if (kijiweId != null) {
+        updateData['kijiweId'] = kijiweId;
       }
       await _firestore.collection('rideRequests').doc(rideRequestId).update(updateData);
     } catch (e) {
@@ -127,29 +134,47 @@ Future<void> createRideRequest(RideRequestModel rideRequest) async {
 
   // Kijiwe Queue Management
 Future<void> joinKijiweQueue(String kijiweId, String userId) async {
-  await _firestore.collection('KijiweQueues').doc(kijiweId).update({
-    'driverIds': FieldValue.arrayUnion([userId])
-  });
+  // The queue is an array of maps within the Kijiwe document itself.
+  final kijiweRef = _firestore.collection('kijiwe').doc(kijiweId);
+  try {
+    // Queue is now an array of strings (driverIds)
+    await kijiweRef.update({
+      'queue': FieldValue.arrayUnion([userId])
+    });
+    debugPrint("Successfully added driver '$userId' to queue for Kijiwe '$kijiweId'");
+  } catch (e) {
+    debugPrint("Error joining queue for Kijiwe '$kijiweId' (user '$userId'): $e");
+    rethrow;
+  }
 }
 
 Future<void> leaveKijiweQueue(String kijiweId, String userId) async {
-  await _firestore.collection('KijiweQueues').doc(kijiweId).update({
-    'driverIds': FieldValue.arrayRemove([userId])
-  });
+  final kijiweRef = _firestore.collection('kijiwe').doc(kijiweId);
+  try {
+    // Queue is now an array of strings (driverIds)
+    await kijiweRef.update({
+      'queue': FieldValue.arrayRemove([userId])
+    });
+    debugPrint("Successfully removed driver '$userId' from queue for Kijiwe '$kijiweId'");
+  } catch (e) {
+    debugPrint("Error leaving queue for Kijiwe '$kijiweId' (user '$userId'): $e");
+    rethrow;
+  }
 }
 
 Stream<DocumentSnapshot> getKijiweQueueStream(String kijiweId) {
-  return _firestore.collection('KijiweQueues').doc(kijiweId).snapshots();
+  return _firestore.collection('kijiwe').doc(kijiweId).snapshots();
 }
 
-// Add this method to get the queue for a specific Kijiwe
-  Future<List<DocumentSnapshot>> getKijiweQueue(String kijiweId) async {
-    final queueCollection = FirebaseFirestore.instance
-        .collection('kijiwes')
-        .doc(kijiweId)
-        .collection('queue');
-    final querySnapshot = await queueCollection.get();
-    return querySnapshot.docs;
+  // this method retrieves the queue data for a specific Kijiwe
+  // It returns a list of maps, each representing a driver in the queue
+  Future<List<String>> getKijiweQueueData(String kijiweId) async {
+    final docSnap = await _firestore.collection('kijiwe').doc(kijiweId).get();
+    if (docSnap.exists && docSnap.data() != null && docSnap.data()!.containsKey('queue')) {
+      // Queue is now a list of strings
+      return List<String>.from(docSnap.data()!['queue'] as List);
+    }
+    return [];
   }
 
   // Get rideId based on kijiweId and userId
@@ -189,5 +214,20 @@ Stream<DocumentSnapshot> getKijiweQueueStream(String kijiweId) {
     }
     return null;
   }
-}
 
+  // Get all Kijiwe documents
+  Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>> getAllKijiwes() async {
+    try {
+      final querySnapshot = await _firestore.collection('kijiwe').get();
+      return querySnapshot.docs;
+    } catch (e) {
+      debugPrint("Error fetching all kijiwes: $e");
+      rethrow;
+    }
+  }
+
+  // Helper to get Kijiwe collection reference for GeoFlutterFire
+  CollectionReference<Map<String, dynamic>> getKijiweCollectionRef() {
+    return _firestore.collection('kijiwe');
+  }
+}

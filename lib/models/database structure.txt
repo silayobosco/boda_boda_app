@@ -6,7 +6,6 @@
     - contactPhone: String
 
 /Kijiwes/{kijiweId}
-    - location: GeoPoint
     - adminId: String (userId from Users collection)
     - createdAt: timestamp
     - name: String
@@ -15,9 +14,7 @@
     - position: Map  // For GeoFlutterFirePlus
         - geohash: String
         - geoPoint: GeoPoint
-    - queue: Array of maps
-        - driverId: String
-        - joinedAt: Timestamp
+    - queue: Array of Strings // driverIds
 
 /Users/{userId}  //  Unified User Collection
     - customerId: String (userId from Users collection)

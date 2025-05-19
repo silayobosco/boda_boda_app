@@ -1,5 +1,11 @@
-const { onDocumentCreated, onDocumentUpdated, onDocumentDeleted } = require("firebase-functions/v2/firestore");
 const admin = require("firebase-admin");
+const { onDocumentCreated, onDocumentUpdated, onDocumentDeleted } = require("firebase-functions/v2/firestore");
+
+
+// Initialize Firebase Admin SDK if not already initialized (typically done once at the top of your index.js)
+if (admin.apps.length === 0) {
+  admin.initializeApp();
+}
 
 /**
  * Helper function to calculate distance (Haversine formula - simplified)
@@ -25,80 +31,15 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
 }
 
 /**
- * Helper function to find the nearest Kijiwes based on an address.
- * This function uses the Geocoding API to convert the address to coordinates
- * and then finds the nearest Kijiwes.
- * @param {string} pickupAddress - Pickup address
- * @param {number} maxResults - Maximum results to return
- * @return {Promise<Array<string>>} Array of nearest Kijiwe IDs
- */
-async function findNearestKijiwesByAddress(pickupAddress, maxResults = 3) {
-  try {
-    const geocodeResult = await admin.firestore().collection("geocoding").doc(pickupAddress).get();
-    let pickupLocation;
-    if (geocodeResult.exists && geocodeResult.data() && geocodeResult.data().latitude && geocodeResult.data().longitude) {
-      pickupLocation = {
-        latitude: geocodeResult.data().latitude,
-        longitude: geocodeResult.data().longitude,
-      };
-    } else {
-      // Geocoding API call to get coordinates from address
-      const apiKey = process.env.GOOGLE_MAPS_API_KEY; // Ensure you have this environment variable set
-      if (!apiKey) {
-        console.error("Google Maps API key not found in environment variables.");
-        return [];
-      }
-      const geocodingApiUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(pickupAddress)}&key=${apiKey}`;
-      const response = await fetch(geocodingApiUrl);
-      const data = await response.json();
-
-      if (data.results && data.results.length > 0) {
-        const location = data.results[0].geometry.location;
-        pickupLocation = {
-          latitude: location.lat,
-          longitude: location.lng,
-        };
-        // Cache the geocoding result
-        await admin.firestore().collection("geocoding").doc(pickupAddress).set(pickupLocation, { merge: true });
-      } else {
-        console.error("Geocoding failed for address:", pickupAddress, data.status, data.error_message);
-        return [];
-      }
-    }
-
-    const kijiwesSnapshot = await admin.firestore().collection("Kijiwes").get();
-    const kijiwes = [];
-    kijiwesSnapshot.forEach((doc) => {
-      const kijiwe = doc.data();
-      if (kijiwe.location && pickupLocation) {
-        const distance = calculateDistance(
-          pickupLocation.latitude,
-          pickupLocation.longitude,
-          kijiwe.location.latitude,
-          kijiwe.location.longitude,
-        );
-        kijiwes.push({ id: doc.id, distance });
-      }
-    });
-
-    kijiwes.sort((a, b) => a.distance - b.distance);
-    return kijiwes.slice(0, maxResults).map((k) => k.id);
-  } catch (error) {
-    console.error("Error finding nearest Kijiwes by address:", error);
-    return [];
-  }
-}
-
-/**
  * Send notification to driver via FCM
- * @param {string} userId - User ID to notify
- * @param {string} message - Notification message
+ * @param {string} driverId - Driver's User ID to notify
+ * @param {object} rideDetails - Ride details for the notification payload
  * @return {Promise<void>}
  */
-async function sendDriverNotification(userId, message) {
-  const userDoc = await admin.firestore().collection("Users").doc(userId).get();
+async function sendDriverNotification(driverId, rideDetails) {
+  const userDoc = await admin.firestore().collection("users").doc(driverId).get(); // Use 'users' collection
   if (!userDoc.exists) {
-    console.warn(`User ${userId} not found, cannot send notification.`);
+    console.warn(`Driver ${driverId} not found, cannot send notification.`);
     return;
   }
   const userData = userDoc.data();
@@ -107,10 +48,34 @@ async function sendDriverNotification(userId, message) {
   if (fcmToken) {
     const payload = {
       notification: {
-        title: "Ride Request Update",
-        body: message,
+        title: "New Ride Request!",
+        body: "You have a new ride assignment. Tap to view details.",
+      },
+      data: { // Custom data payload for your app to handle
+        rideRequestId: rideDetails.id,
+        customerId: rideDetails.customerId,
+        pickupLat: rideDetails.pickup.latitude.toString(),
+        pickupLng: rideDetails.pickup.longitude.toString(),
+        dropoffLat: rideDetails.dropoff.latitude.toString(),
+        dropoffLng: rideDetails.dropoff.longitude.toString(),
+        status: "pending_driver_acceptance", // Status when driver receives it
+        click_action: "FLUTTER_NOTIFICATION_CLICK",
       },
       token: fcmToken,
+      android: {
+        priority: "high", // Sets the FCM message priority for Android devices
+        notification: {
+          sound: "default", // Specifies the sound for the notification on Android
+          click_action: "FLUTTER_NOTIFICATION_CLICK", // Ensures notification tap opens the app correctly
+        },
+      },
+      apns: { // Apple Push Notification Service specific configuration
+        payload: {
+          aps: {
+            sound: "default", // Specifies the sound for the notification on iOS
+          },
+        },
+      },
     };
 
     try {
@@ -120,71 +85,137 @@ async function sendDriverNotification(userId, message) {
       console.error("Error sending message:", error);
     }
   } else {
-    console.warn(`User ${userId} has no FCM token.`);
+    console.warn(`Driver ${driverId} has no FCM token.`);
   }
 }
 
 /**
  * Cloud Function to match ride requests with available drivers
  */
-exports.matchRideRequest = onDocumentCreated("/RideRequests/{rideRequestId}", async (event) => {
+exports.matchRideRequest = onDocumentCreated("/rideRequests/{rideRequestId}", async (event) => {
+  console.log("matchRideRequest triggered for ride ID:", event.params.rideRequestId);
   const snap = event.data;
+  if (!snap) {
+    console.log("No data associated with the event.");
+    return;
+  }
   const rideRequestData = snap.data();
-  const pickupAddress = rideRequestData.pickupAddress;
-  let searchCount = 0;
+  const rideRequestId = event.params.rideRequestId;
+
+  // Ensure pickup location is present
+  if (!rideRequestData.pickup || !rideRequestData.pickup.latitude || !rideRequestData.pickup.longitude) {
+    console.error("Ride request is missing pickup GeoPoint:", rideRequestId, rideRequestData);
+    await snap.ref.update({ status: "matching_error_missing_pickup" });
+    return;
+  }
+
+  const pickupGeoPoint = rideRequestData.pickup;
   const MAX_SEARCH_KIJIWES = 3;
+  const kijiwesWithDistance = [];
 
-  const nearestKijiwes = await findNearestKijiwesByAddress(pickupAddress, MAX_SEARCH_KIJIWES);
-  let kijiweIndex = 0;
+  // 1. Fetch all Kijiwes and calculate distance
+  try {
+    const kijiwesSnapshot = await admin.firestore().collection("kijiwe").get();
+    kijiwesSnapshot.forEach((doc) => {
+      const kijiwe = doc.data();
+      // Ensure kijiwe has position and geoPoint
+      if (kijiwe.position && kijiwe.position.geoPoint &&
+          kijiwe.position.geoPoint.latitude && kijiwe.position.geoPoint.longitude) {
+        const distance = calculateDistance(
+            pickupGeoPoint.latitude,
+            pickupGeoPoint.longitude,
+            kijiwe.position.geoPoint.latitude,
+            kijiwe.position.geoPoint.longitude,
+        );
+        kijiwesWithDistance.push({ id: doc.id, name: kijiwe.name, distance, docData: kijiwe });
+      } else {
+        console.warn(`Kijiwe ${doc.id} is missing valid position.geoPoint data.`);
+      }
+    });
+  } catch (error) {
+    console.error("Error fetching Kijiwes:", error);
+    await snap.ref.update({ status: "matching_error_kijiwe_fetch" });
+    return;
+  }
+
+  if (kijiwesWithDistance.length === 0) {
+    console.log("No Kijiwes found in the database or none with valid location data.");
+    await snap.ref.update({ status: "no_kijiwes_nearby" }); // Or a more specific status
+    return;
+  }
+
+  // Sort Kijiwes by distance
+  kijiwesWithDistance.sort((a, b) => a.distance - b.distance);
+
   let assignedDriverId = null;
+  let assignedKijiweId = null;
 
-  while (kijiweIndex < nearestKijiwes.length && !assignedDriverId) {
-    const currentKijiweId = nearestKijiwes[kijiweIndex];
-    const kijiweQueueRef = admin.firestore().collection("KijiweQueues").doc(currentKijiweId);
-    const kijiweQueueDoc = await kijiweQueueRef.get();
+  // 2. Iterate through nearest Kijiwes and their queues
+  for (let i = 0; i < Math.min(kijiwesWithDistance.length, MAX_SEARCH_KIJIWES); i++) {
+    const kijiwe = kijiwesWithDistance[i];
+    console.log(`Checking Kijiwe: ${kijiwe.name} (ID: ${kijiwe.id}), Distance: ${kijiwe.distance.toFixed(2)}km`);
 
-    if (kijiweQueueDoc.exists) {
-      const driverIds = kijiweQueueDoc.data().driverIds || [];
-      for (const userId of driverIds) {
-        const userDoc = await admin.firestore().collection("Users").doc(userId).get();
+    const kijiweQueue = kijiwe.docData.queue || []; // Queue is an array of driver IDs
+    if (kijiweQueue.length === 0) {
+      console.log(`Kijiwe ${kijiwe.name} queue is empty.`);
+      continue; // Try next Kijiwe
+    }
 
-        if (
-          userDoc.exists &&
-          userDoc.data().role.includes("Driver") &&
-          userDoc.data().driverDetails &&
-          userDoc.data().driverDetails.available
-        ) {
+    for (const driverId of kijiweQueue) {
+      const driverDoc = await admin.firestore().collection("users").doc(driverId).get();
+
+      if (driverDoc.exists) {
+        const driverData = driverDoc.data();
+        const driverProfile = driverData.driverProfile;
+        // Check if driver is online and waiting for a ride
+        if (driverProfile && driverProfile.isOnline === true && driverProfile.status === "waitingForRide") {
           // Match found!
-          assignedDriverId = userId;
-          await snap.ref.update({
-            status: "accepted",
-            assignedDriverId: userId,
-          });
+          assignedDriverId = driverId;
+          assignedKijiweId = kijiwe.id;
 
-          // Remove driver from queue
-          await kijiweQueueRef.update({
-            driverIds: admin.firestore.FieldValue.arrayRemove(userId),
+          const batch = admin.firestore().batch();
+          // Update RideRequest
+          await snap.ref.update({
+            status: "pending_driver_acceptance",
+            assignedDriverId: assignedDriverId,
+            kijiweId: assignedKijiweId,
           });
+          // Update Driver's profile status
+          batch.update(admin.firestore().collection("users").doc(assignedDriverId), {
+            "driverProfile.status": "pending_ride_acceptance",
+          });
+          await batch.commit();
 
           // Send notifications
           try {
-            await sendDriverNotification(userId, "You have a new ride request!");
-            // ... send customer notification (implement this function)
+            // Construct rideDetails for notification
+            const rideDetailsForNotification = { ...rideRequestData, id: rideRequestId };
+            await sendDriverNotification(assignedDriverId, rideDetailsForNotification);
+            console.log(`Assigned ride ${rideRequestId} to driver ${assignedDriverId} from Kijiwe ${assignedKijiweId}`);
+            // TODO: Send customer notification that a driver is being assigned
           } catch (error) {
             console.error("Error sending notifications:", error);
           }
           break; // Exit the inner loop once a driver is assigned
         }
       }
-
-       }
-    kijiweIndex++;
+    }
+    if (assignedDriverId) {
+      break; // Exit the Kijiwe loop once a driver is assigned
+    }
   }
 
-  // No match found after searching nearest Kijiwes
+  // 3. No match found after searching
   if (!assignedDriverId) {
-    await snap.ref.update({ status: "pending" });
-    // ... notify customer about no available drivers
+    console.log(`No available driver found for ride ${rideRequestId} after checking ` +
+        `${Math.min(kijiwesWithDistance.length, MAX_SEARCH_KIJIWES)} Kijiwes.`);
+    const statusUpdate = { status: "no_drivers_available" };
+    if (kijiwesWithDistance.length > 0 && kijiwesWithDistance[0].id) {
+      // If at least one Kijiwe was checked, assign its ID to the ride request
+      statusUpdate.kijiweId = kijiwesWithDistance[0].id;
+    }
+    await snap.ref.update(statusUpdate);
+    // TODO: Notify customer about no available drivers
   }
 });
 
@@ -192,76 +223,75 @@ exports.matchRideRequest = onDocumentCreated("/RideRequests/{rideRequestId}", as
  * Cloud Function to handle ride request updates
  */
 exports.updateRideRequest = onDocumentUpdated("/RideRequests/{rideRequestId}", async (event) => {
+  // This function might need more specific logic based on which status changes you want to react to.
+  // For now, it's a placeholder.
   const beforeData = event.data.before.data();
   const afterData = event.data.after.data();
 
   if (beforeData.status !== afterData.status) {
-    // Handle status change
+    console.log(`Ride request ${event.params.rideRequestId} status changed from ${beforeData.status} ` +
+        `to ${afterData.status}`);
     if (afterData.status === "completed") {
-      // Notify customer and driver about ride completion
-      await sendDriverNotification(
-          afterData.assignedDriverId,
-          "Your ride has been completed!",
-      );
-      // ... notify customer
+      if (afterData.assignedDriverId) {
+        // Example: Send a generic completion notification to driver
+        // You might want a more specific payload for completion
+        // await sendDriverNotification(afterData.assignedDriverId, {
+        //  id: event.params.rideRequestId, /* other details */ });
+        console.log(`Ride ${event.params.rideRequestId} completed by driver ${afterData.assignedDriverId}.`);
+      }
+      // TODO: Notify customer about ride completion
     }
   }
 });
 
 /**
  * Cloud Function to handle ride request deletions
+ * Note: Your security rules prevent deletion, so this might not trigger often from client.
  */
 exports.deleteRideRequest = onDocumentDeleted("/RideRequests/{rideRequestId}", async (event) => {
-  const rideRequestData = event.data;
-  const assignedDriverId = rideRequestData.assignedDriverId;
-
-  if (assignedDriverId) {
-    // Notify driver about ride request deletion
-    await sendDriverNotification(
-        assignedDriverId,
-        "Your ride request has been deleted!",
-    );
-  }
+  const deletedData = event.data.data(); // Get the data of the deleted document
+  console.log(`Ride request ${event.params.rideRequestId} deleted. Data:`, deletedData);
+  // if (deletedData && deletedData.assignedDriverId) {
+  //   // Notify driver about ride request deletion
+  //   // await sendDriverNotification(deletedData.assignedDriverId, {
+  //  id: event.params.rideRequestId, /* other details */ });
+  // }
 });
 
 /**
  * Cloud Function to handle Kijiwe queue updates
  * @type {functions.CloudFunction<functions.firestore.DocumentSnapshot>}
+ * This function needs to be adapted because KijiweQueues collection is not used.
+ * Queue is now an array within the Kijiwe document.
  */
-exports.updateKijiweQueue = onDocumentUpdated("/KijiweQueues/{kijiweId}", async (event) => {
+// exports.updateKijiweQueue = onDocumentUpdated("/KijiweQueues/{kijiweId}", async (event) => {
+//   // ... logic would need to change to monitor /kijiwe/{kijiweId} and compare the 'queue' array.
+// });
+
+exports.onKijiweUpdate = onDocumentUpdated("/kijiwe/{kijiweId}", async (event) => {
   const beforeData = event.data.before.data();
   const afterData = event.data.after.data();
 
-  if (beforeData.driverIds.length !== afterData.driverIds.length) {
-    // Handle driver queue changes
-    if (afterData.driverIds.length > beforeData.driverIds.length) {
-      // New driver added to the queue
-      const newDriverId = afterData.driverIds[afterData.driverIds.length - 1];
-      await sendDriverNotification(
-          newDriverId,
-          "You have been added to the Kijiwe queue!",
-      );
-    } else {
-      // Driver removed from the queue
-      const removedDriverId = beforeData.driverIds[beforeData.driverIds.length - 1];
-      await sendDriverNotification(
-          removedDriverId,
-          "You have been removed from the Kijiwe queue!",
-      );
-    }
+  // Example: Detect changes in the queue array
+  const beforeQueue = beforeData.queue || [];
+  const afterQueue = afterData.queue || [];
+
+  if (JSON.stringify(beforeQueue) !== JSON.stringify(afterQueue)) {
+    console.log(`Kijiwe ${event.params.kijiweId} queue updated.`);
+    // You could add logic here to notify drivers if they are added/removed,
+    // but this might be noisy if client already handles this.
+    // For example, finding the difference in drivers:
+    // const addedDrivers = afterQueue.filter(d => !beforeQueue.includes(d));
+    // const removedDrivers = beforeQueue.filter(d => !afterQueue.includes(d));
+  }
+
+  // Example: Detect changes in adminId (if you had a leaderId field, you'd use that)
+  if (beforeData.adminId !== afterData.adminId) {
+    console.log(`Kijiwe ${event.params.kijiweId} admin changed from ${beforeData.adminId} ` +
+        `to ${afterData.adminId}.`);
+    // if (afterData.adminId) {
+    //   await sendDriverNotification(afterData.adminId, {
+    //  message: `You are now the admin of Kijiwe ${afterData.name || event.params.kijiweId}.` });
+    // }
   }
 });
-
-exports.updateKijiwe = onDocumentUpdated("/Kijiwes/{kijiweId}", async (event) => {
-  const beforeData = event.data.before.data();
-  const afterData = event.data.after.data();
-
-  if (beforeData.leaderId !== afterData.leaderId) {
-    // Handle Kijiwe leader change
-    await sendDriverNotification(
-        afterData.leaderId,
-        "You are now the leader of this Kijiwe!",
-    );
-  }
-});
-// Add a blank line here

@@ -15,13 +15,11 @@ const {
   matchRideRequest,
   updateRideRequest,
   deleteRideRequest,
-  updateKijiweQueue,
-  updateKijiwe,
+  onKijiweUpdate, // Changed from updateKijiwe to match the export from matchRideRequest.js
 } = require("./matchRideRequest");
 
 // Export functions
 exports.matchRideRequest = matchRideRequest;
 exports.updateRideRequest = updateRideRequest;
 exports.deleteRideRequest = deleteRideRequest;
-exports.updateKijiweQueue = updateKijiweQueue;
-exports.updateKijiwe = updateKijiwe;
+exports.onKijiweUpdate = onKijiweUpdate; // Exporting the renamed function

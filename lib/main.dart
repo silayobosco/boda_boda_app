@@ -1,3 +1,4 @@
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -23,6 +24,42 @@ import 'services/firestore_service.dart';
 final FirestoreService firestoreService = FirestoreService();
 final AuthService authService = AuthService();
 
+@pragma('vm:entry-point') // Required for release mode on Android
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp(); // Ensure Firebase is initialized
+  debugPrint("Handling a background message: ${message.messageId}");
+  debugPrint('Message data: ${message.data}');
+  // You can perform background tasks here, or save data to be picked up when the app opens.
+  // For example, you can save the message to Firestore or local storage.
+  // If you want to show a notification, you can use flutter_local_notifications or similar package.
+  // Make sure to handle the notification in a way that is appropriate for your app.
+  // For example, if you want to show a local notification:
+  // final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+  // const AndroidInitializationSettings initializationSettingsAndroid =
+  //     AndroidInitializationSettings('@mipmap/ic_launcher');
+  // const InitializationSettings initializationSettings = InitializationSettings(
+  //   android: initializationSettingsAndroid,
+  // );
+  // await flutterLocalNotificationsPlugin.initialize(initializationSettings);
+  // await flutterLocalNotificationsPlugin.show(
+  //   0,
+  //   message.notification?.title,
+  //   message.notification?.body,
+  //   NotificationDetails(
+  //     android: AndroidNotificationDetails(
+  //       'your_channel_id',
+  //       'your_channel_name',
+  //       channelDescription: 'your_channel_description',
+  //       importance: Importance.max,
+  //       priority: Priority.high,
+  //       showWhen: false,
+  //     ),
+  //   ),
+  // );
+  // Note: Make sure to handle the notification in a way that is appropriate for your app.
+  // You cannot update UI directly from here.
+}
+
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -30,6 +67,7 @@ void main() async {
 
   final themeProvider = ThemeProvider();
   await themeProvider.loadThemeMode();
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
   runApp(
   MultiProvider(
@@ -43,7 +81,7 @@ void main() async {
         ChangeNotifierProvider<RideRequestProvider>(
           create: (context) => RideRequestProvider(
             firestoreService: context.read<FirestoreService>(),
-            authService: context.read<AuthService>(),
+            // authService: context.read<AuthService>(), // Removed as RideRequestProvider creates its own
           )
         ),
     ],

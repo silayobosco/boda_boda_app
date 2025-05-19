@@ -804,25 +804,34 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
       }
       return;
     }
+    final currentUserId = rideRequestProvider.currentUserId;
+    if (currentUserId == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('User not authenticated. Cannot create ride request.')),
+        );
+      }
+      return;
+    }
 
     try {
       final stopsData = _stops
         .where((s) => s.location != null) 
         .map((s) => {
               'name': s.name,
-              'location': s.location!, 
+              // Ensure stop location is also converted to gmf.LatLng if RideRequestModel expects it
+              'location': LatLng(s.location!.latitude, s.location!.longitude), 
             })
         .toList();
         
-        
-
+      // Create a ride request model
       final rideRequest = RideRequestModel(
-        customerId: rideRequestProvider.authService.currentUser?.uid,
-        pickup: ll.LatLng(_pickupLocation!.latitude, _pickupLocation!.longitude),
-        dropoff: ll.LatLng(_dropOffLocation!.latitude, _dropOffLocation!.longitude),
+        customerId: currentUserId, // Use the non-nullable currentUserId
+        pickup: LatLng(_pickupLocation!.latitude, _pickupLocation!.longitude), // Use google_maps_flutter LatLng
+        dropoff: LatLng(_dropOffLocation!.latitude, _dropOffLocation!.longitude), // Use google_maps_flutter LatLng
         stops: stopsData,
         status: 'pending',
-        timestamp: DateTime.now(),
+        requestTime: DateTime.now(), // Use requestTime
       );
 
       await rideRequestProvider.createRideRequest(rideRequest);

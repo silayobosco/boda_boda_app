@@ -23,115 +23,116 @@ class DriverProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> toggleOnlineStatus(BuildContext context) async {
+  Future<void> loadDriverData() async {
+    final userId = _authService.currentUser?.uid;
+    if (userId == null) {
+      _isOnline = false;
+      _currentKijiweId = null;
+      // No setLoading needed if returning early, but notify for UI consistency
+      notifyListeners();
+      return;
+    }
     setLoading(true);
     try {
-      final newOnlineStatus = !_isOnline;
-
-      if (newOnlineStatus && _currentKijiweId == null) {
-        // Can't go online without a Kijiwe ID
-        // No change to _isOnline, just show message and stop loading
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Kijiwe ID is not set. Cannot go online.')),
-          );
+      DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('users').doc(userId).get();
+      if (userDoc.exists && userDoc.data() != null) {
+        final data = userDoc.data() as Map<String, dynamic>;
+        if (data.containsKey('driverProfile')) {
+          final driverProfile = data['driverProfile'] as Map<String, dynamic>;
+          _isOnline = driverProfile['isOnline'] ?? false;
+          _currentKijiweId = driverProfile['kijiweId'] as String?;
+        } else { // Driver profile doesn't exist
+          _isOnline = false;
+          _currentKijiweId = null;
         }
-        setLoading(false);
-        return;
-      }
-
-      // Optimistically update the local state for immediate UI feedback
-      _isOnline = newOnlineStatus;
-      notifyListeners();
-
-      // Perform Firestore operations
-      // If going online, _currentKijiweId must be non-null (checked above)
-      // If going offline, _currentKijiweId is needed to leave the queue correctly
-      if (_currentKijiweId != null) {
-        await _updateFirestoreAndQueueForOnlineStatus(context, newOnlineStatus, _currentKijiweId!);
-      } else if (!newOnlineStatus) {
-        // This case implies going offline when _currentKijiweId was already null.
-        // This might indicate a previous state inconsistency, but we ensure offline status.
-        if (context.mounted) {
-           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('You are now offline.')),
-          );
-        }
+      } else { // User document doesn't exist
+        _isOnline = false;
+        _currentKijiweId = null;
       }
     } catch (e) {
-      _isOnline = !_isOnline; // Revert optimistic update on error
-      notifyListeners();
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to toggle status: ${e.toString()}')),
-        );
-      }
+      debugPrint("Error loading driver data: $e");
+      _isOnline = false; // Reset on error
+      _currentKijiweId = null;
     } finally {
-      setLoading(false);
+      setLoading(false); // This will also call notifyListeners()
     }
   }
 
-  // New private method to handle direct Firestore updates for driver profile status
+  Future<String?> toggleOnlineStatus() async {
+    setLoading(true);
+    final userId = _authService.currentUser?.uid;
+
+    if (userId == null) {
+      setLoading(false);
+      return 'User not authenticated. Cannot toggle status.';
+    }
+
+    final newOnlineStatus = !_isOnline;
+
+    // Prevent going ONLINE if Kijiwe ID is not set.
+    if (newOnlineStatus && _currentKijiweId == null) {
+      setLoading(false); // Stop loading as we are returning.
+      return 'Kijiwe ID is not set. Cannot go online.';
+    }
+
+    // Optimistically update UI
+    _isOnline = newOnlineStatus;
+    notifyListeners();
+
+    try {
+      // 1. Always update driverProfile's isOnline and status in Firestore.
+      await _updateDriverProfileInFirestore(
+        userId: userId,
+        isOnline: newOnlineStatus,
+        statusString: newOnlineStatus ? "waitingForRide" : "offline",
+        // kijiweId in driverProfile is only associated when going online with a specific kijiwe.
+        // It's not cleared from driverProfile by this toggle when going offline.
+        kijiweId: (newOnlineStatus && _currentKijiweId != null) ? _currentKijiweId : null,
+      );
+
+      // 2. Update KijiweQueues (join or leave) only if _currentKijiweId is available.
+      if (_currentKijiweId != null) {
+        if (newOnlineStatus) {
+          await _firestoreService.joinKijiweQueue(_currentKijiweId!, userId);
+        } else {
+          await _firestoreService.leaveKijiweQueue(_currentKijiweId!, userId);
+        }
+      }
+
+      // Success
+      setLoading(false);
+      return null; // Indicates success
+    } catch (e) {
+      // Revert optimistic UI update on failure
+      _isOnline = !newOnlineStatus; // Revert to previous state
+      notifyListeners();
+      setLoading(false);
+      return 'Failed to toggle status: ${e.toString()}';
+    }
+  }
+
+  // method to handle direct Firestore updates for driver profile status
   Future<void> _updateDriverProfileInFirestore({
     required String userId,
     required bool isOnline,
     String? statusString,
-    String? kijiweId, // Only update if provided
+    String? kijiweId, // Optional, only needed when going online
+  // This is the Kijiwe ID the driver is joining or leaving
   }) async {
-    final Map<String, dynamic> profileUpdateData = {
-      'isOnline': isOnline,
-      if (statusString != null) 'status': statusString,
-      if (kijiweId != null) 'kijiweId': kijiweId,
+    // Use dot notation to update specific fields within the driverProfile map
+    final Map<String, dynamic> updateData = {};
+    updateData['driverProfile.isOnline'] = isOnline;
+    if (statusString != null) {
+      updateData['driverProfile.status'] = statusString;
+    }
+    // Only update kijiweId if it's explicitly provided (e.g., when going online or changing kijiwe)
+    // When going offline, kijiweId in profile should typically remain.
+    if (kijiweId != null) {
+      updateData['driverProfile.kijiweId'] = kijiweId;
     };
 
-    // Remove null values to avoid overwriting fields with null if not provided
-    profileUpdateData.removeWhere((key, value) => value == null);
-
-    if (profileUpdateData.isNotEmpty) {
-      await FirebaseFirestore.instance.collection('users').doc(userId).update({
-        'driverProfile': profileUpdateData, // Update within the driverProfile map
-      });
-    }
-  }
-
-  // Renamed and refactored internal method to handle Firestore updates for online status
-  Future<void> _updateFirestoreAndQueueForOnlineStatus(
-    BuildContext context,
-    bool newStatus,
-    String kijiweId,
-  ) async {
-    final userId = _authService.currentUser?.uid;
-    if (userId == null) {
-      throw Exception('User not authenticated. Cannot update online status.');
-    }
-
-    try {
-      await _updateDriverProfileInFirestore( // Call internal method
-        userId: userId,
-        isOnline: newStatus,
-        statusString: newStatus ? "waitingForRide" : "offline", // Set status string
-        kijiweId: kijiweId,
-      );
-
-      if (newStatus) {
-        await _firestoreService.joinKijiweQueue(kijiweId, userId);
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('You are now online and in the Kijiwe queue.')),
-          );
-        }
-      } else {
-        await _firestoreService.leaveKijiweQueue(kijiweId, userId);
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('You are now offline.')),
-          );
-        }
-      }
-    } catch (e) {
-      // The calling method (toggleOnlineStatus) will handle reverting _isOnline state.
-      debugPrint('Error in _updateFirestoreAndQueueForOnlineStatus: $e');
-      throw Exception('Failed to update status in Firestore: $e'); // Re-throw to be caught by caller
+    if (updateData.isNotEmpty) {
+      await FirebaseFirestore.instance.collection('users').doc(userId).update(updateData);
     }
   }
 
@@ -140,9 +141,6 @@ class DriverProvider extends ChangeNotifier {
   required String userId,
   required String vehicleType,
   required String licenseNumber,
-  // Kijiwe parameters:
-  // If createNewKijiwe is true, newKijiweName and newKijiweLocation must be provided.
-  // Otherwise, existingKijiweId must be provided.
   required final bool createNewKijiwe,
   final String? newKijiweName,
   final LatLng? newKijiweLocation,
@@ -151,7 +149,7 @@ class DriverProvider extends ChangeNotifier {
   setLoading(true);
   try {
     final firestore = FirebaseFirestore.instance;
-    final geo = GeoFlutterFire(); // Initialize Geoflutterfire from geoflutterfire3
+    final geo = GeoFlutterFire(); 
     String kijiweIdToUse;
     String kijiweNameToDisplay = "";
 
@@ -213,6 +211,10 @@ class DriverProvider extends ChangeNotifier {
       'driverProfile': driverProfilePayload,
     });
 
+    // Update provider's internal state immediately after successful registration
+    _currentKijiweId = kijiweIdToUse;
+    _isOnline = driverProfilePayload['isOnline'] ?? false;
+
     // 3. Add driver to the selected kijiwe's permanent members list (if not already added during creation)
     // FieldValue.arrayUnion is idempotent, so it's safe to call even if userId is already there.
     if (!createNewKijiwe) { // Only needed if selecting an existing Kijiwe
@@ -224,12 +226,9 @@ class DriverProvider extends ChangeNotifier {
     // 4. Add to kijiwe queue if 'isOnline' is true in their profile
     // (We've set it to true in driverProfilePayload)
     // The driver is added to an array field (e.g., 'ueues') in the Kijiwe document.
-    if (driverProfilePayload['isOnline'] == true) {
+    if (driverProfilePayload['isOnline'] == true) { // Queue is now an array of strings
       await kijiweRef.update({
-        'queue': FieldValue.arrayUnion([{ // Using 'ueues' as per your Kijiwe structure
-          'driverId': userId,
-          'joinedAt': Timestamp.now(), // Use client-generated timestamp to avoid error with arrayUnion
-        }])
+        'queue': FieldValue.arrayUnion([userId])
       });
     }
 
@@ -286,12 +285,20 @@ class DriverProvider extends ChangeNotifier {
     setLoading(true);
     try {
       // Update RideRequest status in Firestore (via RideRequestProvider or directly if simpler for now)
-      // For now, let's assume RideRequestProvider handles this or it's done elsewhere.
-      // Here, we focus on updating the driver's own status.
       await _updateDriverProfileInFirestore( // Call internal method
         userId: userId,
         isOnline: true, // Still online
         statusString: "goingToPickup",
+      );
+      // Remove driver from Kijiwe queue as they are now on a ride
+      if (_currentKijiweId != null) {
+        await _firestoreService.leaveKijiweQueue(_currentKijiweId!, userId);
+      }
+      // Update the ride request status in Firestore
+      await _firestoreService.updateRideRequestStatus(
+        rideId,
+        'accepted',
+        driverId: userId,
       );
       // Potentially update local state if needed for UI
       notifyListeners();
@@ -303,12 +310,26 @@ class DriverProvider extends ChangeNotifier {
   }
 
   Future<void> declineRideRequest(String rideId, String customerId) async {
-    // No change to driver's own status typically, they just become available for other requests.
-    // The RideRequest document itself would be updated (e.g., to 'declined' or re-queued).
-    // For simplicity, we assume the driver remains 'waitingForRide'.
-    notifyListeners();
+    final userId = _authService.currentUser?.uid;
+    if (userId == null) throw Exception('Driver not logged in');
+    setLoading(true);
+    try {
+      // Update RideRequest status in Firestore (via RideRequestProvider or directly if simpler for now)
+      await _firestoreService.updateRideRequestStatus(
+        rideId,
+        'declined',
+        driverId: userId,
+      );
+      // Potentially update local state if needed for UI
+      notifyListeners();
+    } catch (e) {
+      throw Exception('Failed to decline ride: $e');
+    } finally {
+      setLoading(false);
+    }
   }
 
+  // Confirm arrival at pickup location
   Future<void> confirmArrival(String rideId, String customerId) async {
     final userId = _authService.currentUser?.uid;
     if (userId == null) throw Exception('Driver not logged in');
@@ -318,6 +339,12 @@ class DriverProvider extends ChangeNotifier {
         userId: userId,
         isOnline: true, // Still online
         statusString: "arrivedAtPickup",
+      );
+      // Update the ride request status in Firestore
+      await _firestoreService.updateRideRequestStatus(
+        rideId,
+        'arrivedAtPickup',
+        driverId: userId,
       );
       notifyListeners();
     } catch (e) {
@@ -337,6 +364,12 @@ class DriverProvider extends ChangeNotifier {
         isOnline: true, // Still online
         statusString: "onRide",
       );
+      // Update the ride request status in Firestore
+      await _firestoreService.updateRideRequestStatus(
+        rideId,
+        'onRide',
+        driverId: userId,
+      );
       notifyListeners();
     } catch (e) {
       throw Exception('Failed to start ride: $e');
@@ -355,15 +388,42 @@ class DriverProvider extends ChangeNotifier {
         isOnline: true, // Still online, ready for next ride
         statusString: "waitingForRide", // Or "returningToKijiwe" then "waitingForRide"
       );
+      // Update the ride request status in Firestore
+      await _firestoreService.updateRideRequestStatus(
+        rideId,
+        'completed',
+        driverId: userId,
+      );
+      // Optionally, update the ride document with a completion time separately:
+      await FirebaseFirestore.instance.collection('rideRequests').doc(rideId).update({
+        'completedAt': FieldValue.serverTimestamp(),
+      });      
+      // Optionally, you might want to update the driver's earnings or other metrics
+      // For example, you could update a 'totalEarnings' field in the driver profile
+      // Optionally, you might want to update the ride history or other related data
+      // For example, you could create a ride history entry here
       // Increment completedRides
       await FirebaseFirestore.instance.collection('users').doc(userId).update({
         'driverProfile.completedRides': FieldValue.increment(1),
       });
+      // If driver is still online and kijiweId is set, add them back to the queue
+      if (_isOnline && _currentKijiweId != null) {
+        await _firestoreService.joinKijiweQueue(_currentKijiweId!, userId);
+      }
       notifyListeners();
     } catch (e) {
       throw Exception('Failed to complete ride: $e');
     } finally {
       setLoading(false);
+    }
+  }
+
+  Future<void> rateRide(String rideId, double rating) async {
+    try {
+      // await ApiService.rateRide(rideId, rating);
+      notifyListeners();
+    } catch (e) {
+      throw Exception('Failed to rate ride: $e');
     }
   }
 
@@ -378,6 +438,18 @@ class DriverProvider extends ChangeNotifier {
         isOnline: true, // Still online
         statusString: "waitingForRide",
       );
+      // Update the ride request status in Firestore
+      await _firestoreService.updateRideRequestStatus(
+        rideId,
+        'cancelled',
+        driverId: userId,
+      );
+      // If driver is still online and kijiweId is set, add them back to the queue
+      if (_isOnline && _currentKijiweId != null) {
+        await _firestoreService.joinKijiweQueue(_currentKijiweId!, userId);
+      }
+      // send notification to customer
+      // await ApiService.sendNotificationToCustomer(customerId, "Ride Cancelled", "Your ride has been cancelled by the driver.");
       notifyListeners();
     } catch (e) {
       throw Exception('Failed to cancel ride: $e');
@@ -385,13 +457,4 @@ class DriverProvider extends ChangeNotifier {
       setLoading(false);
     }
   }
-  Future<void> rateRide(String rideId, double rating) async {
-    try {
-      // await ApiService.rateRide(rideId, rating);
-      notifyListeners();
-    } catch (e) {
-      throw Exception('Failed to rate ride: $e');
-    }
-  }
-  
 }
