@@ -35,6 +35,7 @@ class _DriverHomeState extends State<DriverHome> {
   bool _isLoadingRoute = false;
   String _currentRouteType = ''; // To describe the route (e.g., "Full Ride", "To Pickup", "Main Ride")
   String? _pendingRideCustomerName; // To store fetched customer name
+  String? _currentlyDisplayedProposedRideId; // To track the ID of the ride for which a proposed route is shown
   final String _googlePlacesApiKey = 'AIzaSyCkKD8FP-r9bqi5O-sOjtuksT-0Dr9dgeg'; // TODO: Move to a config file
 
     // Define the listener method
@@ -598,6 +599,25 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
 
     // Fetches and displays the FULL PROPOSED RIDE route (pickup to destination with stops) for the ride request sheet
   Future<void> _initiateFullProposedRideRouteForSheet(Map<String, dynamic> rideData) async {
+    final String? newRideRequestId = rideData['rideRequestId'] as String?;
+
+    if (newRideRequestId == null) {
+      debugPrint("DriverHome: Proposed ride has no ID. Cannot fetch/display route.");
+      return;
+    }
+
+    // If already loading a route, or if the current proposed ride is already displayed for the *same* ride ID, do nothing.
+    if (_isLoadingRoute) {
+      // debugPrint("DriverHome: Route is currently being loaded. Skipping fetch for $newRideRequestId.");
+      return;
+    }
+    // Check if the same proposed ride's route and markers are already displayed
+    if (newRideRequestId == _currentlyDisplayedProposedRideId && _activeRoutePolylines.isNotEmpty && _rideSpecificMarkers.any((m) => m.markerId.value.startsWith('proposed_'))) {
+      // debugPrint("DriverHome: Proposed route already displayed for $newRideRequestId. Skipping fetch.");
+      return;
+    }
+
+
     final dynamic pickupLatDynamic = rideData['pickupLat'];
     final dynamic pickupLngDynamic = rideData['pickupLng'];
     final dynamic dropoffLatDynamic = rideData['dropoffLat'];
@@ -632,13 +652,26 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
     final customerId = rideData['customerId'] as String?;
     if (customerId != null) {
       // ... (customer name fetching logic remains the same as in your current _initiateRouteToPickupForSheet)
+      // Ensure customer name is fetched if not already available or if ride ID changed
+      if (_pendingRideCustomerName == null || newRideRequestId != _currentlyDisplayedProposedRideId) {
+        try {
+          DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('users').doc(customerId).get();
+          if (mounted && userDoc.exists) {
+            final userData = userDoc.data() as Map<String, dynamic>?; // Explicit cast
+            setState(() {
+              _pendingRideCustomerName = userData?['name'] as String? ?? 'Customer';
+            });
+          }
+        } catch (e) { debugPrint("Error fetching customer name for sheet: $e"); }
+      }
     }
+
 
     await _fetchAndDisplayRoute(
         origin: ridePickupLocation,
         destination: rideDropoffLocation,
         // waypoints: rideWaypoints, // Pass parsed stops here
-        polylineColor: Colors.deepPurpleAccent, // Color for the proposed full route
+        polylineColor: Colors.deepPurpleAccent, 
         routeType: "Proposed Ride");
 
     // Add markers for the proposed route
@@ -667,6 +700,11 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
         //   ));
         // });
       });
+    }
+    // Update the ID of the currently displayed proposed route
+    if (mounted && _activeRoutePolylines.isNotEmpty && !_isLoadingRoute) {
+      // Set this regardless of whether markers were added, as long as polyline is there
+      _currentlyDisplayedProposedRideId = newRideRequestId;
     }
   }
 
@@ -832,6 +870,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
         _activeRoutePolylines.clear(); // Clear proposed full route polyline
         _rideSpecificMarkers.clear(); // Clear proposed full route markers
         _currentRouteDistance = null;
+        _currentlyDisplayedProposedRideId = null; // Clear the proposed ride ID
         _currentRouteDuration = null;
       });
 
@@ -864,6 +903,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
         _rideSpecificMarkers.clear(); // Clear proposed markers
         _currentRouteDistance = null;
         _currentRouteDuration = null;
+        _currentlyDisplayedProposedRideId = null; // Clear the proposed ride ID
         _pendingRideCustomerName = null; // Clear customer name for sheet
       });
       ScaffoldMessenger.of(context).showSnackBar(
@@ -922,6 +962,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
         _activeRoutePolylines.clear(); // Clear route to pickup
         _rideSpecificMarkers.clear(); // Clear pickup marker
         _currentRouteDistance = null;
+        // _currentlyDisplayedProposedRideId is not relevant here as we are past the proposed stage
         _currentRouteDuration = null;
       });
 
@@ -986,6 +1027,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
         _activeRoutePolylines.clear();
         _rideSpecificMarkers.clear();
         _currentRouteDistance = null;
+        // _currentlyDisplayedProposedRideId is not relevant here
         _currentRouteDuration = null;
       });
       if (!mounted) return;
@@ -1126,6 +1168,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
         _rideSpecificMarkers.clear();
         _currentRouteDistance = null;
         _currentRouteDuration = null;
+        // _currentlyDisplayedProposedRideId is not relevant here
       });
     } catch (e) {
       if (mounted) {

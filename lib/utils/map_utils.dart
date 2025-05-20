@@ -72,6 +72,7 @@ class MapUtils {
     );
 
     try {
+      debugPrint('Requesting route from: $url'); // Add this line
       final response = await http.get(url);
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
