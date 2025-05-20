@@ -1,5 +1,6 @@
-import 'package:boda_boda/models/Ride_Request_Model.dart';
+import 'dart:convert';
 import 'package:boda_boda/providers/ride_request_provider.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -7,11 +8,11 @@ import 'package:latlong2/latlong.dart' as ll;
 import 'package:provider/provider.dart';
 import '../providers/location_provider.dart';
 import 'package:geocoding/geocoding.dart';
-import 'package:http/http.dart' as http;
+// import 'package:http/http.dart' as http; // No longer needed directly
 import 'package:cloud_firestore/cloud_firestore.dart'; // Import GeoPoint from cloud_firestore
-import 'dart:convert';
 import '../models/stop.dart';
 import '../utils/ui_utils.dart'; // Import ui_utils
+import '../utils/map_utils.dart'; // Import the new map utility
 class CustomerHome extends StatefulWidget {
   const CustomerHome({super.key});
 
@@ -22,8 +23,6 @@ class CustomerHome extends StatefulWidget {
 class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClientMixin {
   // Map and Location Variables
   GoogleMapController? _mapController;
-  String? _routeDistance;
-  String? _routeDuration;
   ll.LatLng? _pickupLocation;
   ll.LatLng? _dropOffLocation;
   final Set<Marker> _markers = {};
@@ -34,7 +33,6 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
   // Search and Suggestions
   List<Map<String, dynamic>> _destinationSuggestions = [];
   List<Map<String, dynamic>> _pickupSuggestions = [];
-  List<Map<String, dynamic>> _stopSuggestions = [];
   final String _googlePlacesApiKey = 'AIzaSyCkKD8FP-r9bqi5O-sOjtuksT-0Dr9dgeg';
   final List<String> _searchHistory = [];
   
@@ -56,6 +54,13 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
   final List<Stop> _stops = [];
   int? _editingStopIndex;
   bool _routeReady = false;
+  List<Map<String, dynamic>> _stopSuggestions = [];
+
+  // Route Management
+  List<Map<String, dynamic>> _allFetchedRoutes = []; // To store all routes from MapUtils
+  int _selectedRouteIndex = 0; // Index of the currently selected route
+  String? _selectedRouteDistance;
+  String? _selectedRouteDuration;
 
   @override
   bool get wantKeepAlive => true;
@@ -128,7 +133,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
       ..._stops.where((s) => s.location != null)
                .map((s) => LatLng(s.location!.latitude, s.location!.longitude)),
     ];
-
+    
     if (points.isEmpty) {
       return LatLngBounds(
         northeast: LatLng(
@@ -142,7 +147,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
       );
     }
 
-    final bounds = _boundsFromLatLngList(points);
+    final bounds = MapUtils.boundsFromLatLngList(points); // Use MapUtils
     final latDelta = bounds.northeast.latitude - bounds.southwest.latitude;
     final lngDelta = bounds.northeast.longitude - bounds.southwest.longitude;
     
@@ -424,142 +429,89 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
 
   Future<void> _drawRoute() async {
   if (_pickupLocation == null || _dropOffLocation == null) return;
-
-  // Format waypoints for the API
-  final waypoints = _stops
-      .where((s) => s.location != null)
-      .map((s) => '${s.location!.latitude},${s.location!.longitude}')
-      .join('|');
-
-  final origin = '${_pickupLocation!.latitude},${_pickupLocation!.longitude}';
-  final destination = '${_dropOffLocation!.latitude},${_dropOffLocation!.longitude}';
-
-  // Build the API URL
-  final url = Uri.parse(
-    'https://maps.googleapis.com/maps/api/directions/json?'
-    'origin=$origin&destination=$destination&key=$_googlePlacesApiKey'
-    '${waypoints.isNotEmpty ? '&waypoints=$waypoints' : ''}'
-    '&alternatives=true', // Request alternative routes
-  );
-
+  
+  setState(() {
+    _isLoadingRoute = true;
+    _polylines.clear();
+    _allFetchedRoutes.clear();
+    _selectedRouteIndex = 0;
+    _selectedRouteDistance = null;
+    _selectedRouteDuration = null;
+  });
+  
   try {
-    final response = await http.get(url);
+    final List<ll.LatLng>? waypointsLatLng = _stops
+        .where((s) => s.location != null)
+        .map((s) => s.location!)
+        .toList();
 
-    if (response.statusCode == 200) {
-      final data = json.decode(response.body);
+    final List<Map<String, dynamic>>? routes = await MapUtils.getRouteDetails(
+      origin: LatLng(_pickupLocation!.latitude, _pickupLocation!.longitude),
+      destination: LatLng(_dropOffLocation!.latitude, _dropOffLocation!.longitude),
+      apiKey: _googlePlacesApiKey,
+      waypoints: waypointsLatLng?.map((ll) => LatLng(ll.latitude, ll.longitude)).toList(),
+    ) as List<Map<String, dynamic>>?;
 
-      if (data['status'] == 'OK') {
-        final routes = data['routes'] as List;
+    if (!mounted) return;
 
-        setState(() {
-          _polylines.clear(); // Clear existing polylines
-          _isLoadingRoute = true;
+    if (routes != null && routes.isNotEmpty) {
+      setState(() {
+        _allFetchedRoutes = routes;
+        _selectedRouteIndex = 0; // Default to the first route
+        _updateDisplayedRoute();
+      });
 
-          // Add all routes to the map
-          for (int i = 0; i < routes.length; i++) {
-            final route = routes[i];
-            final routePoints = _decodePolyline(route['overview_polyline']['points']);
-            final leg = route['legs'][0];
-
-            _polylines.add(Polyline(
-              polylineId: PolylineId('route_$i'),
-              color: i == 0 ? Colors.blue : Colors.grey, // Highlight the first route
-              width: i == 0 ? 6 : 4, // Make the primary route thicker
-              points: routePoints,
-              onTap: () {
-                // Handle route selection if needed
-                // print('Selected route $i');
-                setState(() {
-                  // Highlight the selected route
-                  _polylines.forEach((polyline) {
-                    polyline = polyline.copyWith(
-                      colorParam: polyline.polylineId == PolylineId('route_$i') ? Colors.blue : Colors.grey,
-                      widthParam: polyline.polylineId == PolylineId('route_$i') ? 6 : 4,
-                    );
-                  });
-                });
-              },
-            ));
-
-            // Update route distance and duration for the primary route
-            if (i == 0) {
-              _routeDistance = leg['distance']['text']; // e.g., "4.5 km"
-              _routeDuration = leg['duration']['text']; // e.g., "12 mins"
-            }
-          }
-
-          // Adjust the camera to fit all routes
-          final allPoints = routes
-              .expand((route) => _decodePolyline(route['overview_polyline']['points']))
-              .toList();
-          _mapController?.animateCamera(
-            CameraUpdate.newLatLngBounds(_boundsFromLatLngList(allPoints), 100),
-          );
-        });
-      } else {
-        print('Directions API error: ${data['status']}');
+      // Adjust camera to fit all points of the first (primary) route initially
+      if (_allFetchedRoutes.isNotEmpty) {
+        final List<LatLng> primaryRoutePoints = _allFetchedRoutes[0]['points'] as List<LatLng>;
+        _mapController?.animateCamera(
+          CameraUpdate.newLatLngBounds(MapUtils.boundsFromLatLngList(primaryRoutePoints), 100),
+        );
       }
     } else {
-      print('Failed to load route');
+      // Handle no routes found or API error (MapUtils prints errors)
+      setState(() {
+        _polylines.clear();
+        _selectedRouteDistance = null;
+        _selectedRouteDuration = null;
+      });
     }
   } catch (e) {
-    print('Error fetching route: $e');
+    debugPrint('Error in _drawRoute (CustomerHome): $e');
+  } finally {
+    if (mounted) {
+      setState(() {
+        _isLoadingRoute = false;
+      });
+    }
+    _checkRouteReady();
   }
-  _checkRouteReady();
-  setState(() {
-    _isLoadingRoute = false;
-  });
 }
 
-  // Decode the polyline from the Directions API
- List<LatLng> _decodePolyline(String encoded) {
-  List<LatLng> points = [];
-  int index = 0, len = encoded.length;
-  int lat = 0, lng = 0;
+void _updateDisplayedRoute() {
+  if (_allFetchedRoutes.isEmpty) return;
 
-  while (index < len) {
-    int b, shift = 0, result = 0;
-    do {
-      b = encoded.codeUnitAt(index++) - 63;
-      result |= (b & 0x1F) << shift;
-      shift += 5;
-    } while (b >= 0x20);
-    int dlat = (result & 1) != 0 ? ~(result >> 1) : (result >> 1);
-    lat += dlat;
-
-    shift = 0;
-    result = 0;
-    do {
-      b = encoded.codeUnitAt(index++) - 63;
-      result |= (b & 0x1F) << shift;
-      shift += 5;
-    } while (b >= 0x20);
-    int dlng = (result & 1) != 0 ? ~(result >> 1) : (result >> 1);
-    lng += dlng;
-
-    points.add(LatLng(lat / 1E5, lng / 1E5));
-  }
-  return points;
- }
-
-  LatLngBounds _boundsFromLatLngList(List<LatLng> list) {
-    double? x0, x1, y0, y1;
-    for (LatLng latLng in list) {
-      if (x0 == null) {
-        x0 = x1 = latLng.latitude;
-        y0 = y1 = latLng.longitude;
-      } else {
-        if (latLng.latitude > x1!) x1 = latLng.latitude;
-        if (latLng.latitude < x0) x0 = latLng.latitude;
-        if (latLng.longitude > y1!) y1 = latLng.longitude;
-        if (latLng.longitude < y0!) y0 = latLng.longitude;
-      }
+  setState(() {
+    _polylines.clear();
+    for (int i = 0; i < _allFetchedRoutes.length; i++) {
+      final routeData = _allFetchedRoutes[i];
+      final Polyline originalPolyline = routeData['polyline'] as Polyline;
+      
+      _polylines.add(originalPolyline.copyWith(
+        colorParam: i == _selectedRouteIndex ? Colors.blueAccent : Colors.grey,
+        widthParam: i == _selectedRouteIndex ? 6 : 4,
+        onTapParam: () {
+        setState(() {
+            _selectedRouteIndex = i;
+            _updateDisplayedRoute(); // Rebuild polylines with new selection
+          });
+        }),
+      );
     }
-    return LatLngBounds(
-      northeast: LatLng(x1!, y1!),
-      southwest: LatLng(x0!, y0!),
-    );
-  }
+    _selectedRouteDistance = _allFetchedRoutes[_selectedRouteIndex]['distance'] as String?;
+    _selectedRouteDuration = _allFetchedRoutes[_selectedRouteIndex]['duration'] as String?;
+  });
+}
 
   Future<List<Map<String, dynamic>>> _getGooglePlacesSuggestions(String query) async {
     if (query.isEmpty) return [];
@@ -567,7 +519,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
     try {
       final response = await http.get(Uri.parse(url));
       if (response.statusCode == 200) {
-        final data = json.decode(response.body);
+        final data = json.decode(response.body); // Keep json.decode for Google Places API
         if (data['status'] == 'OK') {
           return (data['predictions'] as List).map((p) => {
             'place_id': p['place_id'],
@@ -577,7 +529,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
       }
       return [];
     } catch (e) {
-      print('Error fetching suggestions: $e');
+      debugPrint('Error fetching suggestions: $e');
       return [];
     }
   }
@@ -587,7 +539,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
     try {
       final response = await http.get(Uri.parse(url));
       if (response.statusCode == 200) {
-        final data = json.decode(response.body);
+        final data = json.decode(response.body); // Keep json.decode for Google Places API
         if (data['status'] == 'OK') {
           final geometry = data['result']['geometry']['location'];
           return {
@@ -598,7 +550,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
       }
       return null;
     } catch (e) {
-      print('Error fetching place details: $e');
+      debugPrint('Error fetching place details: $e');
       return null;
     }
   }
@@ -732,8 +684,8 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
     setState(() {
       _pickupController.clear();
       _pickupLocation = null;
-      _routeDistance = null;
-      _routeDuration = null;
+      _selectedRouteDistance = null;
+      _selectedRouteDuration = null;
       _markers.removeWhere((m) => m.markerId == const MarkerId('pickup'));
       _drawRoute();
     });
@@ -744,8 +696,8 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
     setState(() {
       _destinationController.clear();
       _dropOffLocation = null;
-      _routeDistance = null;
-      _routeDuration = null;
+      _selectedRouteDistance = null;
+      _selectedRouteDuration = null;
       _markers.removeWhere((m) => m.markerId == const MarkerId('dropoff'));
       _drawRoute();
     });
@@ -756,8 +708,8 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
     setState(() {
       _stops[index].controller.clear();
       _stops[index].location = null;
-      _routeDistance = null;
-      _routeDuration = null;
+      _selectedRouteDistance = null;
+      _selectedRouteDuration = null;
       _markers.removeWhere((m) => m.markerId == MarkerId('stop_$index'));
       _drawRoute();
     });
@@ -825,16 +777,20 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
         .toList();
         
       // Create a ride request model
-      final rideRequest = RideRequestModel(
-        customerId: currentUserId, // Use the non-nullable currentUserId
-        pickup: LatLng(_pickupLocation!.latitude, _pickupLocation!.longitude), // Use google_maps_flutter LatLng
-        dropoff: LatLng(_dropOffLocation!.latitude, _dropOffLocation!.longitude), // Use google_maps_flutter LatLng
-        stops: stopsData,
-        status: 'pending',
-        requestTime: DateTime.now(), // Use requestTime
+      // Call the updated createRideRequest method in the provider
+      // Ensure that the LatLng types match what createRideRequest expects (latlong2.LatLng)
+      await rideRequestProvider.createRideRequest(
+        pickup: _pickupLocation!, // _pickupLocation is already ll.LatLng (latlong2.LatLng)
+        pickupAddressName: _pickupController.text,
+        dropoff: _dropOffLocation!, // _dropOffLocation is already ll.LatLng (latlong2.LatLng)
+        dropoffAddressName: _destinationController.text,
+        stops: _stops.map((s) => {
+          'name': s.name,
+          // s.location is ll.LatLng (latlong2.LatLng), which is what createRideRequest expects for stops' location
+          'location': s.location!, 
+          'addressName': s.controller.text, // Assuming controller holds the address name
+        }).toList(),
       );
-
-      await rideRequestProvider.createRideRequest(rideRequest);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1088,14 +1044,14 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                           ),
                           
                           // Route Info (Distance and Duration)
-                          if (_routeDistance != null && _routeDuration != null)
+                          if (_selectedRouteDistance != null && _selectedRouteDuration != null)
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4), // Use spacing constants?
                             child: Row(
                               children: [
                                 Icon(Icons.access_time, size: 20, color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.7)),
                                 horizontalSpaceSmall,
-                                Text('$_routeDuration · $_routeDistance',
+                                Text('$_selectedRouteDuration · $_selectedRouteDistance',
                                   style: Theme.of(context).textTheme.bodyMedium, // Use theme text style
                                 ),
                               ],

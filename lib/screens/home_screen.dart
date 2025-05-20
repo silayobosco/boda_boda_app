@@ -3,6 +3,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart'; /
 import 'package:firebase_messaging/firebase_messaging.dart'; // Import Firebase Messaging
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/auth_service.dart'; // Import AuthService
+import '../providers/driver_provider.dart'; // Import DriverProvider
 import '../services/user_service.dart';
 import '../models/user_model.dart';
 import 'customer_home.dart';
@@ -10,6 +11,7 @@ import 'driver_home.dart';
 import 'admin_home.dart';
 import 'additional_info_screen.dart';
 import '../widgets/app_drawer.dart'; 
+import 'package:provider/provider.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -22,18 +24,19 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _navigatedToAdditionalInfo = false;
   // String? _errorMessage; // Error will be handled by StreamBuilder
   int _selectedIndex = 0;
-  // UserModel? _userModel; // UserModel will come from StreamBuilder
+  UserModel? _currentUserModel; // Store the UserModel from the StreamBuilder
   final UserService _userService = UserService();
   final AuthService _authService = AuthService(); // Add AuthService instance
   User? _currentUser; // Store the current Firebase user
   FlutterLocalNotificationsPlugin _flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+  bool _fcmActionsInitializedForCurrentUser = false; // Flag to track initialization
 
   @override
   void initState() {
     super.initState();
     _currentUser = FirebaseAuth.instance.currentUser;
     _initializeLocalNotifications();
-    _initializeFCMAndCurrentUserActions();
+    // FCM initialization will now happen after userModel is loaded in the builder
   }
 
   Future<void> _initializeLocalNotifications() async {
@@ -69,8 +72,18 @@ class _HomeScreenState extends State<HomeScreen> {
     // Example: Navigate to a specific screen or handle the tap
   }
 
-  Future<void> _initializeFCMAndCurrentUserActions() async {
-    if (_currentUser == null) return;
+  // Accept UserModel as a parameter
+  Future<void> _initializeFCMAndCurrentUserActions(UserModel? userModel) async {
+    // Store the userModel in state
+    // If userModel changes (e.g., user logs out and logs in as someone else), reset the flag.
+    if (_currentUserModel?.uid != userModel?.uid) {
+      _fcmActionsInitializedForCurrentUser = false;
+    }
+    _currentUserModel = userModel;
+
+    if (_fcmActionsInitializedForCurrentUser) return; // Already initialized for this user
+
+    if (_currentUser == null || _currentUserModel == null) return;
 
     // Request notification permissions (iOS and web)
     NotificationSettings settings = await FirebaseMessaging.instance.requestPermission(
@@ -93,12 +106,25 @@ class _HomeScreenState extends State<HomeScreen> {
         _showForegroundNotification(message);
       }
       // You can update UI or show an in-app banner based on message.data
+
+      // Check if the current user is a Driver and the message contains ride request data
+      if (_currentUserModel?.role == 'Driver' &&
+          message.data.isNotEmpty &&
+          message.data.containsKey('rideRequestId')) {
+         try {
+           // Access DriverProvider without listening, assuming it's available in the context
+           final driverProvider = Provider.of<DriverProvider>(context, listen: false);
+           driverProvider.setNewPendingRide(message.data);
+           debugPrint("HomeScreen: Passed ride data to DriverProvider.");
+         } catch (e) {
+           debugPrint("HomeScreen: Could not access DriverProvider or set pending ride: $e");
+         }
+      }
     });
 
     // Handle notification tap when app is in background
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
       debugPrint('HomeScreen: Message opened from background!');
-      debugPrint('Message data: ${message.data}');
       // Navigate or perform action based on message.data
       _handleNotificationTap(message.data);
     });
@@ -107,8 +133,16 @@ class _HomeScreenState extends State<HomeScreen> {
     FirebaseMessaging.instance.getInitialMessage().then((RemoteMessage? message) {
       if (message != null) {
         debugPrint('HomeScreen: Message opened from terminated state!');
-        debugPrint('Message data: ${message.data}');
-        // Navigate or perform action based on message.data
+         if (_currentUserModel?.role == 'Driver' && message.data.isNotEmpty && message.data.containsKey('rideRequestId')) {
+           try {
+             // Access DriverProvider without listening
+             final driverProvider = Provider.of<DriverProvider>(context, listen: false);
+             driverProvider.setNewPendingRide(message.data);
+             debugPrint("HomeScreen: Passed ride data from terminated state to DriverProvider.");
+           } catch (e) {
+             debugPrint("HomeScreen: Could not access DriverProvider or set pending ride from terminated state: $e");
+           }
+        }
         _handleNotificationTap(message.data);
       }
     });
@@ -120,6 +154,7 @@ class _HomeScreenState extends State<HomeScreen> {
     FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
       _authService.saveFCMTokenToFirestore(newToken); // Assumes AuthService has this method
     });
+    _fcmActionsInitializedForCurrentUser = true; // Mark as initialized
   }
 
   Future<void> _showForegroundNotification(RemoteMessage message) async {
@@ -253,13 +288,29 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _handleNotificationTap(Map<String, dynamic> data) {
-    // Example: Navigate if rideRequestId is present
     final String? rideRequestId = data['rideRequestId'] as String?;
-    if (rideRequestId != null) {
+    // Check if the current user is a Driver and the data contains a rideRequestId
+    if (_currentUserModel?.role == 'Driver' && rideRequestId != null) {
       debugPrint("Notification tap: Navigating for ride ID $rideRequestId");
-      // Add your navigation logic here, e.g.,
-      // Navigator.of(context).pushNamed('/rideDetailsScreen', arguments: rideRequestId);
-      // Ensure you have a navigatorKey if calling from outside a widget with context.
+      // Ensure we are on the DriverHome screen.
+      // This assumes DriverHome is the screen at index 0 for the Driver role.
+      // If your navigation is more complex, you might need Navigator.pushNamed or a global key.
+      if (_selectedIndex != 0 || _currentUserModel?.role != 'Driver') {
+         // Navigate to DriverHome (index 0 for Driver)
+         // Using pushReplacement to avoid stacking screens if already deep in navigation
+         Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const HomeScreen()));
+         // Note: This will rebuild HomeScreen and the StreamBuilder, which will then
+         // re-initialize FCM handlers with the correct context and userModel.
+         // The getInitialMessage/onMessageOpenedApp might need to be re-processed slightly.
+      }
+
+      // Now that we are (or are ensuring we are) on the correct screen, update the provider.
+      try {
+        final driverProvider = Provider.of<DriverProvider>(context, listen: false);
+        driverProvider.setNewPendingRide(data);
+      } catch (e) {
+        debugPrint("HomeScreen: Could not access DriverProvider from notification tap handler: $e");
+      }
     }
   }
 
@@ -308,15 +359,11 @@ class _HomeScreenState extends State<HomeScreen> {
         }
 
         final userModel = snapshot.data;
+        _initializeFCMAndCurrentUserActions(userModel);// Initialize FCM and actions with the loaded userModel
+
 
         if (userModel == null || userModel.uid == null) {
           // User document doesn't exist or is incomplete.
-          // This could be a new user who needs to go to AdditionalInfoScreen,
-          // or an error state if a logged-in user has no Firestore doc.
-          // The logic below for userModel.role == null will handle AdditionalInfoScreen.
-          // If userModel is truly null (doc doesn't exist), you might want to create it
-          // or navigate to a specific "create profile" screen.
-          // For now, we let the role check handle it.
         }
 
         // Handle navigation to AdditionalInfoScreen if role is missing

@@ -6,6 +6,8 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import '../screens/additional_info_screen.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 
+import 'package:permission_handler/permission_handler.dart';
+
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -14,9 +16,19 @@ class AuthService {
   
   // Request notification permissions and get/save FCM token
   Future<void> initializeFCM() async {
+    // Check and request location permission
+    PermissionStatus locationStatus = await Permission.location.status;
+    if (!locationStatus.isGranted) {
+      locationStatus = await Permission.location.request();
+      if (!locationStatus.isGranted) {
+        debugPrint('Location permission not granted. FCM initialization aborted.');
+        return;
+      }
+    }
+
     FirebaseMessaging messaging = FirebaseMessaging.instance;
 
-    // Request permission
+    // Request notification permission
     NotificationSettings settings = await messaging.requestPermission(
       alert: true,
       announcement: false,

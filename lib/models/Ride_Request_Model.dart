@@ -7,13 +7,20 @@ class RideRequestModel {
   final String? driverId;
   final gmf.LatLng pickup;
   final gmf.LatLng dropoff;
-  final List<Map<String, dynamic>> stops; // Each map: {'name': String, 'location': gmf.LatLng}
+  final List<Map<String, dynamic>> stops; // Each map: {'name': String, 'location': gmf.LatLng, 'addressName': String?}
   final String status;
   final DateTime? requestTime; // Renamed from timestamp and made nullable
   final String? kijiweId; // Added
   final double? fare; // Added
   final DateTime? acceptedTime; // Added
   final DateTime? completedTime; // Added
+  // Denormalized fields for easier display and FCM payloads
+  final String? customerName;
+  final String? customerProfileImageUrl;
+  final String? driverName;
+  final String? driverProfileImageUrl;
+  final String? pickupAddressName;
+  final String? dropoffAddressName;
 
   RideRequestModel({
     this.id,
@@ -27,7 +34,14 @@ class RideRequestModel {
     this.kijiweId,
     this.fare,
     this.acceptedTime,
-    this.completedTime,  });
+    this.completedTime,
+    this.customerName,
+    this.customerProfileImageUrl,
+    this.driverName,
+    this.driverProfileImageUrl,
+    this.pickupAddressName,
+    this.dropoffAddressName,
+  });
 
   factory RideRequestModel.fromJson(Map<String, dynamic> json, String rideRequestId) {
     return RideRequestModel(
@@ -61,6 +75,7 @@ class RideRequestModel {
                 return {
                   'name': stopMap['name'] as String,
                   'location': stopLocation,
+                  'addressName': stopMap['addressName'] as String?, // Parse addressName
                 };
               }).toList() ??
           [],
@@ -69,7 +84,14 @@ class RideRequestModel {
       kijiweId: json['kijiweId'] as String?,
       fare: (json['fare'] as num?)?.toDouble(),
       acceptedTime: (json['acceptedTime'] as Timestamp?)?.toDate(),
-      completedTime: (json['completedTime'] as Timestamp?)?.toDate(),    );
+      completedTime: (json['completedTime'] as Timestamp?)?.toDate(),
+      customerName: json['customerName'] as String?,
+      customerProfileImageUrl: json['customerProfileImageUrl'] as String?,
+      driverName: json['driverName'] as String?,
+      driverProfileImageUrl: json['driverProfileImageUrl'] as String?,
+      pickupAddressName: json['pickupAddressName'] as String?,
+      dropoffAddressName: json['dropoffAddressName'] as String?,
+    );
   }
 
   Map<String, dynamic> toJson() {
@@ -83,13 +105,21 @@ class RideRequestModel {
           .map((stop) => {
                 'name': stop['name'],
                 'location': GeoPoint((stop['location'] as gmf.LatLng).latitude, (stop['location'] as gmf.LatLng).longitude),
+                'addressName': stop['addressName'], // Include addressName
               })
           .toList(),
       'status': status,
       'requestTime': requestTime != null ? Timestamp.fromDate(requestTime!) : FieldValue.serverTimestamp(),
       'fare': fare,
       'acceptedTime': acceptedTime != null ? Timestamp.fromDate(acceptedTime!) : null,
-      'completedTime': completedTime != null ? Timestamp.fromDate(completedTime!) : null,    };
+      'completedTime': completedTime != null ? Timestamp.fromDate(completedTime!) : null,
+      'customerName': customerName,
+      'customerProfileImageUrl': customerProfileImageUrl,
+      'driverName': driverName,
+      'driverProfileImageUrl': driverProfileImageUrl,
+      'pickupAddressName': pickupAddressName,
+      'dropoffAddressName': dropoffAddressName,
+    };
   }
 
   RideRequestModel copyWith({
@@ -104,7 +134,14 @@ class RideRequestModel {
     String? kijiweId,
     double? fare,
     DateTime? acceptedTime,
-    DateTime? completedTime,  }) {
+    DateTime? completedTime,
+    String? customerName,
+    String? customerProfileImageUrl,
+    String? driverName,
+    String? driverProfileImageUrl,
+    String? pickupAddressName,
+    String? dropoffAddressName,
+  }) {
     return RideRequestModel(
       // Corrected logic: use the provided 'id' parameter if not null, otherwise use current instance's 'id'.
       id: id ?? this.id, 
@@ -118,7 +155,14 @@ class RideRequestModel {
       kijiweId: kijiweId ?? this.kijiweId,
       fare: fare ?? this.fare,
       acceptedTime: acceptedTime ?? this.acceptedTime,
-      completedTime: completedTime ?? this.completedTime,    );
+      completedTime: completedTime ?? this.completedTime,
+      customerName: customerName ?? this.customerName,
+      customerProfileImageUrl: customerProfileImageUrl ?? this.customerProfileImageUrl,
+      driverName: driverName ?? this.driverName,
+      driverProfileImageUrl: driverProfileImageUrl ?? this.driverProfileImageUrl,
+      pickupAddressName: pickupAddressName ?? this.pickupAddressName,
+      dropoffAddressName: dropoffAddressName ?? this.dropoffAddressName,
+    );
   }
 
   @override
@@ -126,7 +170,8 @@ class RideRequestModel {
     return 'RideRequestModel(id: $id, customerId: $customerId, driverId: $driverId, '
         'kijiweId: $kijiweId, pickup: $pickup, dropoff: $dropoff, stops: $stops, '
         'status: $status, requestTime: $requestTime, fare: $fare, '
-        'acceptedTime: $acceptedTime, completedTime: $completedTime)';
+        'acceptedTime: $acceptedTime, completedTime: $completedTime, '
+        'customerName: $customerName, pickupAddressName: $pickupAddressName, driverName: $driverName)';
   }
 }
 
@@ -136,7 +181,7 @@ class RideHistoryModel {
   final String driverId;
   final gmf.LatLng pickup;
   final gmf.LatLng dropoff;
-  final List<Map<String, dynamic>> stops; // Each map: {'name': String, 'location': gmf.LatLng}
+  final List<Map<String, dynamic>> stops; // Each map: {'name': String, 'location': gmf.LatLng, 'addressName': String?}
   final double distance;
   final double cost;
   final DateTime timestamp;
@@ -193,6 +238,7 @@ class RideHistoryModel {
                 return {
                   'name': stopMap['name'] as String,
                   'location': stopLocation,
+                  'addressName': stopMap['addressName'] as String?, // Parse addressName
                 };
               }).toList() ?? [],
       distance: (json['distance'] as num).toDouble(),
@@ -216,6 +262,7 @@ class RideHistoryModel {
           .map((stop) => {
                 'name': stop['name'],
                 'location': GeoPoint((stop['location'] as gmf.LatLng).latitude, (stop['location'] as gmf.LatLng).longitude),
+                'addressName': stop['addressName'], // Include addressName
               })
           .toList(),
       'distance': distance,

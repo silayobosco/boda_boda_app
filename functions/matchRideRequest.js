@@ -110,7 +110,7 @@ exports.matchRideRequest = onDocumentCreated("/rideRequests/{rideRequestId}", as
   }
 
   const pickupGeoPoint = rideRequestData.pickup;
-  const MAX_SEARCH_KIJIWES = 3;
+  const MAX_SEARCH_KIJIWES = 7;
   const kijiwesWithDistance = [];
 
   // 1. Fetch all Kijiwes and calculate distance

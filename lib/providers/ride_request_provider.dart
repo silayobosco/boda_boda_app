@@ -1,7 +1,9 @@
 import 'package:boda_boda/models/Ride_Request_Model.dart';
+import 'package:boda_boda/models/user_model.dart';
 import 'package:cloud_firestore/cloud_firestore.dart'; // Add this import
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart' as google_maps_flutter;
 import '../services/firestore_service.dart';
 import 'package:geolocator/geolocator.dart'; // For distance calculation
 import 'package:geoflutterfire3/geoflutterfire3.dart'; // For Geo-queries
@@ -27,46 +29,201 @@ class RideRequestProvider extends ChangeNotifier {
     return authService.currentUser?.uid;
   }
 
+  Future<UserModel?> _getCurrentUserModel() async {
+    if (currentUserId == null) return null;
+    return await _firestoreService.getUser(currentUserId!);
+  }
+
   void _listenToRideRequests() {
     _firestoreService.getRideRequests().listen((List<RideRequestModel> rideRequests) {
       _rideRequests = rideRequests;
       notifyListeners(); 
     });
   }
-
-  Future<void> createRideRequest(RideRequestModel rideRequest) async {
+  Future<String?> createRideRequest({
+    required LatLng pickup,
+    required String pickupAddressName,
+    required LatLng dropoff,
+    required String dropoffAddressName,
+    required List<Map<String, dynamic>> stops, // Expecting {'name': String, 'location': latlong2.LatLng, 'addressName': String}
+  }) async {
     final currentUser = authService.currentUser; // Use local authService instance
+    final userModel = await _getCurrentUserModel();
+
     if (currentUser == null) {
       throw Exception('User not authenticated');
     }
-    
-    // Ensure customerId is set, status is 'pending_match' initially
-    final initialRideRequestData = rideRequest.copyWith(
+    if (userModel == null) {
+      throw Exception('User profile not found');
+    }
+
+    // Construct the RideRequestModel with all necessary data.
+    // The model's toJson() method will handle converting LatLng to GeoPoint for stops
+    // and requestTime: null to FieldValue.serverTimestamp().
+    final RideRequestModel rideRequestData = RideRequestModel(
       customerId: currentUser.uid,
-      status: 'pending_match', // Initial status before matching
-      // kijiweId will be determined by the matching logic
+      pickup: google_maps_flutter.LatLng(pickup.latitude, pickup.longitude),
+      dropoff: google_maps_flutter.LatLng(dropoff.latitude, dropoff.longitude),
+      stops: stops.map((s) => {
+        'name': s['name'],
+        // Ensure the location passed to the model is gmf.LatLng
+        'location': google_maps_flutter.LatLng((s['location'] as LatLng).latitude, (s['location'] as LatLng).longitude),
+        'addressName': s['addressName'] // Model now includes addressName in stops
+      }).toList(),
+      status: 'pending_match',
+      requestTime: null, // This will be handled by toJson to become FieldValue.serverTimestamp()
+      // Denormalized fields
+      customerName: userModel.name,
+      customerProfileImageUrl: userModel.profileImageUrl,
+      pickupAddressName: pickupAddressName,
+      dropoffAddressName: dropoffAddressName,
+      // kijiweId, fare, etc., are set later or by backend/matching logic
     );
 
-    // Create the request in Firestore and get its ID
-    // String rideRequestId = await _firestoreService.createRideRequest(initialRideRequestData); // Cloud Function will pick this up
-    await _firestoreService.createRideRequest(initialRideRequestData);
-
-    // The Cloud Function 'matchRideRequest' will now handle the matching.
-    // Remove the client-side attempt to find and assign a driver.
-    // await _findAndAssignToNearestKijiweDriver(initialRideRequestData.copyWith(id: rideRequestId));
+    // Create the request in Firestore
+    // Pass the RideRequestModel instance directly.
+    // FirestoreService.createRideRequest will call toJson() on this model.
+    String rideRequestId = await _firestoreService.createRideRequest(
+        rideRequestData
+    );
+    notifyListeners();
+    return rideRequestId;
   }
 
-  Future<void> updateRideRequestStatus(String rideRequestId, String status, {String? driverId}) async {
-    // If no driverId provided and status is "accepted", use current user
-    final currentUser = authService.currentUser; // Use local authService instance
-    final assignedDriverId = driverId ?? 
-        (status == "accepted" ? currentUser?.uid : null);
-    
+  Future<void> updateRideRequestStatus(String rideRequestId, String newStatus, {String? driverId}) async {
+    // The 'driverId' parameter is now directly used if provided.
+    // 'assignedDriverId' and the conditional logic for 'accepted' status were removed as it's handled by specific methods like acceptRideByDriver.
     await _firestoreService.updateRideRequestStatus(
       rideRequestId, 
-      status, 
-      driverId: assignedDriverId,
+      newStatus, // Use the newStatus parameter
+      driverId: driverId, // driverId is explicitly passed when a driver is involved
     );
+    notifyListeners();
+  }
+
+  Future<void> acceptRideByDriver(String rideRequestId, String customerId) async {
+    final driver = authService.currentUser;
+    final driverModel = await _getCurrentUserModel(); // Assumes this gets the *driver's* model
+    if (driver == null || driverModel == null) throw Exception('Driver not logged in or profile not found');
+
+    // Denormalize driver info
+    final Map<String, dynamic> updateData = {
+      'status': 'accepted', // Or 'goingToPickup'
+      'driverId': driver.uid,
+      'driverName': driverModel.name,
+      'driverProfileImageUrl': driverModel.profileImageUrl,
+      'acceptedTime': FieldValue.serverTimestamp(),
+    };
+
+    await FirebaseFirestore.instance.collection('rideRequests').doc(rideRequestId).update(updateData);
+    notifyListeners();
+  }
+
+  Future<void> declineRideByDriver(String rideRequestId, String customerId) async {
+    final driver = authService.currentUser;
+    if (driver == null) throw Exception('Driver not logged in');
+
+    await _firestoreService.updateRideRequestStatus(
+      rideRequestId,
+      'declined_by_driver', 
+      driverId: driver.uid, 
+    );
+    notifyListeners();
+  }
+
+  Future<void> confirmArrivalByDriver(String rideRequestId, String customerId) async {
+    final driver = authService.currentUser;
+    if (driver == null) throw Exception('Driver not logged in');
+    await _firestoreService.updateRideRequestStatus(
+      rideRequestId,
+      'arrivedAtPickup',
+      driverId: driver.uid,
+    );
+    notifyListeners();
+  }
+
+  Future<void> startRideByDriver(String rideRequestId, String customerId) async {
+    final driver = authService.currentUser;
+    if (driver == null) throw Exception('Driver not logged in');
+    await _firestoreService.updateRideRequestStatus(
+      rideRequestId,
+      'onRide',
+      driverId: driver.uid,
+    );
+    notifyListeners();
+  }
+
+  Future<void> completeRideByDriver(String rideRequestId, String customerId) async {
+    final driver = authService.currentUser;
+    if (driver == null) throw Exception('Driver not logged in');
+
+    WriteBatch batch = FirebaseFirestore.instance.batch();
+    final rideRef = FirebaseFirestore.instance.collection('rideRequests').doc(rideRequestId);
+    final driverRef = FirebaseFirestore.instance.collection('users').doc(driver.uid);
+
+    batch.update(rideRef, {
+      'status': 'completed',
+      'completedTime': FieldValue.serverTimestamp(),
+    });
+    // Assuming 'driverProfile.completedRides' exists
+    batch.update(driverRef, {'driverProfile.completedRides': FieldValue.increment(1)});
+
+    await batch.commit();
+    notifyListeners();
+  }
+
+  Future<void> cancelRideByDriver(String rideRequestId, String customerId) async {
+    final driver = authService.currentUser;
+    if (driver == null) throw Exception('Driver not logged in');
+
+    WriteBatch batch = FirebaseFirestore.instance.batch();
+    final rideRef = FirebaseFirestore.instance.collection('rideRequests').doc(rideRequestId);
+    final driverRef = FirebaseFirestore.instance.collection('users').doc(driver.uid);
+
+    batch.update(rideRef, {'status': 'cancelled_by_driver'});
+    // Assuming 'driverProfile.cancelledRides' exists
+    batch.update(driverRef, {'driverProfile.cancelledRides': FieldValue.increment(1)});
+
+    await batch.commit();
+    notifyListeners();
+  }
+
+  Future<void> cancelRideByCustomer(String rideRequestId) async {
+    final customer = authService.currentUser;
+    if (customer == null) throw Exception('Customer not logged in');
+
+    WriteBatch batch = FirebaseFirestore.instance.batch();
+    final rideRef = FirebaseFirestore.instance.collection('rideRequests').doc(rideRequestId);
+    final customerRef = FirebaseFirestore.instance.collection('users').doc(customer.uid);
+
+    batch.update(rideRef, {'status': 'cancelled_by_customer'});
+    // Assuming 'customerProfile.cancelledRides' or 'cancelledRides' directly on user doc
+    batch.update(customerRef, {'customerProfile.cancelledRides': FieldValue.increment(1)}); 
+
+    await batch.commit();
+    notifyListeners();
+  }
+
+  Future<void> rateUser({
+    required String rideId,
+    required String ratedUserId, 
+    required String ratedUserRole, 
+    required double rating,
+    String? comment,
+  }) async {
+    final raterUserId = authService.currentUser?.uid;
+    if (raterUserId == null) throw Exception("Rater not authenticated");
+
+    String ratingField = ratedUserRole == 'driver' ? 'customerRatingToDriver' : 'driverRatingToCustomer';
+    String commentField = ratedUserRole == 'driver' ? 'customerCommentToDriver' : 'driverCommentToCustomer';
+
+    Map<String, dynamic> rideUpdateData = { ratingField: rating };
+    if (comment != null && comment.isNotEmpty) {
+      rideUpdateData[commentField] = comment;
+    }
+    await FirebaseFirestore.instance.collection('rideRequests').doc(rideId).update(rideUpdateData);
+    debugPrint("Rating of $rating for $ratedUserRole ($ratedUserId) on ride $rideId submitted by $raterUserId. Comment: $comment");
+    notifyListeners();
   }
 
   // Add this new method to get current user's assigned rides
@@ -213,7 +370,7 @@ class RideRequestProvider extends ChangeNotifier {
         // Optionally, you can also update the ride request status to 'no_drivers_available'
         // This will be handled in the next iteration if no driver is found
         // await _firestoreService.updateRideRequestStatus(rideRequest.id!, 'no_drivers_available', kijiweId: selectedKijiweId);
-        await _firestoreService.updateRideRequestStatus(rideRequest.id!, rideRequest.status ?? 'pending_match', kijiweId: selectedKijiweId);
+        await _firestoreService.updateRideRequestStatus(rideRequest.id!, rideRequest.status, kijiweId: selectedKijiweId);
         kijiwesTried++;
         continue; // Try next Kijiwe
       }
@@ -225,7 +382,7 @@ class RideRequestProvider extends ChangeNotifier {
 
         if (driverUserSnapshot.exists && driverUserSnapshot.data() != null) {
           // Cast driver user data
-          final driverUserData = driverUserSnapshot.data()! as Map<String, dynamic>;
+          final driverUserData = driverUserSnapshot.data()!;
           final driverProfile = driverUserData['driverProfile'] as Map<String, dynamic>?;
 
           // Assuming drivers in queue are already vetted for isOnline and waitingForRide status
@@ -252,8 +409,15 @@ class RideRequestProvider extends ChangeNotifier {
             final String? driverFcmToken = driverUserData['fcmToken'] as String?;
             if (driverFcmToken != null && driverFcmToken.isNotEmpty) {
               // Construct the RideRequestModel with all details for the notification payload
-              final rideDetailsForNotification = rideRequest.copyWith(status: 'pending_driver_acceptance', driverId: driverId, kijiweId: selectedKijiweId);
-              await _sendFCMNotificationToDriver(driverFcmToken, rideDetailsForNotification);
+              // Fetch the newly updated ride request document to get all denormalized fields
+              DocumentSnapshot rideDocSnapshot = await rideRequestRef.get();
+              if (rideDocSnapshot.exists) {
+                RideRequestModel fullRideDetails = RideRequestModel.fromJson(rideDocSnapshot.data() as Map<String, dynamic>, rideDocSnapshot.id);
+                await _sendFCMNotificationToDriver(driverFcmToken, fullRideDetails);
+              } else {
+                // Fallback or handle error if rideDocSnapshot doesn't exist (shouldn't happen here)
+                debugPrint("Error: Ride document ${rideRequest.id} not found after update for FCM.");
+              }
             } else {
               debugPrint("Driver $driverId does not have an FCM token. Cannot send notification.");
             }
@@ -298,16 +462,21 @@ class RideRequestProvider extends ChangeNotifier {
       'notification': {
         'title': 'New Ride Request!',
         'body': 'You have a new ride assignment. Tap to view details.',
-        'sound': 'default', // Optional: for default notification sound
+        'sound': 'default', 
       },
       'data': { // Custom data payload for your app to handle
         'rideRequestId': rideDetails.id,
         'customerId': rideDetails.customerId,
+        'customerName': rideDetails.customerName ?? 'A Customer', // Use denormalized field from RideRequestModel
+        'customerProfileImageUrl': rideDetails.customerProfileImageUrl ?? '', // Use denormalized field
         'pickupLat': rideDetails.pickup.latitude.toString(),
         'pickupLng': rideDetails.pickup.longitude.toString(),
+        'pickupAddressName': rideDetails.pickupAddressName ?? 'Pickup Location', // Use denormalized field
         'dropoffLat': rideDetails.dropoff.latitude.toString(),
         'dropoffLng': rideDetails.dropoff.longitude.toString(),
-        'status': rideDetails.status, // This will be 'pending_driver_acceptance'
+        'dropoffAddressName': rideDetails.dropoffAddressName ?? 'Destination', // Use denormalized field
+        // 'stops': rideDetails.stops?.map((s) => s.toJson()).toList(), // If stops need to be in payload
+        'status': rideDetails.status, 
         'click_action': 'FLUTTER_NOTIFICATION_CLICK', // Important for Flutter when app is in background/terminated
         // Add any other data your driver app needs to handle the notification
       },

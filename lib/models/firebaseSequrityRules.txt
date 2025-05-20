@@ -15,7 +15,7 @@ service cloud.firestore {
     match /rideRequests/{rideRequestId} {
       // Allow customers to create ride requests
       allow create: if request.auth != null && 
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['Customer', 'Driver', 'Both'];
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['Customer', 'Driver', ''];
 
       // Allow authenticated users to read ride requests
       allow read: if request.auth != null;
@@ -73,15 +73,14 @@ service cloud.firestore {
         
         // Allow updates by admin, or for users to manage their presence in permanentMembers or queue (used in registration)
         allow update: if request.auth != null && (
-                        resource.data.adminId == request.auth.uid || // Admin can update
-                        (request.resource.data.permanentMembers != null && // User modifying permanentMembers
-                         (request.resource.data.permanentMembers.hasAny([request.auth.uid]) || resource.data.permanentMembers.hasAny([request.auth.uid]))
-                        ) ||
-                        (request.resource.data.queue != null && // User modifying queue (e.g. adding self during registration)
-                         request.resource.data.queue.size() != resource.data.queue.size() // Basic check for queue modification
-                        )
-                      );
-      }
-
+        resource.data.adminId == request.auth.uid || // Admin can update
+        (request.resource.data.permanentMembers != null && // User modifying permanentMembers
+          (request.resource.data.permanentMembers.hasAny([request.auth.uid]) || resource.data.permanentMembers.hasAny([request.auth.uid]))
+        ) ||
+        (request.resource.data.queue != null && // User modifying queue (e.g. adding self during registration)
+          request.resource.data.queue.size() != resource.data.queue.size() // Basic check for queue modification
+        )
+      );
     }
+  }
 }

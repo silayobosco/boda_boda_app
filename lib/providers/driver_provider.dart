@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
+import 'ride_request_provider.dart'; // Import RideRequestProvider
 import '../services/firestore_service.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../screens/home_screen.dart'; // Import HomeScreen
@@ -10,13 +12,18 @@ import 'package:latlong2/latlong.dart' as latlong2; // Import for latlong2.LatLn
 class DriverProvider extends ChangeNotifier {
   final AuthService _authService = AuthService();
   final FirestoreService _firestoreService = FirestoreService();
+  // RideRequestProvider is typically accessed via Provider.of in widgets, or passed if needed for direct calls
   bool _isOnline = false;
   String? _currentKijiweId;
   bool _isLoading = false;
+  Map<String, dynamic>? _pendingRideRequestDetails;
 
   bool get isLoading => _isLoading;
   bool get isOnline => _isOnline;
   String? get currentKijiweId => _currentKijiweId;
+  Map<String, dynamic>? get pendingRideRequestDetails => _pendingRideRequestDetails;
+
+
 
   void setLoading(bool value) {
     _isLoading = value;
@@ -262,6 +269,18 @@ class DriverProvider extends ChangeNotifier {
   }
 }
 
+  // Method to set new pending ride details from FCM
+  void setNewPendingRide(Map<String, dynamic> rideData) {
+    _pendingRideRequestDetails = rideData;
+    notifyListeners();
+  }
+
+  // Method to clear pending ride details
+  void clearPendingRide() {
+    _pendingRideRequestDetails = null;
+    notifyListeners();
+  }
+
   Future<void> updateDriverPosition(LatLng position) async {
     // Implement your backend API call to update driver position
     final userId = _authService.currentUser?.uid;
@@ -279,10 +298,11 @@ class DriverProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> acceptRideRequest(String rideId, String customerId) async {
+  // Context is needed if you plan to show SnackBars or navigate from here
+  Future<void> acceptRideRequest(BuildContext context, String rideId, String customerId) async {
     final userId = _authService.currentUser?.uid;
     if (userId == null) throw Exception('Driver not logged in');
-    setLoading(true);
+    // setLoading(true); // RideRequestProvider might handle its own loading for this
     try {
       // Update RideRequest status in Firestore (via RideRequestProvider or directly if simpler for now)
       await _updateDriverProfileInFirestore( // Call internal method
@@ -290,98 +310,83 @@ class DriverProvider extends ChangeNotifier {
         isOnline: true, // Still online
         statusString: "goingToPickup",
       );
+      // Call RideRequestProvider to handle the ride request update
+      await Provider.of<RideRequestProvider>(context, listen: false).acceptRideByDriver(rideId, customerId);
+
       // Remove driver from Kijiwe queue as they are now on a ride
       if (_currentKijiweId != null) {
         await _firestoreService.leaveKijiweQueue(_currentKijiweId!, userId);
       }
-      // Update the ride request status in Firestore
-      await _firestoreService.updateRideRequestStatus(
-        rideId,
-        'accepted',
-        driverId: userId,
-      );
       // Potentially update local state if needed for UI
+      clearPendingRide(); // Clear the request from the UI
       notifyListeners();
     } catch (e) {
       throw Exception('Failed to accept ride: $e');
     } finally {
-      setLoading(false);
+      // setLoading(false);
     }
   }
 
-  Future<void> declineRideRequest(String rideId, String customerId) async {
+  Future<void> declineRideRequest(BuildContext context, String rideId, String customerId) async {
     final userId = _authService.currentUser?.uid;
     if (userId == null) throw Exception('Driver not logged in');
-    setLoading(true);
+    // setLoading(true);
     try {
-      // Update RideRequest status in Firestore (via RideRequestProvider or directly if simpler for now)
-      await _firestoreService.updateRideRequestStatus(
-        rideId,
-        'declined',
-        driverId: userId,
-      );
+      await Provider.of<RideRequestProvider>(context, listen: false).declineRideByDriver(rideId, customerId);
+
       // Potentially update local state if needed for UI
+      clearPendingRide(); // Clear the request from the UI
       notifyListeners();
     } catch (e) {
       throw Exception('Failed to decline ride: $e');
     } finally {
-      setLoading(false);
+      // setLoading(false);
     }
   }
 
   // Confirm arrival at pickup location
-  Future<void> confirmArrival(String rideId, String customerId) async {
+  Future<void> confirmArrival(BuildContext context, String rideId, String customerId) async {
     final userId = _authService.currentUser?.uid;
     if (userId == null) throw Exception('Driver not logged in');
-    setLoading(true);
+    // setLoading(true);
     try {
       await _updateDriverProfileInFirestore( // Call internal method
         userId: userId,
         isOnline: true, // Still online
         statusString: "arrivedAtPickup",
       );
-      // Update the ride request status in Firestore
-      await _firestoreService.updateRideRequestStatus(
-        rideId,
-        'arrivedAtPickup',
-        driverId: userId,
-      );
+      await Provider.of<RideRequestProvider>(context, listen: false).confirmArrivalByDriver(rideId, customerId);
       notifyListeners();
     } catch (e) {
       throw Exception('Failed to confirm arrival: $e');
     } finally {
-      setLoading(false);
+      // setLoading(false);
     }
   }
 
-  Future<void> startRide(String rideId, String customerId) async {
+  Future<void> startRide(BuildContext context, String rideId, String customerId) async {
     final userId = _authService.currentUser?.uid;
     if (userId == null) throw Exception('Driver not logged in');
-    setLoading(true);
+    // setLoading(true);
     try {
       await _updateDriverProfileInFirestore( // Call internal method
         userId: userId,
         isOnline: true, // Still online
         statusString: "onRide",
       );
-      // Update the ride request status in Firestore
-      await _firestoreService.updateRideRequestStatus(
-        rideId,
-        'onRide',
-        driverId: userId,
-      );
+      await Provider.of<RideRequestProvider>(context, listen: false).startRideByDriver(rideId, customerId);
       notifyListeners();
     } catch (e) {
       throw Exception('Failed to start ride: $e');
     } finally {
-      setLoading(false);
+      // setLoading(false);
     }
   }
 
-  Future<void> completeRide(String rideId, String customerId) async {
+  Future<void> completeRide(BuildContext context, String rideId, String customerId) async {
     final userId = _authService.currentUser?.uid;
     if (userId == null) throw Exception('Driver not logged in');
-    setLoading(true);
+    // setLoading(true);
     try {
       await _updateDriverProfileInFirestore( // Call internal method
         userId: userId,
@@ -389,15 +394,8 @@ class DriverProvider extends ChangeNotifier {
         statusString: "waitingForRide", // Or "returningToKijiwe" then "waitingForRide"
       );
       // Update the ride request status in Firestore
-      await _firestoreService.updateRideRequestStatus(
-        rideId,
-        'completed',
-        driverId: userId,
-      );
-      // Optionally, update the ride document with a completion time separately:
-      await FirebaseFirestore.instance.collection('rideRequests').doc(rideId).update({
-        'completedAt': FieldValue.serverTimestamp(),
-      });      
+      await Provider.of<RideRequestProvider>(context, listen: false).completeRideByDriver(rideId, customerId);
+
       // Optionally, you might want to update the driver's earnings or other metrics
       // For example, you could update a 'totalEarnings' field in the driver profile
       // Optionally, you might want to update the ride history or other related data
@@ -414,23 +412,31 @@ class DriverProvider extends ChangeNotifier {
     } catch (e) {
       throw Exception('Failed to complete ride: $e');
     } finally {
-      setLoading(false);
+      // setLoading(false);
     }
   }
 
-  Future<void> rateRide(String rideId, double rating) async {
+  Future<void> rateCustomer(BuildContext context, String customerId, double rating, String rideId, {String? comment}) async {
+    final driverId = _authService.currentUser?.uid;
+    if (driverId == null) throw Exception("Driver not authenticated to rate.");
     try {
-      // await ApiService.rateRide(rideId, rating);
+      await Provider.of<RideRequestProvider>(context, listen: false).rateUser(
+        rideId: rideId,
+        ratedUserId: customerId,
+        ratedUserRole: "customer",
+        rating: rating,
+        comment: comment,
+      );
       notifyListeners();
     } catch (e) {
-      throw Exception('Failed to rate ride: $e');
+      throw Exception('Failed to rate customer: $e');
     }
   }
 
-  Future<void> cancelRide(String rideId, String customerId) async {
+  Future<void> cancelRide(BuildContext context, String rideId, String customerId) async {
     final userId = _authService.currentUser?.uid;
     if (userId == null) throw Exception('Driver not logged in');
-    setLoading(true);
+    // setLoading(true);
     try {
       // Update driver's status back to available or as appropriate
       await _updateDriverProfileInFirestore( // Call internal method
@@ -438,12 +444,8 @@ class DriverProvider extends ChangeNotifier {
         isOnline: true, // Still online
         statusString: "waitingForRide",
       );
-      // Update the ride request status in Firestore
-      await _firestoreService.updateRideRequestStatus(
-        rideId,
-        'cancelled',
-        driverId: userId,
-      );
+      await Provider.of<RideRequestProvider>(context, listen: false).cancelRideByDriver(rideId, customerId);
+
       // If driver is still online and kijiweId is set, add them back to the queue
       if (_isOnline && _currentKijiweId != null) {
         await _firestoreService.joinKijiweQueue(_currentKijiweId!, userId);
@@ -454,7 +456,7 @@ class DriverProvider extends ChangeNotifier {
     } catch (e) {
       throw Exception('Failed to cancel ride: $e');
     } finally {
-      setLoading(false);
+      // setLoading(false);
     }
   }
 }
