@@ -11,7 +11,8 @@ class UserModel {
   final String? email;
   final String? role;
   final String? fcmToken;
-  final Map<String, dynamic>? driverDetails;
+  final Map<String, dynamic>? driverDetails; // Maps to 'driverProfile' in Firestore
+  final Map<String, dynamic>? customerProfile; // New
 
   UserModel({
     this.uid,
@@ -24,7 +25,8 @@ class UserModel {
     this.email,
     this.role,
     this.fcmToken,
-    this.driverDetails,
+    this.driverDetails, 
+    this.customerProfile,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -59,8 +61,11 @@ class UserModel {
       email: json['email'] as String?,
       role: json['role'] as String?,
       fcmToken: json['fcmToken'] as String?,
-      driverDetails: json['driverDetails'] != null
-          ? Map<String, dynamic>.from(json['driverDetails'] as Map)
+      // In Firestore, driver details are under 'driverProfile'
+      driverDetails: json['driverProfile'] != null 
+          ? Map<String, dynamic>.from(json['driverProfile'] as Map)
+          : null,
+      customerProfile: json['customerProfile'] != null ? Map<String, dynamic>.from(json['customerProfile'] as Map)
           : null,
     );
   }
@@ -84,7 +89,10 @@ class UserModel {
       data['fcmToken'] = fcmToken;
     }
     if (driverDetails != null) {
-      data['driverDetails'] = driverDetails;
+      data['driverProfile'] = driverDetails; // Save as 'driverProfile' in Firestore
+    }
+    if (customerProfile != null) {
+      data['customerProfile'] = customerProfile;
     }
     return data;
   }
@@ -101,6 +109,7 @@ class UserModel {
     String? role,
     String? fcmToken,
     Map<String, dynamic>? driverDetails,
+    Map<String, dynamic>? customerProfile,
   }) {
     return UserModel(
       uid: uid ?? this.uid,
@@ -114,6 +123,7 @@ class UserModel {
       role: role ?? this.role,
       fcmToken: fcmToken ?? this.fcmToken,
       driverDetails: driverDetails ?? this.driverDetails,
+      customerProfile: customerProfile ?? this.customerProfile,
     );
   }
 
@@ -121,6 +131,6 @@ class UserModel {
   String toString() {
     return 'UserModel(uid: $uid, name: $name, phoneNumber: $phoneNumber, dob: $dob, '
         'gender: $gender, location: $location, profileImageUrl: $profileImageUrl, '
-        'email: $email, role: $role, fcmToken: $fcmToken, driverDetails: $driverDetails)';
+        'email: $email, role: $role, fcmToken: $fcmToken, driverDetails: $driverDetails, customerProfile: $customerProfile)';
   }
 }

@@ -84,12 +84,22 @@ class RideRequestProvider extends ChangeNotifier {
     // Pass the RideRequestModel instance directly.
     // FirestoreService.createRideRequest will call toJson() on this model.
     String rideRequestId = await _firestoreService.createRideRequest(
-        rideRequestData
+      rideRequestData
     );
+
+    // Increment customer's requestedRidesCount
+    if (currentUser.uid.isNotEmpty) {
+      await FirebaseFirestore.instance.collection('users').doc(currentUser.uid).update({
+        'customerProfile.requestedRidesCount': FieldValue.increment(1),
+      }).catchError((e) {
+        debugPrint("Error incrementing requestedRidesCount for customer ${currentUser.uid}: $e");
+        // Decide if this error should be rethrown or just logged
+      });
+    }
+
     notifyListeners();
     return rideRequestId;
   }
-
   Future<void> updateRideRequestStatus(String rideRequestId, String newStatus, {String? driverId}) async {
     // The 'driverId' parameter is now directly used if provided.
     // 'assignedDriverId' and the conditional logic for 'accepted' status were removed as it's handled by specific methods like acceptRideByDriver.
@@ -159,14 +169,18 @@ class RideRequestProvider extends ChangeNotifier {
 
     WriteBatch batch = FirebaseFirestore.instance.batch();
     final rideRef = FirebaseFirestore.instance.collection('rideRequests').doc(rideRequestId);
-    final driverRef = FirebaseFirestore.instance.collection('users').doc(driver.uid);
+    final driverUserRef = FirebaseFirestore.instance.collection('users').doc(driver.uid);
+    final customerUserRef = FirebaseFirestore.instance.collection('users').doc(customerId);
 
     batch.update(rideRef, {
       'status': 'completed',
       'completedTime': FieldValue.serverTimestamp(),
     });
-    // Assuming 'driverProfile.completedRides' exists
-    batch.update(driverRef, {'driverProfile.completedRides': FieldValue.increment(1)});
+
+    // Increment driver's completedRidesCount
+    batch.update(driverUserRef, {'driverProfile.completedRidesCount': FieldValue.increment(1)});
+    // Increment customer's completedRidesCount
+    batch.update(customerUserRef, {'customerProfile.completedRidesCount': FieldValue.increment(1)});
 
     await batch.commit();
     notifyListeners();
@@ -178,11 +192,14 @@ class RideRequestProvider extends ChangeNotifier {
 
     WriteBatch batch = FirebaseFirestore.instance.batch();
     final rideRef = FirebaseFirestore.instance.collection('rideRequests').doc(rideRequestId);
-    final driverRef = FirebaseFirestore.instance.collection('users').doc(driver.uid);
+    final driverUserRef = FirebaseFirestore.instance.collection('users').doc(driver.uid);
+    final customerUserRef = FirebaseFirestore.instance.collection('users').doc(customerId);
 
     batch.update(rideRef, {'status': 'cancelled_by_driver'});
-    // Assuming 'driverProfile.cancelledRides' exists
-    batch.update(driverRef, {'driverProfile.cancelledRides': FieldValue.increment(1)});
+    // Increment driver's cancelledByDriverCount
+    batch.update(driverUserRef, {'driverProfile.cancelledByDriverCount': FieldValue.increment(1)});
+    // Increment customer's ridesCancelledByDriverForCustomerCount
+    batch.update(customerUserRef, {'customerProfile.ridesCancelledByDriverForCustomerCount': FieldValue.increment(1)});
 
     await batch.commit();
     notifyListeners();
@@ -194,11 +211,11 @@ class RideRequestProvider extends ChangeNotifier {
 
     WriteBatch batch = FirebaseFirestore.instance.batch();
     final rideRef = FirebaseFirestore.instance.collection('rideRequests').doc(rideRequestId);
-    final customerRef = FirebaseFirestore.instance.collection('users').doc(customer.uid);
+    final customerUserRef = FirebaseFirestore.instance.collection('users').doc(customer.uid);
 
     batch.update(rideRef, {'status': 'cancelled_by_customer'});
-    // Assuming 'customerProfile.cancelledRides' or 'cancelledRides' directly on user doc
-    batch.update(customerRef, {'customerProfile.cancelledRides': FieldValue.increment(1)}); 
+    // Increment customer's cancelledByCustomerCount
+    batch.update(customerUserRef, {'customerProfile.cancelledByCustomerCount': FieldValue.increment(1)});
 
     await batch.commit();
     notifyListeners();
@@ -214,14 +231,42 @@ class RideRequestProvider extends ChangeNotifier {
     final raterUserId = authService.currentUser?.uid;
     if (raterUserId == null) throw Exception("Rater not authenticated");
 
-    String ratingField = ratedUserRole == 'driver' ? 'customerRatingToDriver' : 'driverRatingToCustomer';
-    String commentField = ratedUserRole == 'driver' ? 'customerCommentToDriver' : 'driverCommentToCustomer';
+    WriteBatch batch = FirebaseFirestore.instance.batch();
+    final rideRequestRef = FirebaseFirestore.instance.collection('rideRequests').doc(rideId);
+    final ratedUserRef = FirebaseFirestore.instance.collection('users').doc(ratedUserId);
 
-    Map<String, dynamic> rideUpdateData = { ratingField: rating };
-    if (comment != null && comment.isNotEmpty) {
-      rideUpdateData[commentField] = comment;
+    Map<String, dynamic> rideUpdateData = {};
+    Map<String, dynamic> userProfileUpdate = {};
+
+    if (ratedUserRole == 'driver') {
+      rideUpdateData['customerRatingToDriver'] = rating;
+      if (comment != null && comment.isNotEmpty) {
+        rideUpdateData['customerCommentToDriver'] = comment;
+      }
+      // Update driver's aggregate rating stats
+      userProfileUpdate['driverProfile.sumOfRatingsReceived'] = FieldValue.increment(rating);
+      userProfileUpdate['driverProfile.totalRatingsReceivedCount'] = FieldValue.increment(1);
+      // Note: Calculating and updating averageRating (driverProfile.averageRating) should ideally be a Cloud Function
+      // to avoid race conditions and ensure accuracy. For simplicity here, we're just updating sum and count.
+    } else { // ratedUserRole == 'customer'
+      rideUpdateData['driverRatingToCustomer'] = rating;
+      if (comment != null && comment.isNotEmpty) {
+        rideUpdateData['driverCommentToCustomer'] = comment;
+      }
+      // Update customer's aggregate rating stats
+      userProfileUpdate['customerProfile.sumOfRatingsReceived'] = FieldValue.increment(rating);
+      userProfileUpdate['customerProfile.totalRatingsReceivedCount'] = FieldValue.increment(1);
+      // Similarly, averageRating for customerProfile is best calculated server-side.
     }
-    await FirebaseFirestore.instance.collection('rideRequests').doc(rideId).update(rideUpdateData);
+
+    if (comment != null && comment.isNotEmpty) {
+      // Comment is already added to rideUpdateData above
+    }
+
+    batch.update(rideRequestRef, rideUpdateData);
+    batch.update(ratedUserRef, userProfileUpdate);
+    await batch.commit();
+
     debugPrint("Rating of $rating for $ratedUserRole ($ratedUserId) on ride $rideId submitted by $raterUserId. Comment: $comment");
     notifyListeners();
   }

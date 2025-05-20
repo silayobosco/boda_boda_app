@@ -14,23 +14,13 @@
     - position: Map  // For GeoFlutterFirePlus
         - geohash: String
         - geoPoint: GeoPoint
+    //TODO- Rules
     - queue: Array of Strings // driverIds
 
 /Users/{userId}  //  Unified User Collection
-    - customerId: String (userId from Users collection)
     - createdAt: Timestamp
+    - customerId: String (userId from Users collection)
     - dob: String
-    - driverProfile: Map  //  Optional - Only present if role includes "Driver"
-        - approved: Boolean  // Whether they've been approved as a driver by an admin
-        - isOnline: Boolean  // Whether they are currently available for rides and should be in the Kijiwe queue
-        - kijiweId: String
-        - licenseNumber: String
-        - registeredAt: Timestamp
-        - vehicleType: String
-        - currentLocation: GeoPoint (Driver's active location)
-        - rating: Number
-        - status: String ("offline", "waitingForRide", "goingToPickup", "arrivedAtPickup", "onRide", "returningToKijiwe") // Example statuses
-        - completedRides: Number // Counter for completed rides    - email: String
     - emailVerified: Boolean
     - fcmToken: String
     - gender: String
@@ -38,21 +28,52 @@
     - name: String
     - phoneNumber: String
     - profileImageUrl: String
-    - role: String  // "Customer", "Driver", "Both", "Kijiwe Leader", "Union Official"
+    - role: String  // "Customer", "Driver", "Admin", "Both" (Kijiwe Leader, Union Official can be sub-roles or separate flags)
     - uid: String  // Firebase Auth UID (This is the key identifier)
-    - photoURL: String
-    
+    - customerProfile: Map // Optional - Present if user acts as a customer
+        - requestedRidesCount: Number
+        - completedRidesCount: Number
+        - cancelledByCustomerCount: Number // Rides they cancelled
+        - ridesCancelledByDriverForCustomerCount: Number // Rides a driver accepted then cancelled for them
+        - ridesDeclinedByDriverForCustomerCount: Number // Rides a driver was offered for them but declined by driver
+        - sumOfRatingsReceived: Number // Sum of ratings given by drivers to this customer
+        - totalRatingsReceivedCount: Number
+        - averageRating: Number // Calculated: sumOfRatingsReceived / totalRatingsReceivedCount
+    - driverProfile: Map  //  Optional - Only present if role includes "Driver" or "Both"
+        - approved: Boolean  // Whether they've been approved as a driver by an admin
+        - vehicleType: String
+        - licenseNumber: String
+        - kijiweId: String
+        - registeredAt: Timestamp
+        - isOnline: Boolean  // Whether they are currently available for rides and should be in the Kijiwe queue
+        - status: String ("offline", "waitingForRide", "goingToPickup", "arrivedAtPickup", "onRide", "pending_ride_acceptance")
+        - currentLocation: GeoPoint (Driver's active location, if different from user's general location)
+        - completedRidesCount: Number
+        - cancelledByDriverCount: Number // Rides cancelled BY THE DRIVER after acceptance
+        - declinedByDriverCount: Number // Rides offered to driver that they declined before acceptance
+        - sumOfRatingsReceived: Number // Sum of ratings given by customers to this driver
+        - totalRatingsReceivedCount: Number
+        - averageRating: Number // Calculated: sumOfRatingsReceived / totalRatingsReceivedCount (this was 'rating' before)
 
 /RideRequests/{rideRequestId}
-    - customerId: String (userId from Users collection)
-    - assignedDriverId: String (userId from Users collection)
-    - dropOff: GeoPoint
-    - pickup: GeoPoint
-    - status: String
-    - stops: Array of GeoPoints
-    - requestTime: Timestamp
-    - acceptedTime: Timestamp
+    - acceptedTime: Timestamp // Time driver accepted
     - completedTime: Timestamp
-    - route: Array of GeoPoints
-    - kijiweId: String
+    - customerId: String (userId from Users collection)
+    - customerName: String
+    - customerProfileImageUrl
+    - driverName: String
+    - driverProfileImageUrl
+    - dropOff: GeoPoint
+    - dropoffAddressName: String
     - fare: Number
+    - kijiweId: String
+    - pickup: GeoPoint
+    - pickupAddressName: String
+    - requestTime: Timestamp
+    - status: String // e.g. "pending_match", "pending_driver_acceptance", "accepted", "goingToPickup", "arrivedAtPickup", "onRide", "completed", "cancelled_by_customer", "cancelled_by_driver", "declined_by_driver", "no_drivers_available", "matching_error"
+    - stops: Array of Maps // [{'name': String, 'location': GeoPoint, 'addressName': String}]
+    - driverId: String (userId from Users collection, formerly assignedDriverId)
+    - customerRatingToDriver: Number // Rating customer gave to driver for this ride
+    - customerCommentToDriver: String
+    - driverRatingToCustomer: Number // Rating driver gave to customer for this ride
+    - driverCommentToCustomer: String

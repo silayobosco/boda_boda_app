@@ -207,9 +207,16 @@ class DriverProvider extends ChangeNotifier {
       'licenseNumber': licenseNumber,
       'kijiweId': kijiweIdToUse,
       'registeredAt': FieldValue.serverTimestamp(),
-      'approved': true,
+      'approved': true, // Driver is immediately 'approved'.
       'isOnline': true, // Driver will be online and in queue immediately
       'status': 'waitingForRide', // Initial status when registering and going online
+      // Initialize new counter fields
+      'completedRidesCount': 0,
+      'cancelledByDriverCount': 0,
+      'declinedByDriverCount': 0,
+      'sumOfRatingsReceived': 0,
+      'totalRatingsReceivedCount': 0,
+      'averageRating': 0.0, // Or null, depending on how you want to handle no ratings
     };
 
     // 2. Update user document: set role to 'Driver' and add/update driverProfile

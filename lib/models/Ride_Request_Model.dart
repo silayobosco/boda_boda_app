@@ -21,6 +21,12 @@ class RideRequestModel {
   final String? driverProfileImageUrl;
   final String? pickupAddressName;
   final String? dropoffAddressName;
+  // Fields to store ratings given for this specific ride
+  final double? customerRatingToDriver;
+  final String? customerCommentToDriver;
+  final double? driverRatingToCustomer;
+  final String? driverCommentToCustomer;
+
 
   RideRequestModel({
     this.id,
@@ -41,6 +47,10 @@ class RideRequestModel {
     this.driverProfileImageUrl,
     this.pickupAddressName,
     this.dropoffAddressName,
+    this.customerRatingToDriver,
+    this.customerCommentToDriver,
+    this.driverRatingToCustomer,
+    this.driverCommentToCustomer,
   });
 
   factory RideRequestModel.fromJson(Map<String, dynamic> json, String rideRequestId) {
@@ -91,6 +101,10 @@ class RideRequestModel {
       driverProfileImageUrl: json['driverProfileImageUrl'] as String?,
       pickupAddressName: json['pickupAddressName'] as String?,
       dropoffAddressName: json['dropoffAddressName'] as String?,
+      customerRatingToDriver: (json['customerRatingToDriver'] as num?)?.toDouble(),
+      customerCommentToDriver: json['customerCommentToDriver'] as String?,
+      driverRatingToCustomer: (json['driverRatingToCustomer'] as num?)?.toDouble(),
+      driverCommentToCustomer: json['driverCommentToCustomer'] as String?,
     );
   }
 
@@ -119,6 +133,10 @@ class RideRequestModel {
       'driverProfileImageUrl': driverProfileImageUrl,
       'pickupAddressName': pickupAddressName,
       'dropoffAddressName': dropoffAddressName,
+      'customerRatingToDriver': customerRatingToDriver,
+      'customerCommentToDriver': customerCommentToDriver,
+      'driverRatingToCustomer': driverRatingToCustomer,
+      'driverCommentToCustomer': driverCommentToCustomer,
     };
   }
 
@@ -141,6 +159,10 @@ class RideRequestModel {
     String? driverProfileImageUrl,
     String? pickupAddressName,
     String? dropoffAddressName,
+    double? customerRatingToDriver,
+    String? customerCommentToDriver,
+    double? driverRatingToCustomer,
+    String? driverCommentToCustomer,
   }) {
     return RideRequestModel(
       // Corrected logic: use the provided 'id' parameter if not null, otherwise use current instance's 'id'.
@@ -162,6 +184,10 @@ class RideRequestModel {
       driverProfileImageUrl: driverProfileImageUrl ?? this.driverProfileImageUrl,
       pickupAddressName: pickupAddressName ?? this.pickupAddressName,
       dropoffAddressName: dropoffAddressName ?? this.dropoffAddressName,
+      customerRatingToDriver: customerRatingToDriver ?? this.customerRatingToDriver,
+      customerCommentToDriver: customerCommentToDriver ?? this.customerCommentToDriver,
+      driverRatingToCustomer: driverRatingToCustomer ?? this.driverRatingToCustomer,
+      driverCommentToCustomer: driverCommentToCustomer ?? this.driverCommentToCustomer,
     );
   }
 
