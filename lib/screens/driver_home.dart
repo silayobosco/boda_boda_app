@@ -374,22 +374,22 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
                   ],
                 ),
               ),
-              // // Cancel Ride Button - visible if ride is active but not yet completed
-              // if (_hasActiveRide && !isRideInProgress) // Show if going to pickup or arrived, but not yet 'onRide' or 'completed'
-              //   Padding(
-              //     padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              //     child: SizedBox(
-              //       width: double.infinity,
-              //       child: OutlinedButton(
-              //         style: OutlinedButton.styleFrom(
-              //           side: BorderSide(color: Colors.red),
-              //           foregroundColor: Colors.red,
-              //         ),
-              //         onPressed: _showCancelRideConfirmationDialog, // This is where it's called
-              //         child: Text('Cancel Ride'),
-              //       ),
-              //     ),
-              //   ),
+            // Cancel Ride Button - visible if ride is active but not yet completed
+            if (_hasActiveRide && !isRideInProgress) // Show if going to pickup or arrived, but not yet 'onRide' or 'completed'
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(color: Colors.red),
+                    foregroundColor: Colors.red,
+                  ),
+                  onPressed: _showCancelRideConfirmationDialog, // This is where it's called
+                  child: Text('Cancel Ride'),
+                ),
+              ),
+             ),
             ],
           ),
         ),
