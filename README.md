@@ -1,21 +1,4 @@
 # boda_boda_app
-<<<<<<< HEAD
-
-A new Flutter project.
-
-## Getting Started
-
-This project is a starting point for a Flutter application.
-
-A few resources to get you started if this is your first Flutter project:
-
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
-=======
 🇹🇿 Boda Boda Station App – A smart, territory-aware ride-hailing platform for Boda Boda services in Tanzania. 🔒 Verified drivers &amp; stations | 📍 Location-based pickups | ⚙️ Admin &amp; group leader control | 📱 Built with Flutter &amp; Firebase
 # 🛵 Boda Boda Station App
 
@@ -79,4 +62,4 @@ The Boda Boda Station App simplifies ride requests, ensures fair driver rotation
    ```bash
    git clone https://github.com/your-username/boda-boda-app.git
    cd boda-boda-app
->>>>>>> cbd236652e2fe539501809ad8d744beac196cb7d
+```
