@@ -5,6 +5,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:geoflutterfire3/geoflutterfire3.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart' as gmf; // Import for google_maps_flutter.LatLng
 
 class FirestoreService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -70,6 +71,12 @@ Future<String> createRideRequest(RideRequestModel rideRequest) async {
     });
   }
 
+  // Stream a single ride request document
+  Stream<DocumentSnapshot> getRideRequestDocumentStream(String rideRequestId) {
+    return _firestore.collection('rideRequests').doc(rideRequestId).snapshots();
+  }
+
+
   Future<void> updateRideRequestStatus(String rideRequestId, String status, {String? driverId, String? kijiweId}) async {
     try {
       Map<String, dynamic> updateData = {'status': status};
@@ -113,9 +120,11 @@ Future<String> createRideRequest(RideRequestModel rideRequest) async {
 
   Future<void> updateUserLocation(String userId, LatLng location) async {
     try {
+      // This updates the general user location.
       await _firestore.collection('users').doc(userId).update({
         'location': GeoPoint(location.latitude, location.longitude),
       });
+      // If this user is a driver, also update their driverProfile.currentLocation
     } catch (e) {
       print('Error updating user location: $e');
       rethrow;
@@ -123,6 +132,27 @@ Future<String> createRideRequest(RideRequestModel rideRequest) async {
   }
 
   Stream<DocumentSnapshot> getUserLocationStream(String userId) {
+    return _firestore.collection('users').doc(userId).snapshots();
+  }
+
+  // Specifically for driver's active location and heading
+  Future<void> updateDriverActiveLocation(String driverId, gmf.LatLng location, double? heading) async {
+    try {
+      Map<String, dynamic> dataToUpdate = {
+        'driverProfile.currentLocation': GeoPoint(location.latitude, location.longitude),
+      };
+      if (heading != null) {
+        dataToUpdate['driverProfile.currentHeading'] = heading;
+      }
+      await _firestore.collection('users').doc(driverId).update(dataToUpdate);
+    } catch (e) {
+      print('Error updating driver active location: $e');
+      rethrow;
+    }
+  }
+
+  // Stream for a user document, which can be used to get driver's profile updates
+  Stream<DocumentSnapshot> getUserDocumentStream(String userId) {
     return _firestore.collection('users').doc(userId).snapshots();
   }
 

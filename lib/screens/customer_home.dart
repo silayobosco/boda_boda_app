@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'package:boda_boda/models/Ride_Request_Model.dart';
 import 'package:boda_boda/providers/ride_request_provider.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -8,11 +10,13 @@ import 'package:latlong2/latlong.dart' as ll;
 import 'package:provider/provider.dart';
 import '../providers/location_provider.dart';
 import 'package:geocoding/geocoding.dart';
-// import 'package:http/http.dart' as http; // No longer needed directly
 import 'package:cloud_firestore/cloud_firestore.dart'; // Import GeoPoint from cloud_firestore
 import '../models/stop.dart';
+import '../models/user_model.dart'; // For Driver's UserModel
 import '../utils/ui_utils.dart'; // Import ui_utils
 import '../utils/map_utils.dart'; // Import the new map utility
+import 'package:boda_boda/services/firestore_service.dart';
+
 class CustomerHome extends StatefulWidget {
   const CustomerHome({super.key});
 
@@ -40,7 +44,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
   bool _selectingPickup = false;
   bool _editingPickup = false;
   bool _editingDestination = false;
-  bool _isLoadingRoute = false;
+  // bool _isLoadingRoute = false; // Will be replaced by _isFindingDriver or specific loading for route drawing
   final FocusNode _destinationFocusNode = FocusNode();
   final FocusNode _pickupFocusNode = FocusNode();
   final FocusNode _stopFocusNode = FocusNode();
@@ -62,12 +66,21 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
   String? _selectedRouteDistance;
   String? _selectedRouteDuration;
 
+  // Ride Lifecycle State
+  bool _isFindingDriver = false;
+  String? _activeRideRequestId;
+  RideRequestModel? _activeRideRequestDetails;
+  UserModel? _assignedDriverModel;
+  StreamSubscription? _driverLocationSubscription;
+  BitmapDescriptor? _driverIcon; // For the driver's marker
+  bool _isDriverIconLoaded = false;
   @override
   bool get wantKeepAlive => true;
 
   @override
   void initState() {
     super.initState();
+    _loadDriverMarkerIcon();
     _initializePickupLocation();
     _setupFocusListeners();
     _sheetController.addListener(_onSheetChanged);
@@ -79,6 +92,18 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
         });
       }
     });
+  }
+  
+  Future<void> _loadDriverMarkerIcon() async {
+    try {
+      _driverIcon = await BitmapDescriptor.fromAssetImage(
+        const ImageConfiguration(size: Size(48, 48)), // Adjust size as needed
+        'assets/boda_marker.png', // Use your specific driver icon
+      );
+      if (mounted) setState(() => _isDriverIconLoaded = true);
+    } catch (e) {
+      debugPrint("Error loading driver marker icon: $e");
+    }
   }
 
   void _startEditing(String field, {bool requestFocus = true}) {
@@ -282,6 +307,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
   Future<void> _initializePickupLocation() async {
     final currentLocation = Provider.of<LocationProvider>(context, listen: false).currentLocation;
     if (currentLocation != null) {
+      if (!mounted) return;
       _pickupLocation = currentLocation;
       _updateGooglePickupMarker(LatLng(currentLocation.latitude, currentLocation.longitude));
       await _reverseGeocode(_pickupLocation!, _pickupController);
@@ -295,6 +321,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
         location.longitude,
       );
       if (placemarks.isNotEmpty) {
+        if (!mounted) return;
         final Placemark place = placemarks.first;
         String address = _formatAddress(place);
         controller.text = address;
@@ -405,6 +432,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
         _editingStopIndex = null;
         _stopFocusNode.unfocus();
         _collapseSheet();
+        _drawRoute(); // Redraw route if a stop location changes
       });
     } else if (_editingDestination) {
       setState(() {
@@ -413,15 +441,14 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
         _reverseGeocode(_dropOffLocation!, _destinationController);
         _editingDestination = false;
         _destinationFocusNode.unfocus();
-        _drawRoute();
         _collapseSheet();
       });
+      _drawRoute(); // Draw route after setting destination
     } else if (_dropOffLocation == null && !_editingPickup && _editingStopIndex == null) {
       setState(() {
         _dropOffLocation = llTappedLatLng;
         _updateGoogleDropOffMarker(tappedLatLng);
         _reverseGeocode(_dropOffLocation!, _destinationController);
-        _drawRoute();
       });
     }
     _checkRouteReady();
@@ -431,7 +458,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
   if (_pickupLocation == null || _dropOffLocation == null) return;
   
   setState(() {
-    _isLoadingRoute = true;
+    // _isLoadingRoute = true; // This is for drawing the customer's proposed route
     _polylines.clear();
     _allFetchedRoutes.clear();
     _selectedRouteIndex = 0;
@@ -481,12 +508,58 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
   } finally {
     if (mounted) {
       setState(() {
-        _isLoadingRoute = false;
+        // _isLoadingRoute = false;
       });
     }
     _checkRouteReady();
   }
 }
+
+  // Update polylines based on selected route
+  void _startListeningToDriverLocation(String driverId) {
+    _driverLocationSubscription?.cancel(); // Cancel any previous subscription
+    final firestoreService = Provider.of<FirestoreService>(context, listen: false);
+    _driverLocationSubscription = firestoreService.getUserDocumentStream(driverId).listen((driverDoc) {
+      if (driverDoc.exists && driverDoc.data() != null) {
+        final data = driverDoc.data() as Map<String, dynamic>;
+        final driverProfile = data['driverProfile'] as Map<String, dynamic>?;
+        if (driverProfile != null && driverProfile['currentLocation'] is GeoPoint) {
+          final GeoPoint driverGeoPoint = driverProfile['currentLocation'] as GeoPoint;
+          final LatLng driverLatLng = LatLng(driverGeoPoint.latitude, driverGeoPoint.longitude);
+          final double driverHeading = (driverProfile['currentHeading'] as num?)?.toDouble() ?? 0.0;
+
+          if (mounted) {
+            setState(() {
+              _markers.removeWhere((m) => m.markerId.value == 'driver_active_location');
+              if (_isDriverIconLoaded) {
+                _markers.add(
+                  Marker(
+                    markerId: const MarkerId('driver_active_location'),
+                    position: driverLatLng,
+                    icon: _driverIcon!,
+                    rotation: driverHeading,
+                    anchor: const Offset(0.5, 0.5),
+                    flat: true,
+                    zIndex: 10, // Ensure driver marker is prominent
+                  ),
+                );
+              }
+               _mapController?.animateCamera(CameraUpdate.newLatLng(driverLatLng));
+            });
+          }
+        }
+      }
+    }, onError: (error) {
+      debugPrint("Error listening to driver location: $error");
+    });
+  }
+
+  void _stopListeningToDriverLocation() {
+    _driverLocationSubscription?.cancel();
+    _driverLocationSubscription = null;
+    _markers.removeWhere((m) => m.markerId.value == 'driver_active_location');
+    // No need to call setState here if the marker removal is part of a larger state reset
+  }
 
 void _updateDisplayedRoute() {
   if (_allFetchedRoutes.isEmpty) return;
@@ -574,7 +647,7 @@ void _updateDisplayedRoute() {
       });
       // Only reverse geocode if no description or too short
       if ((suggestion['description'] != null && (suggestion['description'] as String).length < 5)) {
-        await _reverseGeocode(_pickupLocation!, _pickupController);
+        //await _reverseGeocode(_pickupLocation!, _pickupController);
       }
 
       _drawRoute();
@@ -746,6 +819,12 @@ void _updateDisplayedRoute() {
   }
 
   void _confirmRideRequest() async {
+    if (_isFindingDriver) return; // Prevent multiple requests
+
+    setState(() {
+      _isFindingDriver = true;
+    });
+
     final rideRequestProvider = Provider.of<RideRequestProvider>(context, listen: false); // Ensure RideRequestProvider is defined and imported
 
     if (_pickupLocation == null || _dropOffLocation == null) {
@@ -753,6 +832,7 @@ void _updateDisplayedRoute() {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Please select both pickup and drop-off locations')),
         );
+        setState(() => _isFindingDriver = false);
       }
       return;
     }
@@ -762,6 +842,7 @@ void _updateDisplayedRoute() {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('User not authenticated. Cannot create ride request.')),
         );
+        setState(() => _isFindingDriver = false);
       }
       return;
     }
@@ -777,9 +858,7 @@ void _updateDisplayedRoute() {
         .toList();
         
       // Create a ride request model
-      // Call the updated createRideRequest method in the provider
-      // Ensure that the LatLng types match what createRideRequest expects (latlong2.LatLng)
-      await rideRequestProvider.createRideRequest(
+      String rideId = await rideRequestProvider.createRideRequest(
         pickup: _pickupLocation!, // _pickupLocation is already ll.LatLng (latlong2.LatLng)
         pickupAddressName: _pickupController.text,
         dropoff: _dropOffLocation!, // _dropOffLocation is already ll.LatLng (latlong2.LatLng)
@@ -793,8 +872,12 @@ void _updateDisplayedRoute() {
       );
 
       if (mounted) {
+        setState(() {
+          _activeRideRequestId = rideId;
+          // _isFindingDriver remains true, the StreamBuilder will handle UI changes
+        });
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Ride request created successfully')),
+          const SnackBar(content: Text('Ride request created. Finding a driver...')),
         );
       }
     } catch (e) {
@@ -802,6 +885,13 @@ void _updateDisplayedRoute() {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to create ride request: $e')),
         );
+        setState(() => _isFindingDriver = false); // Stop loading on error
+      }
+    } finally {
+      // Only set _isFindingDriver to false here if an error occurred AND _activeRideRequestId was NOT set.
+      // If _activeRideRequestId IS set, the StreamBuilder is now responsible for the UI.
+      if (mounted && _activeRideRequestId == null) {
+         setState(() => _isFindingDriver = false);
       }
     }
   }
@@ -931,6 +1021,7 @@ void _updateDisplayedRoute() {
   Widget build(BuildContext context) {
     super.build(context);
     final locationProvider = Provider.of<LocationProvider>(context);
+    final rideRequestProvider = Provider.of<RideRequestProvider>(context);
 
     return Scaffold(
       resizeToAvoidBottomInset: true,
@@ -961,8 +1052,64 @@ void _updateDisplayedRoute() {
               bottom: MediaQuery.of(context).size.height * _currentSheetSize,
             ),
           ),
-          
-          _buildRouteSheet(),
+          // Listen to the active ride request if its ID is known
+          if (_activeRideRequestId != null)
+            StreamBuilder<RideRequestModel?>(
+              stream: rideRequestProvider.getRideStream(_activeRideRequestId!),
+              builder: (context, snapshot) {
+                if (snapshot.hasData && snapshot.data != null) {
+                  _activeRideRequestDetails = snapshot.data;
+                  // Check if driver is assigned and we haven't fetched their details yet
+                  if (_activeRideRequestDetails!.driverId != null && _assignedDriverModel == null) {
+                    // Fetch driver details
+                    FirebaseFirestore.instance
+                        .collection('users')
+                        .doc(_activeRideRequestDetails!.driverId)
+                        .get()
+                        .then((doc) {
+                      if (doc.exists && mounted) {
+                        setState(() {
+                          _assignedDriverModel = UserModel.fromJson(doc.data()!);
+                          _isFindingDriver = false; // Driver found
+                          _startListeningToDriverLocation(_assignedDriverModel!.uid!);
+                          // TODO: Add driver marker
+                        });
+                      }
+                    }).catchError((e) {
+                       debugPrint("Error fetching assigned driver details: $e");
+                       if (mounted) setState(() => _isFindingDriver = false); // Stop loading on error
+                    });
+                  } else if (_activeRideRequestDetails!.driverId == null && _assignedDriverModel != null) {
+                    // Driver was unassigned or ride cancelled by driver before pickup
+                    if (mounted) {
+                      setState(() {
+                        _assignedDriverModel = null;
+                        _stopListeningToDriverLocation();
+                        _isFindingDriver = false; // Or set to true if rematching
+                        // Potentially clear _activeRideRequestId if ride is fully cancelled
+                      });
+                    }
+                  }
+                  // Handle other status updates like 'arrived', 'onRide', 'completed'
+                  // For example, if status is 'completed', reset _activeRideRequestId
+                  if (_activeRideRequestDetails!.status == 'completed' || 
+                      _activeRideRequestDetails!.status == 'cancelled_by_customer' ||
+                      _activeRideRequestDetails!.status == 'cancelled_by_driver') {
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (mounted) {
+                            setState(() {
+                              _activeRideRequestId = null;
+                              _activeRideRequestDetails = null;
+                              _assignedDriverModel = null;
+                              _isFindingDriver = false;
+                              _stopListeningToDriverLocation();
+                            });
+                          }
+                        });
+                      }
+                }
+                return _buildRouteSheet(); // Always build the sheet, its content will change
+              }) else _buildRouteSheet(), // Build sheet even if no active ride ID (initial state)
         ],
       ),
     );
@@ -982,6 +1129,17 @@ void _updateDisplayedRoute() {
   }
 
   Widget _buildRouteSheet() {
+    // If a driver is assigned, show driver info and ride progress
+    if (_assignedDriverModel != null && _activeRideRequestDetails != null) {
+      return _buildDriverAssignedSheet();
+    }
+
+    // If finding a driver, show loading state in the sheet
+    if (_isFindingDriver) {
+      return _buildFindingDriverSheet();
+    }
+
+    // Default: Show route planning sheet
     return DraggableScrollableSheet(
       controller: _sheetController,
       initialChildSize: 0.35,
@@ -1280,12 +1438,7 @@ void _updateDisplayedRoute() {
               ),
               
               // Action Buttons (only shown when both pickup and destination are set)
-              if (_isLoadingRoute)
-                const Center(child: Padding(
-                  padding: EdgeInsets.all(16),
-                  child: CircularProgressIndicator(), // Uses theme primary color
-                ))
-              else if (_pickupLocation != null && _dropOffLocation != null)
+              if (_pickupLocation != null && _dropOffLocation != null && !_isFindingDriver)
                 Container(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                   // Use theme surface color to blend with sheet
@@ -1338,6 +1491,140 @@ void _updateDisplayedRoute() {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildFindingDriverSheet() {
+    final theme = Theme.of(context);
+    return Positioned( // Use Positioned to overlay or place at bottom
+      bottom: 0,
+      left: 0,
+      right: 0,
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          boxShadow: [
+            BoxShadow(blurRadius: 10, color: Colors.black12, offset: Offset(0, -2)),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(color: theme.colorScheme.primary),
+            verticalSpaceMedium,
+            Text(
+              'Finding a driver for you...',
+              style: theme.textTheme.titleMedium,
+              textAlign: TextAlign.center,
+            ),
+            verticalSpaceMedium,
+            OutlinedButton( // Changed to OutlinedButton for better visibility
+              style: OutlinedButton.styleFrom(
+                foregroundColor: theme.colorScheme.error,
+                side: BorderSide(color: theme.colorScheme.error),
+              ),
+              onPressed: () async {
+                if (_activeRideRequestId != null) {
+                  try {
+                    await Provider.of<RideRequestProvider>(context, listen: false)
+                        .cancelRideByCustomer(_activeRideRequestId!);
+                    // StreamBuilder will handle UI reset when status changes to cancelled
+                  } catch (e) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Failed to cancel ride: $e')),
+                      );
+                    }
+                  }
+                }
+              },
+              child: Text('Cancel Search', style: TextStyle(color: theme.colorScheme.error)),
+            )
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDriverAssignedSheet() {
+    final theme = Theme.of(context);
+    final rideStatus = _activeRideRequestDetails?.status ?? 'N/A';
+    return Positioned(
+      bottom: 0, left: 0, right: 0,
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          boxShadow: [BoxShadow(blurRadius: 10, color: Colors.black12, offset: Offset(0, -2))],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (_assignedDriverModel?.profileImageUrl != null && _assignedDriverModel!.profileImageUrl!.isNotEmpty)
+              CircleAvatar(
+                radius: 30,
+                backgroundImage: NetworkImage(_assignedDriverModel!.profileImageUrl!),
+              )
+            else
+              CircleAvatar(
+                radius: 30,
+                backgroundColor: theme.colorScheme.primaryContainer,
+                child: Icon(Icons.person, size: 30, color: theme.colorScheme.onPrimaryContainer),
+              ),
+            verticalSpaceSmall,
+            Text(_assignedDriverModel?.name ?? 'Driver', style: theme.textTheme.titleLarge),
+            if (_assignedDriverModel?.driverDetails?['vehicleType'] != null)
+              Text('Vehicle: ${_assignedDriverModel!.driverDetails!['vehicleType']}', style: theme.textTheme.bodySmall),
+            verticalSpaceSmall,
+            // Display Driver's Average Rating
+            if (_assignedDriverModel?.driverDetails?['averageRating'] != null)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.star, color: accentColor, size: 16),
+                  horizontalSpaceSmall,
+                  Text(
+                    (_assignedDriverModel!.driverDetails!['averageRating'] as num).toStringAsFixed(1),
+                    style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+            verticalSpaceSmall,
+            Chip(
+              label: Text('Status: $rideStatus', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSecondaryContainer)),
+              backgroundColor: theme.colorScheme.secondaryContainer,
+            ),
+            verticalSpaceMedium,
+            // Add Cancel Ride button if the ride is not yet 'onRide', 'completed', or 'cancelled'
+            if (rideStatus != 'onRide' && rideStatus != 'completed' && !rideStatus.contains('cancelled'))
+              OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: theme.colorScheme.error,
+                  side: BorderSide(color: theme.colorScheme.error),
+                ),
+                onPressed: () async {
+                  if (_activeRideRequestId != null) {
+                    try {
+                      await Provider.of<RideRequestProvider>(context, listen: false)
+                          .cancelRideByCustomer(_activeRideRequestId!);
+                      // StreamBuilder will handle UI reset
+                    } catch (e) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Failed to cancel ride: $e')),
+                        );
+                      }
+                    }
+                  }
+                },
+                child: const Text('Cancel Ride'),
+              ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -1557,18 +1844,7 @@ void _updateDisplayedRoute() {
     _destinationFocusNode.dispose();
     _pickupFocusNode.dispose();
     _stopFocusNode.dispose();
+    _driverLocationSubscription?.cancel();
     super.dispose();
   }
 }
-//class Stop {
-  //final String name;
-  //final String address;
-  //ll.LatLng? location;
-  //final TextEditingController controller = TextEditingController();
-
- //Stop({
-  //required this.name,
-  //required this.address,
-  //this.location,
-  //});
-//}

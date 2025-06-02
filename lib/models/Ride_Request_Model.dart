@@ -21,6 +21,7 @@ class RideRequestModel {
   final String? driverProfileImageUrl;
   final String? pickupAddressName;
   final String? dropoffAddressName;
+  final String? customerDetails;
   // Fields to store ratings given for this specific ride
   final double? customerRatingToDriver;
   final String? customerCommentToDriver;
@@ -51,6 +52,7 @@ class RideRequestModel {
     this.customerCommentToDriver,
     this.driverRatingToCustomer,
     this.driverCommentToCustomer,
+    this.customerDetails,
   });
 
   factory RideRequestModel.fromJson(Map<String, dynamic> json, String rideRequestId) {
@@ -101,6 +103,7 @@ class RideRequestModel {
       driverProfileImageUrl: json['driverProfileImageUrl'] as String?,
       pickupAddressName: json['pickupAddressName'] as String?,
       dropoffAddressName: json['dropoffAddressName'] as String?,
+      customerDetails: json['customerDetails'] as String?,
       customerRatingToDriver: (json['customerRatingToDriver'] as num?)?.toDouble(),
       customerCommentToDriver: json['customerCommentToDriver'] as String?,
       driverRatingToCustomer: (json['driverRatingToCustomer'] as num?)?.toDouble(),
@@ -137,6 +140,7 @@ class RideRequestModel {
       'customerCommentToDriver': customerCommentToDriver,
       'driverRatingToCustomer': driverRatingToCustomer,
       'driverCommentToCustomer': driverCommentToCustomer,
+      'customerDetails': customerDetails,
     };
   }
 
@@ -163,6 +167,7 @@ class RideRequestModel {
     String? customerCommentToDriver,
     double? driverRatingToCustomer,
     String? driverCommentToCustomer,
+    String? customerDetails,
   }) {
     return RideRequestModel(
       // Corrected logic: use the provided 'id' parameter if not null, otherwise use current instance's 'id'.
@@ -188,6 +193,7 @@ class RideRequestModel {
       customerCommentToDriver: customerCommentToDriver ?? this.customerCommentToDriver,
       driverRatingToCustomer: driverRatingToCustomer ?? this.driverRatingToCustomer,
       driverCommentToCustomer: driverCommentToCustomer ?? this.driverCommentToCustomer,
+      customerDetails: customerDetails ?? this.customerDetails,
     );
   }
 
@@ -197,7 +203,11 @@ class RideRequestModel {
         'kijiweId: $kijiweId, pickup: $pickup, dropoff: $dropoff, stops: $stops, '
         'status: $status, requestTime: $requestTime, fare: $fare, '
         'acceptedTime: $acceptedTime, completedTime: $completedTime, '
-        'customerName: $customerName, pickupAddressName: $pickupAddressName, driverName: $driverName)';
+        'customerName: $customerName, pickupAddressName: $pickupAddressName, driverName: $driverName, customerProfileImageUrl: $customerProfileImageUrl, '
+        'driverProfileImageUrl: $driverProfileImageUrl, dropoffAddressName: $dropoffAddressName, '
+        'customerRatingToDriver: $customerRatingToDriver, customerCommentToDriver: $customerCommentToDriver, '
+        'driverRatingToCustomer: $driverRatingToCustomer, driverCommentToCustomer: $driverCommentToCustomer, '
+        'customerDetails: $customerDetails)';
   }
 }
 
@@ -216,6 +226,14 @@ class RideHistoryModel {
   final DateTime? acceptedTime; // to do
   final DateTime? completedTime; // to do
   final String? status; // to do
+  // Denormalized fields for easier display and FCM payloads
+  final String? customerName;
+  final String? customerProfileImageUrl;
+  final String? driverName;
+  final String? driverProfileImageUrl;
+  final String? pickupAddressName;
+  final String? dropoffAddressName;
+  final String? customerDetails;
 
   RideHistoryModel({
     this.rideHistoryId,
@@ -232,6 +250,13 @@ class RideHistoryModel {
     this.acceptedTime,
     this.completedTime,
     this.status,
+    this.customerName,
+    this.customerProfileImageUrl,
+    this.driverName,
+    this.driverProfileImageUrl,
+    this.pickupAddressName,
+    this.dropoffAddressName,
+    this.customerDetails,
   });
 
   factory RideHistoryModel.fromJson(Map<String, dynamic> json, String rideHistoryId) {
@@ -275,6 +300,13 @@ class RideHistoryModel {
       acceptedTime: (json['acceptedTime'] as Timestamp?)?.toDate(),
       completedTime: (json['completedTime'] as Timestamp?)?.toDate(),
       status: json['status'] as String?,
+      customerName: json['customerName'] as String?,
+      customerProfileImageUrl: json['customerProfileImageUrl'] as String?,
+      driverName: json['driverName'] as String?,
+      driverProfileImageUrl: json['driverProfileImageUrl'] as String?,
+      pickupAddressName: json['pickupAddressName'] as String?,
+      dropoffAddressName: json['dropoffAddressName'] as String?,
+      customerDetails: json['customerDetails'] as String?,
     );
   }
 
@@ -299,6 +331,13 @@ class RideHistoryModel {
       'acceptedTime': acceptedTime != null ? Timestamp.fromDate(acceptedTime!) : null,
       'completedTime': completedTime != null ? Timestamp.fromDate(completedTime!) : null,
       'status': status,
+      'customerName': customerName,
+      'customerProfileImageUrl': customerProfileImageUrl,
+      'driverName': driverName,
+      'driverProfileImageUrl': driverProfileImageUrl,
+      'pickupAddressName': pickupAddressName,
+      'dropoffAddressName': dropoffAddressName,
+      'customerDetails': customerDetails,
     };
   }
 
@@ -317,6 +356,13 @@ class RideHistoryModel {
     DateTime? acceptedTime,
     DateTime? completedTime,
     String? status,
+    String? customerName,
+    String? customerProfileImageUrl,
+    String? driverName,
+    String? driverProfileImageUrl,
+    String? pickupAddressName,
+    String? dropoffAddressName,
+    String? customerDetails,
   }) {
     return RideHistoryModel(
       rideHistoryId: rideHistoryId ?? this.rideHistoryId,
@@ -333,6 +379,13 @@ class RideHistoryModel {
       acceptedTime: acceptedTime ?? this.acceptedTime,
       completedTime: completedTime ?? this.completedTime,
       status: status ?? this.status,
+      customerName: customerName ?? this.customerName,
+      customerProfileImageUrl: customerProfileImageUrl ?? this.customerProfileImageUrl,
+      driverName: driverName ?? this.driverName,
+      driverProfileImageUrl: driverProfileImageUrl ?? this.driverProfileImageUrl,
+      pickupAddressName: pickupAddressName ?? this.pickupAddressName,
+      dropoffAddressName: dropoffAddressName ?? this.dropoffAddressName,
+      customerDetails: customerDetails ?? this.customerDetails,
     );
   }
 
@@ -342,7 +395,11 @@ class RideHistoryModel {
         'driverId: $driverId, pickup: $pickup, dropoff: $dropoff, stops: $stops, '
         'distance: $distance, cost: $cost, timestamp: $timestamp, '
         'kijiweId: $kijiweId, fare: $fare, acceptedTime: $acceptedTime, '
-        'completedTime: $completedTime, status: $status)';
+        'completedTime: $completedTime, status: $status, '
+        'customerName: $customerName, customerProfileImageUrl: $customerProfileImageUrl, '
+        'driverName: $driverName, driverProfileImageUrl: $driverProfileImageUrl, '
+        'pickupAddressName: $pickupAddressName, dropoffAddressName: $dropoffAddressName, '
+        'customerDetails: $customerDetails)';
   
   }
   

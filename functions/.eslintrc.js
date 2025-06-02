@@ -4,7 +4,13 @@ module.exports = {
     node: true,
   },
   parserOptions: {
-    "ecmaVersion": 2018,
+    "ecmaVersion": 2022, // Use the latest ECMAScript version
+    "sourceType": "module", // Enable ECMAScript modules
+    "ecmaFeatures": {
+      "globalReturn": true, // Allow return statements in the global scope
+      "impliedStrict": true, // Enable strict mode automatically
+    },
+    "allowImportExportEverywhere": true, // Allow import/export statements anywhere
   },
   extends: [
     "eslint:recommended",
@@ -15,7 +21,7 @@ module.exports = {
     "prefer-arrow-callback": "error",
     "quotes": ["error", "double", { "allowTemplateLiterals": true }],
     "eol-last": "off",
-    "max-len": ["warn", { "code": 120 }], // Allow lines up to 120 characters
+    "max-len": ["warn", { "code": 180 }], // Allow lines up to 120 characters
     // "indent": ["error", 2], // Enforce 2 spaces for indentation
     "object-curly-spacing": ["error", "always"], // Enforce spacing inside curly braces
   },

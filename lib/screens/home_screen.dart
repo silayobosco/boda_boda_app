@@ -31,6 +31,26 @@ class _HomeScreenState extends State<HomeScreen> {
   FlutterLocalNotificationsPlugin _flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
   bool _fcmActionsInitializedForCurrentUser = false; // Flag to track initialization
 
+  // Store instances of the main screens for each role to preserve their state
+  // Ensure these are initialized appropriately, perhaps in initState or as late final.
+  // For simplicity, initializing directly here.
+  final List<Widget> _driverScreens = [
+    const DriverHome(), // Screen for index 0
+    const Text("Driver Rides Screen"), // Placeholder for index 1
+    const Text("Driver Account Screen"), // Placeholder for index 2
+  ];
+  final List<Widget> _customerScreens = [
+    const CustomerHome(), // Screen for index 0
+    const Text("Customer Rides Screen"), // Placeholder for index 1
+    const Text("Customer Account Screen"), // Placeholder for index 2
+  ];
+  final List<Widget> _adminScreens = [
+    const AdminHome(), // Screen for index 0
+    const Text("Admin Dashboard Screen"), // Placeholder for index 1
+    const Text("Admin Screen"), // Placeholder for index 2
+    const Text("Admin Account Screen"), // Placeholder for index 3 (if needed)
+  ];
+
   @override
   void initState() {
     super.initState();
@@ -230,54 +250,28 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Widget _getScreen(int index, String role) {
+  List<Widget> _getCurrentScreenList(String role) {
     switch (role) {
       case 'Admin':
-        switch (index) {
-          case 0:
-            return const AdminHome();
-          case 1:
-            return const Text(
-              "Admin Dashboard Screen",
-            ); // Replace with your actual screen
-          case 2:
-            return const Text(
-              "Admin Screen",
-            ); // Replace with your actual screen
-          default:
-            return const Text('Error: Invalid Admin Screen');
-        }
+        return _adminScreens;
       case 'Driver':
-        switch (index) {
-          case 0:
-            return const DriverHome();
-          case 1:
-            return const Text(
-              "Driver Rides Screen",
-            ); // Replace with your actual screen
-          case 2:
-            return const Text(
-              "Driver Account Screen",
-            ); // Replace with your actual screen
-          default:
-            return const Text('Error: Invalid Driver Screen');
-        }
+        return _driverScreens;
       case 'Customer':
       default:
-        switch (index) {
-          case 0:
-            return const CustomerHome();
-          case 1:
-            return const Text(
-              "Customer Rides Screen",
-            ); // Replace with your actual screen
-          case 2:
-            return const Text(
-              "Customer Account Screen",
-            ); // Replace with your actual screen
-          default:
-            return const Text('Error: Invalid Customer Screen');
-        }
+        return _customerScreens;
+    }
+  }
+
+  // This method is no longer strictly needed if IndexedStack directly uses the list,
+  // but can be kept if you need to get a single screen instance for other purposes.
+  Widget _getScreen(int index, String role) {
+    final screenList = _getCurrentScreenList(role);
+    if (index >= 0 && index < screenList.length) {
+      return screenList[index];
+    } else {
+      // Fallback for invalid index, though IndexedStack handles this by crashing if index is out of bounds.
+      // Consider logging this error.
+      return Text('Error: Invalid screen index $index for role $role');
     }
   }
 
@@ -395,9 +389,13 @@ class _HomeScreenState extends State<HomeScreen> {
   }
   
     Widget _buildMainScreen(String role) {
+      final List<Widget> currentScreenList = _getCurrentScreenList(role);
       return Scaffold(
         drawer: const AppDrawer(),
-        body: _getScreen(_selectedIndex, role),
+        body: IndexedStack( // Use IndexedStack to preserve state of screens
+          index: _selectedIndex,
+          children: currentScreenList,
+        ),
         bottomNavigationBar: BottomNavigationBar(
           items: _getNavigationItems(role),
           currentIndex: _selectedIndex,

@@ -117,4 +117,26 @@ class MapUtils {
     }
     return null;
   }
+
+  // Helper to find the index of the closest point in a list of LatLngs to a given point
+  // This is a simple implementation; more sophisticated ones exist (e.g., using perpendicular distance to segments)
+  static int findClosestPointIndex(LatLng point, List<LatLng> pathPoints) {
+    if (pathPoints.isEmpty) return -1;
+
+    double minDistanceSq = -1;
+    int closestIndex = -1;
+
+    for (int i = 0; i < pathPoints.length; i++) {
+      final pathPoint = pathPoints[i];
+      final double dLat = pathPoint.latitude - point.latitude;
+      final double dLng = pathPoint.longitude - point.longitude;
+      final double distanceSq = dLat * dLat + dLng * dLng; // Using squared distance for comparison efficiency
+
+      if (closestIndex == -1 || distanceSq < minDistanceSq) {
+        minDistanceSq = distanceSq;
+        closestIndex = i;
+      }
+    }
+    return closestIndex;
+  }
 }

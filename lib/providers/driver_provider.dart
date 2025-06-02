@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
-import 'ride_request_provider.dart'; // Import RideRequestProvider
 import '../services/firestore_service.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import '../screens/home_screen.dart'; // Import HomeScreen
+import '../screens/home_screen.dart'; 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:geoflutterfire3/geoflutterfire3.dart'; // Import geoflutterfire3
-import 'package:latlong2/latlong.dart' as latlong2; // Import for latlong2.LatLng
+import 'package:geoflutterfire3/geoflutterfire3.dart';  
+import 'package:cloud_functions/cloud_functions.dart'; 
 
 class DriverProvider extends ChangeNotifier {
   final AuthService _authService = AuthService();
@@ -17,13 +15,13 @@ class DriverProvider extends ChangeNotifier {
   String? _currentKijiweId;
   bool _isLoading = false;
   Map<String, dynamic>? _pendingRideRequestDetails;
+  Map<String, dynamic>? _driverProfileData; // To store driver-specific profile data
 
   bool get isLoading => _isLoading;
   bool get isOnline => _isOnline;
   String? get currentKijiweId => _currentKijiweId;
   Map<String, dynamic>? get pendingRideRequestDetails => _pendingRideRequestDetails;
-
-
+  Map<String, dynamic>? get driverProfileData => _driverProfileData; // Getter for driver profile
 
   void setLoading(bool value) {
     _isLoading = value;
@@ -35,6 +33,7 @@ class DriverProvider extends ChangeNotifier {
     if (userId == null) {
       _isOnline = false;
       _currentKijiweId = null;
+      _driverProfileData = null;
       // No setLoading needed if returning early, but notify for UI consistency
       notifyListeners();
       return;
@@ -48,18 +47,22 @@ class DriverProvider extends ChangeNotifier {
           final driverProfile = data['driverProfile'] as Map<String, dynamic>;
           _isOnline = driverProfile['isOnline'] ?? false;
           _currentKijiweId = driverProfile['kijiweId'] as String?;
+          _driverProfileData = Map<String, dynamic>.from(driverProfile); // Store the profile
         } else { // Driver profile doesn't exist
           _isOnline = false;
           _currentKijiweId = null;
+          _driverProfileData = null;
         }
       } else { // User document doesn't exist
         _isOnline = false;
         _currentKijiweId = null;
+        _driverProfileData = null;
       }
     } catch (e) {
       debugPrint("Error loading driver data: $e");
       _isOnline = false; // Reset on error
       _currentKijiweId = null;
+      _driverProfileData = null;
     } finally {
       setLoading(false); // This will also call notifyListeners()
     }
@@ -288,17 +291,16 @@ class DriverProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> updateDriverPosition(LatLng position) async {
+  Future<void> updateDriverPosition(LatLng position, double? heading) async {
     // Implement your backend API call to update driver position
     final userId = _authService.currentUser?.uid;
     if (userId == null) return;
     try {
-      // Convert google_maps_flutter.LatLng to latlong2.LatLng
-      final latlong2Position = latlong2.LatLng(
-        position.latitude,
-        position.longitude,
+      await _firestoreService.updateDriverActiveLocation(
+        userId,
+        position, // Pass the LatLng object directly
+        heading,
       );
-      await _firestoreService.updateUserLocation(userId, latlong2Position);
       notifyListeners();
     } catch (e) {
       throw Exception('Failed to update position: $e');
@@ -308,162 +310,190 @@ class DriverProvider extends ChangeNotifier {
   // Context is needed if you plan to show SnackBars or navigate from here
   Future<void> acceptRideRequest(BuildContext context, String rideId, String customerId) async {
     final userId = _authService.currentUser?.uid;
-    if (userId == null) throw Exception('Driver not logged in');
-    // setLoading(true); // RideRequestProvider might handle its own loading for this
+    if (userId == null) {
+      throw Exception('Driver not logged in');
+    }
+    setLoading(true);
     try {
-      // Update RideRequest status in Firestore (via RideRequestProvider or directly if simpler for now)
-      await _updateDriverProfileInFirestore( // Call internal method
-        userId: userId,
-        isOnline: true, // Still online
-        statusString: "goingToPickup",
-      );
-      // Call RideRequestProvider to handle the ride request update
-      await Provider.of<RideRequestProvider>(context, listen: false).acceptRideByDriver(rideId, customerId);
+      HttpsCallable callable = FirebaseFunctions.instance.httpsCallable('handleDriverRideAction');
+      final result = await callable.call(<String, dynamic>{
+        'rideRequestId': rideId,
+        'action': 'accept',
+        // customerId is implicitly known by the backend via rideId
+      });
+      debugPrint("Cloud function 'acceptRide' result: ${result.data}");
 
-      // Remove driver from Kijiwe queue as they are now on a ride
-      if (_currentKijiweId != null) {
-        await _firestoreService.leaveKijiweQueue(_currentKijiweId!, userId);
-      }
-      // Potentially update local state if needed for UI
       clearPendingRide(); // Clear the request from the UI
       notifyListeners();
     } catch (e) {
-      throw Exception('Failed to accept ride: $e');
+      debugPrint('Error calling handleDriverRideAction (accept): $e');
+      if (e is FirebaseFunctionsException) {
+        throw Exception('Failed to accept ride: ${e.message}');
+      }
+      throw Exception('Failed to accept ride: ${e.toString()}');
     } finally {
-      // setLoading(false);
+      setLoading(false);
     }
   }
 
   Future<void> declineRideRequest(BuildContext context, String rideId, String customerId) async {
     final userId = _authService.currentUser?.uid;
-    if (userId == null) throw Exception('Driver not logged in');
-    // setLoading(true);
+    if (userId == null) {
+      throw Exception('Driver not logged in');
+    }
+    setLoading(true);
     try {
-      await Provider.of<RideRequestProvider>(context, listen: false).declineRideByDriver(rideId, customerId);
+      HttpsCallable callable = FirebaseFunctions.instance.httpsCallable('handleDriverRideAction');
+      final result = await callable.call(<String, dynamic>{
+        'rideRequestId': rideId,
+        'action': 'decline',
+      });
+      debugPrint("Cloud function 'declineRide' result: ${result.data}");
 
-      // Potentially update local state if needed for UI
       clearPendingRide(); // Clear the request from the UI
       notifyListeners();
     } catch (e) {
-      throw Exception('Failed to decline ride: $e');
+      debugPrint('Error calling handleDriverRideAction (decline): $e');
+      if (e is FirebaseFunctionsException) {
+        throw Exception('Failed to decline ride: ${e.message}');
+      }
+      throw Exception('Failed to decline ride: ${e.toString()}');
     } finally {
-      // setLoading(false);
+      setLoading(false);
     }
   }
 
   // Confirm arrival at pickup location
   Future<void> confirmArrival(BuildContext context, String rideId, String customerId) async {
     final userId = _authService.currentUser?.uid;
-    if (userId == null) throw Exception('Driver not logged in');
-    // setLoading(true);
+    if (userId == null) {
+      throw Exception('Driver not logged in');
+    }
+    setLoading(true);
     try {
-      await _updateDriverProfileInFirestore( // Call internal method
-        userId: userId,
-        isOnline: true, // Still online
-        statusString: "arrivedAtPickup",
-      );
-      await Provider.of<RideRequestProvider>(context, listen: false).confirmArrivalByDriver(rideId, customerId);
-      notifyListeners();
+      HttpsCallable callable = FirebaseFunctions.instance.httpsCallable('handleDriverRideAction');
+      final result = await callable.call(<String, dynamic>{
+        'rideRequestId': rideId,
+        'action': 'arrivedAtPickup',
+      });
+      debugPrint("Cloud function 'arrivedAtPickup' result: ${result.data}");
+      // UI updates will come from Firestore stream listener for the ride request
+      notifyListeners(); // Notify for isLoading state change
     } catch (e) {
-      throw Exception('Failed to confirm arrival: $e');
+      debugPrint('Error calling handleDriverRideAction (arrivedAtPickup): $e');
+      if (e is FirebaseFunctionsException) {
+        throw Exception('Failed to confirm arrival: ${e.message}');
+      }
+      throw Exception('Failed to confirm arrival: ${e.toString()}');
     } finally {
-      // setLoading(false);
+      setLoading(false);
     }
   }
 
   Future<void> startRide(BuildContext context, String rideId, String customerId) async {
     final userId = _authService.currentUser?.uid;
-    if (userId == null) throw Exception('Driver not logged in');
-    // setLoading(true);
+    if (userId == null) {
+      throw Exception('Driver not logged in');
+    }
+    setLoading(true);
     try {
-      await _updateDriverProfileInFirestore( // Call internal method
-        userId: userId,
-        isOnline: true, // Still online
-        statusString: "onRide",
-      );
-      await Provider.of<RideRequestProvider>(context, listen: false).startRideByDriver(rideId, customerId);
+      HttpsCallable callable = FirebaseFunctions.instance.httpsCallable('handleDriverRideAction');
+      final result = await callable.call(<String, dynamic>{
+        'rideRequestId': rideId,
+        'action': 'startRide',
+      });
+      debugPrint("Cloud function 'startRide' result: ${result.data}");
       notifyListeners();
     } catch (e) {
-      throw Exception('Failed to start ride: $e');
+      debugPrint('Error calling handleDriverRideAction (startRide): $e');
+      if (e is FirebaseFunctionsException) {
+        throw Exception('Failed to start ride: ${e.message}');
+      }
+      throw Exception('Failed to start ride: ${e.toString()}');
     } finally {
-      // setLoading(false);
+      setLoading(false);
     }
   }
 
   Future<void> completeRide(BuildContext context, String rideId, String customerId) async {
     final userId = _authService.currentUser?.uid;
-    if (userId == null) throw Exception('Driver not logged in');
-    // setLoading(true);
+    if (userId == null) {
+      throw Exception('Driver not logged in');
+    }
+    setLoading(true);
     try {
-      await _updateDriverProfileInFirestore( // Call internal method
-        userId: userId,
-        isOnline: true, // Still online, ready for next ride
-        statusString: "waitingForRide", // Or "returningToKijiwe" then "waitingForRide"
-      );
-      // Update the ride request status in Firestore
-      await Provider.of<RideRequestProvider>(context, listen: false).completeRideByDriver(rideId, customerId);
-
-      // Optionally, you might want to update the driver's earnings or other metrics
-      // For example, you could update a 'totalEarnings' field in the driver profile
-      // Optionally, you might want to update the ride history or other related data
-      // For example, you could create a ride history entry here
-      // Increment completedRides
-      await FirebaseFirestore.instance.collection('users').doc(userId).update({
-        'driverProfile.completedRides': FieldValue.increment(1),
+      HttpsCallable callable = FirebaseFunctions.instance.httpsCallable('handleDriverRideAction');
+      final result = await callable.call(<String, dynamic>{
+        'rideRequestId': rideId,
+        'action': 'completeRide',
       });
-      // If driver is still online and kijiweId is set, add them back to the queue
-      if (_isOnline && _currentKijiweId != null) {
-        await _firestoreService.joinKijiweQueue(_currentKijiweId!, userId);
-      }
+      debugPrint("Cloud function 'completeRide' result: ${result.data}");
+
+      // The Cloud Function now handles updating driver's status and Kijiwe queue.
       notifyListeners();
     } catch (e) {
-      throw Exception('Failed to complete ride: $e');
+      debugPrint('Error calling handleDriverRideAction (completeRide): $e');
+      if (e is FirebaseFunctionsException) {
+        throw Exception('Failed to complete ride: ${e.message}');
+      }
+      throw Exception('Failed to complete ride: ${e.toString()}');
     } finally {
-      // setLoading(false);
+      setLoading(false);
     }
   }
 
   Future<void> rateCustomer(BuildContext context, String customerId, double rating, String rideId, {String? comment}) async {
     final driverId = _authService.currentUser?.uid;
-    if (driverId == null) throw Exception("Driver not authenticated to rate.");
+    if (driverId == null) {
+      throw Exception("Driver not authenticated to rate.");
+    }
+    setLoading(true);
     try {
-      await Provider.of<RideRequestProvider>(context, listen: false).rateUser(
-        rideId: rideId,
-        ratedUserId: customerId,
-        ratedUserRole: "customer",
-        rating: rating,
-        comment: comment,
-      );
+      HttpsCallable callable = FirebaseFunctions.instance.httpsCallable('handleDriverRideAction');
+      final result = await callable.call(<String, dynamic>{
+        'rideRequestId': rideId,
+        'action': 'rateCustomer',
+        'rating': rating, // Key should be a String literal
+        'comment': comment, // Key should be a String literal
+        // customerId is implicitly known by the backend via rideId
+      });
+      debugPrint("Cloud function 'rateCustomer' result: ${result.data}");
       notifyListeners();
     } catch (e) {
-      throw Exception('Failed to rate customer: $e');
+      debugPrint('Error calling handleDriverRideAction (rateCustomer): $e');
+      if (e is FirebaseFunctionsException) {
+        throw Exception('Failed to rate customer: ${e.message}');
+      }
+      throw Exception('Failed to rate customer: ${e.toString()}');
+    } finally {
+      setLoading(false);
     }
   }
 
   Future<void> cancelRide(BuildContext context, String rideId, String customerId) async {
     final userId = _authService.currentUser?.uid;
-    if (userId == null) throw Exception('Driver not logged in');
-    // setLoading(true);
+    if (userId == null) {
+      throw Exception('Driver not logged in');
+    }
+    setLoading(true);
     try {
-      // Update driver's status back to available or as appropriate
-      await _updateDriverProfileInFirestore( // Call internal method
-        userId: userId,
-        isOnline: true, // Still online
-        statusString: "waitingForRide",
-      );
-      await Provider.of<RideRequestProvider>(context, listen: false).cancelRideByDriver(rideId, customerId);
+      HttpsCallable callable = FirebaseFunctions.instance.httpsCallable('handleDriverRideAction');
+      final result = await callable.call(<String, dynamic>{
+        'rideRequestId': rideId,
+        'action': 'cancelRideByDriver',
+      });
+      debugPrint("Cloud function 'cancelRideByDriver' result: ${result.data}");
 
-      // If driver is still online and kijiweId is set, add them back to the queue
-      if (_isOnline && _currentKijiweId != null) {
-        await _firestoreService.joinKijiweQueue(_currentKijiweId!, userId);
-      }
-      // send notification to customer
-      // await ApiService.sendNotificationToCustomer(customerId, "Ride Cancelled", "Your ride has been cancelled by the driver.");
+      // Cloud Function handles driver status and Kijiwe queue.
       notifyListeners();
     } catch (e) {
-      throw Exception('Failed to cancel ride: $e');
+      debugPrint('Error calling handleDriverRideAction (cancelRideByDriver): $e');
+      if (e is FirebaseFunctionsException) {
+        throw Exception('Failed to cancel ride: ${e.message}');
+      }
+      throw Exception('Failed to cancel ride: ${e.toString()}');
     } finally {
-      // setLoading(false);
+      setLoading(false);
     }
   }
 }

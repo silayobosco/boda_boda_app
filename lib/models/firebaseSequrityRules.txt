@@ -15,16 +15,22 @@ service cloud.firestore {
     match /rideRequests/{rideRequestId} {
       // Allow customers to create ride requests
       allow create: if request.auth != null && 
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['Customer', 'Driver', ''];
+        // Check if user document exists and role allows creation
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['Customer', 'Driver', 'Both', '']) || request.resource.data.customerId == request.auth.uid;
 
       // Allow authenticated users to read ride requests
       allow read: if request.auth != null;
 
-      // Allow customers or assigned drivers to update ride requests
+      // Allow customers to update (e.g., cancel their own ride before a driver is assigned or if allowed by app logic)
+      // Allow drivers to update (accept, decline, progress, complete, cancel)
+      // DRIVER UPDATES (accept, decline, progress, complete, cancel by driver) ARE NOW HANDLED BY CLOUD FUNCTIONS.
+      // Customer can only cancel their own ride under specific conditions.
       allow update: if request.auth != null && (
-        resource.data.customerId == request.auth.uid || // Check existing document data
-        resource.data.driverId == request.auth.uid ||
-        request.resource.data.driverId == request.auth.uid // Allow assigning a new driverId
+        // Customer can update their own ride (e.g., to cancel if status allows)
+        (resource.data.customerId == request.auth.uid &&
+          request.resource.data.status == 'cancelled_by_customer' &&
+          (resource.data.status == 'pending_match' || resource.data.status == 'pending_driver_acceptance' || resource.data.status == 'accepted') // Customer can cancel even if accepted, before pickup
+        )
       );
       // Prevent deletion of ride requests
       allow delete: if false;
@@ -63,22 +69,36 @@ service cloud.firestore {
           resource.data.customerId == request.auth.uid;
       }
 
-      // Kijiwe Collection
-      match /kijiwe/{kijiweId} {
-        // Allow any authenticated user to read Kijiwe information (e.g., for the dropdown)
-        allow read: if request.auth != null;
-        // Allow an authenticated user to create a new Kijiwe
-        // (The driver becomes the adminId of this new Kijiwe)
-        allow create: if request.auth != null && request.resource.data.adminId == request.auth.uid;
-        
-        // Allow updates by admin, or for users to manage their presence in permanentMembers or queue (used in registration)
-        allow update: if request.auth != null && (
-        resource.data.adminId == request.auth.uid || // Admin can update
-        (request.resource.data.permanentMembers != null && // User modifying permanentMembers
-          (request.resource.data.permanentMembers.hasAny([request.auth.uid]) || resource.data.permanentMembers.hasAny([request.auth.uid]))
-        ) ||
-        (request.resource.data.queue != null && // User modifying queue (e.g. adding self during registration)
-          request.resource.data.queue.size() != resource.data.queue.size() // Basic check for queue modification
+    // Kijiwe Collection
+    match /kijiwe/{kijiweId} {
+      // Allow any authenticated user to read Kijiwe information (e.g., for the dropdown)
+      allow read: if request.auth != null;
+      // Allow an authenticated user to create a new Kijiwe
+      // (The driver becomes the adminId of this new Kijiwe)
+      allow create: if request.auth != null && request.resource.data.adminId == request.auth.uid;
+      
+      // Allow updates by admin, or for drivers to manage their presence in the queue of their assigned Kijiwe,
+      // or add themselves to permanentMembers of their assigned Kijiwe.
+      allow update: if request.auth != null && (
+      resource.data.adminId == request.auth.uid || // Admin can update
+        // Case 1: Admin of the Kijiwe can update anything
+        resource.data.adminId == request.auth.uid ||
+
+        // Case 2: Driver updating their own Kijiwe's queue or adding themselves to permanentMembers
+        (
+          // Verify user is a driver and this kijiweId matches their profile's kijiweId
+          exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Driver' &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.driverProfile.kijiweId == kijiweId &&
+
+          // Check that only 'queue' or 'permanentMembers' are being written to.
+          // This handles arrayUnion/arrayRemove operations correctly.
+          (
+            (request.writeFields.size() == 1 && request.writeFields[0] == 'queue') ||
+            (request.writeFields.size() == 1 && request.writeFields[0] == 'permanentMembers')
+            // If updating both 'queue' and 'permanentMembers' simultaneously by a driver was a requirement,
+            // this part of the rule would need to be adjusted.
+          )
         )
       );
     }
