@@ -27,6 +27,13 @@ class RideRequestModel {
   final String? customerCommentToDriver;
   final double? driverRatingToCustomer;
   final String? driverCommentToCustomer;
+  // New denormalized driver fields
+  final String? driverGender;
+  final String? driverAgeGroup;
+  final String? driverLicenseNumber;
+  final String? driverVehicleType; // Added for consistency
+  final double? driverAverageRating;
+  final int? driverCompletedRidesCount;
 
 
   RideRequestModel({
@@ -53,6 +60,12 @@ class RideRequestModel {
     this.driverRatingToCustomer,
     this.driverCommentToCustomer,
     this.customerDetails,
+    this.driverGender,
+    this.driverAgeGroup,
+    this.driverLicenseNumber,
+    this.driverVehicleType,
+    this.driverAverageRating,
+    this.driverCompletedRidesCount,
   });
 
   factory RideRequestModel.fromJson(Map<String, dynamic> json, String rideRequestId) {
@@ -108,6 +121,12 @@ class RideRequestModel {
       customerCommentToDriver: json['customerCommentToDriver'] as String?,
       driverRatingToCustomer: (json['driverRatingToCustomer'] as num?)?.toDouble(),
       driverCommentToCustomer: json['driverCommentToCustomer'] as String?,
+      driverGender: json['driverGender'] as String?,
+      driverAgeGroup: json['driverAgeGroup'] as String?,
+      driverLicenseNumber: json['driverLicenseNumber'] as String?,
+      driverVehicleType: json['driverVehicleType'] as String?,
+      driverAverageRating: (json['driverAverageRating'] as num?)?.toDouble(),
+      driverCompletedRidesCount: (json['driverCompletedRidesCount'] as num?)?.toInt(),
     );
   }
 
@@ -141,6 +160,12 @@ class RideRequestModel {
       'driverRatingToCustomer': driverRatingToCustomer,
       'driverCommentToCustomer': driverCommentToCustomer,
       'customerDetails': customerDetails,
+      'driverGender': driverGender,
+      'driverAgeGroup': driverAgeGroup,
+      'driverLicenseNumber': driverLicenseNumber,
+      'driverVehicleType': driverVehicleType,
+      'driverAverageRating': driverAverageRating,
+      'driverCompletedRidesCount': driverCompletedRidesCount,
     };
   }
 
@@ -168,6 +193,12 @@ class RideRequestModel {
     double? driverRatingToCustomer,
     String? driverCommentToCustomer,
     String? customerDetails,
+    String? driverGender,
+    String? driverAgeGroup,
+    String? driverLicenseNumber,
+    String? driverVehicleType,
+    double? driverAverageRating,
+    int? driverCompletedRidesCount,
   }) {
     return RideRequestModel(
       // Corrected logic: use the provided 'id' parameter if not null, otherwise use current instance's 'id'.
@@ -194,6 +225,12 @@ class RideRequestModel {
       driverRatingToCustomer: driverRatingToCustomer ?? this.driverRatingToCustomer,
       driverCommentToCustomer: driverCommentToCustomer ?? this.driverCommentToCustomer,
       customerDetails: customerDetails ?? this.customerDetails,
+      driverGender: driverGender ?? this.driverGender,
+      driverAgeGroup: driverAgeGroup ?? this.driverAgeGroup,
+      driverLicenseNumber: driverLicenseNumber ?? this.driverLicenseNumber,
+      driverVehicleType: driverVehicleType ?? this.driverVehicleType,
+      driverAverageRating: driverAverageRating ?? this.driverAverageRating,
+      driverCompletedRidesCount: driverCompletedRidesCount ?? this.driverCompletedRidesCount,
     );
   }
 
@@ -206,8 +243,8 @@ class RideRequestModel {
         'customerName: $customerName, pickupAddressName: $pickupAddressName, driverName: $driverName, customerProfileImageUrl: $customerProfileImageUrl, '
         'driverProfileImageUrl: $driverProfileImageUrl, dropoffAddressName: $dropoffAddressName, '
         'customerRatingToDriver: $customerRatingToDriver, customerCommentToDriver: $customerCommentToDriver, '
-        'driverRatingToCustomer: $driverRatingToCustomer, driverCommentToCustomer: $driverCommentToCustomer, '
-        'customerDetails: $customerDetails)';
+        'driverRatingToCustomer: $driverRatingToCustomer, driverCommentToCustomer: $driverCommentToCustomer, customerDetails: $customerDetails, driverVehicleType: $driverVehicleType, '
+        'driverGender: $driverGender, driverAgeGroup: $driverAgeGroup, driverLicenseNumber: $driverLicenseNumber, driverAverageRating: $driverAverageRating, driverCompletedRidesCount: $driverCompletedRidesCount)';
   }
 }
 

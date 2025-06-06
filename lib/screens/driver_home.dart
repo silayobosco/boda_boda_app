@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert'; // Added for jsonDecode
 import '/utils/map_utils.dart';
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart' as gmf; // Hide LatLng to avoid conflict with latlong2
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../providers/driver_provider.dart';
@@ -11,6 +11,7 @@ import 'package:cloud_firestore/cloud_firestore.dart'; // For fetching user data
 import '../services/firestore_service.dart'; // Import FirestoreService
 import '../services/auth_service.dart'; // Import AuthService to get current user ID
 import '../models/Ride_Request_Model.dart'; // Import RideRequestModel
+import 'package:latlong2/latlong.dart' as ll; // Use latlong2 for calculations
 import '../utils/ui_utils.dart'; // Import UI Utils for styles and spacing
 
 class DriverHome extends StatefulWidget {
@@ -25,21 +26,21 @@ class _DriverHomeState extends State<DriverHome> with AutomaticKeepAliveClientMi
   bool get wantKeepAlive => true; // Add this to keep the state alive
 
 
-  GoogleMapController? _mapController;
+  gmf.GoogleMapController? _mapController;
   // bool _isOnline = false; // Will use DriverProvider.isOnline directly
   // bool _hasActiveRide = false; // This will be determined by _activeRideDetails != null
   RideRequestModel? _activeRideDetails; // Changed from Map<String, dynamic> to RideRequestModel
   double? _currentHeading;
-  BitmapDescriptor? _bodaIcon; // Define _carIcon
-  LatLng? _lastPosition; // Define _lastPosition
+  gmf.BitmapDescriptor? _bodaIcon; // Define _carIcon
+  ll.LatLng? _lastPosition; // Define _lastPosition using latlong2
   bool _isIconLoaded = false; // New 
   
     // Route drawing state
-  final Set<Polyline> _activeRoutePolylines = {};
-  final Set<Marker> _rideSpecificMarkers = {}; // Markers for current ride (proposed or active)
-  List<LatLng> _fullProposedRoutePoints = []; // Points for the customer's journey (pickup -> destination)
-  List<LatLng> _driverToPickupRoutePoints = []; // Points for driver to customer's pickup
-  List<LatLng> _entireActiveRidePoints = []; // Points for the complete journey: Driver -> Cust.Pickup -> Cust.Dest
+  final Set<gmf.Polyline> _activeRoutePolylines = {};
+  final Set<gmf.Marker> _rideSpecificMarkers = {}; // Markers for current ride (proposed or active)
+  List<gmf.LatLng> _fullProposedRoutePoints = []; // Points for the customer's journey (pickup -> destination)
+  List<gmf.LatLng> _driverToPickupRoutePoints = []; // Points for driver to customer's pickup
+  List<gmf.LatLng> _entireActiveRidePoints = []; // Points for the complete journey: Driver -> Cust.Pickup -> Cust.Dest
   StreamSubscription? _activeRideSubscription; // To listen to the active ride document
   bool _isLoadingRoute = false;
   // String _currentRouteType = ''; // No longer needed, specific variables will be used
@@ -53,10 +54,16 @@ class _DriverHomeState extends State<DriverHome> with AutomaticKeepAliveClientMi
   String? _pendingRideCustomerName; // To store fetched customer name
   String? _currentlyDisplayedProposedRideId; // To track the ID of the ride for which a proposed route is shown
   final String _googlePlacesApiKey = 'AIzaSyCkKD8FP-r9bqi5O-sOjtuksT-0Dr9dgeg'; // TODO: Move to a config file
+  
+  // Ride Tracking Variables
+  DateTime? _rideTrackingStartTime;
+  ll.LatLng? _rideTrackingLastLocation;
+  double _trackedDistanceKm = 0.0;
+  int _trackedDrivingDurationSeconds = 0;
 
     // Define the listener method
   void _locationProviderListener() {
-    final locationProvider = Provider.of<LocationProvider>(context, listen: false);
+    final locationProvider = Provider.of<LocationProvider>(context, listen: false); // Listen: false is correct here
     if (mounted && locationProvider.currentLocation != null) { // Check if mounted before calling setState
       _updateDriverLocationAndMap(locationProvider);
     }
@@ -94,6 +101,7 @@ void dispose() {
   driverProvider.removeListener(_onDriverProviderChange);
   _activeRideSubscription?.cancel();
   super.dispose();
+  debugPrint("DriverHome: dispose() completed.");
 }
 
 void _onDriverProviderChange() {
@@ -129,12 +137,12 @@ void _onDriverProviderChange() {
   // If pendingRideRequestDetails is null but _activeRideDetails is NOT null, we do nothing here,
   // as the active ride sheet (_buildActiveRideSheet) will be shown.
 }
-
-  void _updateDynamicPolylineForProgress(LatLng driverCurrentLocation) {
+  // This method is called by the LocationProvider listener
+  void _updateDynamicPolylineForProgress(gmf.LatLng driverCurrentLocation) { // This is correct
     if (!mounted || _activeRideDetails == null) return;
 
     final status = _activeRideDetails!.status;
-    List<LatLng> basePathPoints;
+    List<gmf.LatLng> basePathPoints;
     Color polylineColor;
     String polylineIdSuffix;
 
@@ -156,12 +164,12 @@ void _onDriverProviderChange() {
     int closestPointIndex = MapUtils.findClosestPointIndex(driverCurrentLocation, basePathPoints);
     if (closestPointIndex == -1 || closestPointIndex >= basePathPoints.length) return;
 
-    List<LatLng> remainingPath = [driverCurrentLocation, ...basePathPoints.sublist(closestPointIndex)];
+    List<gmf.LatLng> remainingPath = [driverCurrentLocation, ...basePathPoints.sublist(closestPointIndex)];
 
-    setState(() {
+    if (mounted) setState(() {
       _activeRoutePolylines.clear(); // Clear previous dynamic polyline
-      _activeRoutePolylines.add(Polyline(
-        polylineId: PolylineId('dynamic_route_$polylineIdSuffix'),
+      _activeRoutePolylines.add(gmf.Polyline(
+        polylineId: gmf.PolylineId('dynamic_route_$polylineIdSuffix'),
         points: remainingPath,
         color: polylineColor,
         width: 6,
@@ -171,11 +179,11 @@ void _onDriverProviderChange() {
 
   Future<void> _loadCustomMarker() async {
     try {
-      _bodaIcon = await BitmapDescriptor.fromAssetImage(
+      _bodaIcon = await gmf.BitmapDescriptor.fromAssetImage(
         const ImageConfiguration(size: Size(48, 48)),
         'assets/boda_marker.png',
       );
-    } catch (e) {
+    } catch (e) { // This is correct
       debugPrint("Error loading custom marker: $e");
       // _bodaIcon will remain null, default marker will be used by _buildDriverMarker
     }
@@ -206,23 +214,23 @@ void _onDriverProviderChange() {
       body: Stack(
         children: [
           // Base Map (reusing similar logic from CustomerHome)
-          GoogleMap(
-            initialCameraPosition: CameraPosition(
-              target: locationProvider.currentLocation is LatLng
-                  ? locationProvider.currentLocation as LatLng // Cast to LatLng
-                  : const LatLng(0, 0),
-              zoom: 17, // Closer zoom for driver view
+          gmf.GoogleMap(
+            initialCameraPosition: gmf.CameraPosition(
+              target: locationProvider.currentLocation is gmf.LatLng
+                  ? locationProvider.currentLocation as gmf.LatLng
+                  : const gmf.LatLng(0, 0),
+              zoom: 17,
               bearing: _currentHeading ?? 0,
             ),
-            onMapCreated: (GoogleMapController controller) {
+            onMapCreated: (gmf.GoogleMapController controller) {
               _mapController = controller;
               _centerMapOnDriver();
             },
-            myLocationEnabled: false, // We'll use custom marker
-            markers: _isIconLoaded ? _buildDriverMarker(locationProvider) : {},
+            myLocationEnabled: false,
+            markers: _buildDriverMarker(locationProvider),
             onCameraMove: (position) {
               _currentHeading = position.bearing;
-            }, // Removed comma here
+            },
             polylines: _activeRoutePolylines,
           ),
 
@@ -696,17 +704,17 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
     return {'rideId': rideId, 'customerId': customerId};
   }
 
-  Set<Marker> _buildDriverMarker(LocationProvider locationProvider) {
-    if (locationProvider.currentLocation == null) return {};
+  Set<gmf.Marker> _buildDriverMarker(LocationProvider locationProvider) {
+    if (locationProvider.currentLocation == null || !_isIconLoaded) return _rideSpecificMarkers; // Only show ride markers if driver location/icon not ready
 
     return {
-      Marker(
-        markerId: MarkerId('driver'), // Use const if it's always the same
-        position: LatLng(
+      gmf.Marker(
+        markerId: gmf.MarkerId('driver'), // Use const if it's always the same
+        position: gmf.LatLng( // This is google_maps_flutter.LatLng
           locationProvider.currentLocation!.latitude,
           locationProvider.currentLocation!.longitude,
         ),
-        icon: _bodaIcon ?? BitmapDescriptor.defaultMarker,
+        icon: _bodaIcon ?? gmf.BitmapDescriptor.defaultMarker,
         rotation: _currentHeading ?? 0.0, // Ensure it's a double
         anchor: const Offset(0.5, 0.5),
         flat: true,
@@ -716,12 +724,12 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
     };
   }
   void _centerMapOnDriver() {
-    final locationProvider = Provider.of<LocationProvider>(context, listen: false);
+    final locationProvider = Provider.of<LocationProvider>(context, listen: false); // Listen: false is correct here
     if (locationProvider.currentLocation == null || _mapController == null) return;
 
-    _mapController?.animateCamera(
-      CameraUpdate.newLatLng(
-        LatLng(
+    _mapController?.animateCamera( // This LatLng is google_maps_flutter.LatLng
+      gmf.CameraUpdate.newLatLng(
+        gmf.LatLng(
           locationProvider.currentLocation!.latitude,
           locationProvider.currentLocation!.longitude,
         ),
@@ -754,26 +762,62 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
   void _updateDriverLocationAndMap(LocationProvider locationProvider) {
     if (!mounted) return; // Ensure widget is still mounted
 
+    final newLocation = locationProvider.currentLocation;
+    if (newLocation == null) return;
+
+    final newLatLng = ll.LatLng(newLocation.latitude, newLocation.longitude); // Use latlong2 for calculations
+
     try {
-      setState(() {
-        _lastPosition = LatLng(
-          locationProvider.currentLocation!.latitude,
-          locationProvider.currentLocation!.longitude,
-        );
+      if (mounted) {
+        setState(() {
+        // Update driver marker position and heading
+        _lastPosition = newLatLng;
         _currentHeading = locationProvider.heading;
+
+        // --- Ride Tracking Logic ---
+        if (_activeRideDetails?.status == 'onRide') {
+          if (_rideTrackingStartTime == null) {
+            _rideTrackingStartTime = DateTime.now();
+            _rideTrackingLastLocation = newLatLng; // Start tracking from the first location update in 'onRide'
+            _trackedDistanceKm = 0.0; // Reset distance
+            _trackedDrivingDurationSeconds = 0; // Reset duration
+          } else {
+            // Calculate distance since last update
+            if (_rideTrackingLastLocation != null) {
+              final distanceBetweenUpdates = const ll.Distance().as(ll.LengthUnit.Kilometer, _rideTrackingLastLocation!, newLatLng);
+              _trackedDistanceKm += distanceBetweenUpdates;
+            }
+            _rideTrackingLastLocation = newLatLng; // Update last location
+
+            // Calculate elapsed time since start
+            final elapsedDuration = DateTime.now().difference(_rideTrackingStartTime!);
+            _trackedDrivingDurationSeconds = elapsedDuration.inSeconds;
+          }
+          // Update dynamic polyline based on new driver location
+          _updateDynamicPolylineForProgress(gmf.LatLng(newLatLng.latitude, newLatLng.longitude)); // Pass google_maps_flutter.LatLng
+        } else {
+          // If not on ride, stop tracking
+          _rideTrackingStartTime = null;
+          _rideTrackingLastLocation = null;
+          // _trackedDistanceKm and _trackedDrivingDurationSeconds are reset in _resetActiveRideState
+        }
       });
+      }
 
       final driverProvider = Provider.of<DriverProvider>(context, listen: false);
       // Only center map on driver if online AND not on an active or pending ride
       if (driverProvider.isOnline && _mapController != null && _lastPosition != null && _activeRideDetails == null && driverProvider.pendingRideRequestDetails == null) {
         _mapController?.animateCamera(
-          CameraUpdate.newLatLng(_lastPosition!),
+          gmf.CameraUpdate.newLatLng(gmf.LatLng(_lastPosition!.latitude, _lastPosition!.longitude)), // This is correct
         );
       }
 
       if (driverProvider.isOnline && _lastPosition != null) {
-        driverProvider.updateDriverPosition(_lastPosition!, _currentHeading).catchError((e) {
-          // Catch errors from async operation updateDriverPosition
+        driverProvider.updateDriverPosition(
+          gmf.LatLng(_lastPosition!.latitude, _lastPosition!.longitude),
+          _currentHeading,
+        ).catchError((e) {
+          // Catch errors from async operation updateDriverPosition (e.g., Firestore write failure)
           debugPrint('Error in driverProvider.updateDriverPosition: $e');
         });
       }
@@ -813,7 +857,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
     debugPrint("DriverHome: _initiateFullProposedRideRouteForSheet - Starting route fetch for ID: $newRideRequestId");
     final dynamic dropoffLngDynamic = rideData['dropoffLng'];
     
-    List<LatLng> customerStops = [];
+    List<gmf.LatLng> customerStops = [];
     final dynamic stopsDataFromFCM = rideData['stops'];
 
     if (stopsDataFromFCM is String && stopsDataFromFCM.isNotEmpty) {
@@ -829,13 +873,13 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
                 final lat = double.tryParse(parts[0]);
                 final lng = double.tryParse(parts[1]);
                 if (lat != null && lng != null) {
-                  return LatLng(lat, lng);
+                  return gmf.LatLng(lat, lng);
                 }
               }
             }
           }
           return null; // Or throw an error for invalid stop format
-        }).whereType<LatLng>().toList();
+        }).whereType<gmf.LatLng>().toList();
       } catch (e) {
         debugPrint("DriverHome: Error parsing stops from FCM: $e. Stops data: $stopsDataFromFCM");
       }
@@ -856,21 +900,21 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
       return;
     }
 
-    final LatLng ridePickupLocation = LatLng(pLat, pLng);
-    final LatLng rideDropoffLocation = LatLng(dLat, dLng);
+    final gmf.LatLng ridePickupLocation = gmf.LatLng(pLat, pLng);
+    final gmf.LatLng rideDropoffLocation = gmf.LatLng(dLat, dLng);
 
     // Build waypoints list for the API: pickup first, then stops (if any)
-    final List<LatLng> waypointsForApi = [ridePickupLocation, ...customerStops];
+    final List<gmf.LatLng> waypointsForApi = [ridePickupLocation, ...customerStops];
 
-    // Get driver's current location
+    // Get driver's current location (using google_maps_flutter.LatLng for API call)
     final locationProvider = Provider.of<LocationProvider>(context, listen: false);
     if (locationProvider.currentLocation == null) {
       await locationProvider.updateLocation(); // Try to get location
       if (locationProvider.currentLocation == null) return; // Still not available
     }
-    final driverCurrentLocation = LatLng(locationProvider.currentLocation!.latitude, locationProvider.currentLocation!.longitude);
+    final gmf.LatLng driverCurrentLocation = gmf.LatLng(locationProvider.currentLocation!.latitude, locationProvider.currentLocation!.longitude); // This is correct
 
-    // Fetch customer name (already part of your existing logic)
+    // Fetch customer name
     final customerId = rideData['customerId'] as String?;
     if (customerId != null) {
       // ... (customer name fetching logic remains the same as in your current _initiateRouteToPickupForSheet)
@@ -892,23 +936,25 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
     await _fetchAndDisplayRoute(
         origin: driverCurrentLocation, // Origin is now driver's current location
         destination: rideDropoffLocation, // Destination is customer's final drop-off
-        waypoints: waypointsForApi, // Customer pickup is the first waypoint
+        waypoints: waypointsForApi.length > 1 ? waypointsForApi.sublist(1) : null, // Waypoints are stops, pickup is origin
         polylineColor: Colors.deepPurpleAccent,
         onRouteFetched: (distance, duration, points) {
           if (!mounted) return; // Guard setState in callback
           if (mounted && points != null && points.isNotEmpty) {
-            setState(() {
+            if (mounted) {
+              setState(() {
               // These now represent the ENTIRE journey from driver to customer's final destination
               _proposedRideDistance = distance;
               _proposedRideDuration = duration;
               _entireActiveRidePoints = points;
               _activeRoutePolylines.clear();
-              _activeRoutePolylines.add(Polyline(polylineId: const PolylineId('full_initial_route'), points: _entireActiveRidePoints, color: Colors.deepPurpleAccent, width: 6));
+              _activeRoutePolylines.add(gmf.Polyline(polylineId: const gmf.PolylineId('full_initial_route'), points: _entireActiveRidePoints, color: Colors.deepPurpleAccent, width: 6));
 
-              // Segment the points for later use
+              // Segment the points for later use: Driver -> Pickup, and Pickup -> Destination (with stops)
               int pickupIndexInEntireRoute = MapUtils.findClosestPointIndex(ridePickupLocation, _entireActiveRidePoints);
               if (pickupIndexInEntireRoute != -1) {
                 _driverToPickupRoutePoints = _entireActiveRidePoints.sublist(0, pickupIndexInEntireRoute + 1);
+                // The segment from pickup to destination (including stops)
                 _fullProposedRoutePoints = _entireActiveRidePoints.sublist(pickupIndexInEntireRoute);
               } else {
                 _driverToPickupRoutePoints = [];
@@ -916,42 +962,46 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
               }
 
               // Draw two polylines for the proposed route view
+              // Clear existing polylines first
               _activeRoutePolylines.clear();
+              // Add polyline from driver to pickup
               if (_driverToPickupRoutePoints.isNotEmpty) {
-                _activeRoutePolylines.add(Polyline(polylineId: const PolylineId('proposed_driver_to_pickup'), points: _driverToPickupRoutePoints, color: Colors.blueAccent, width: 6));
+                _activeRoutePolylines.add(gmf.Polyline(polylineId: const gmf.PolylineId('proposed_driver_to_pickup'), points: _driverToPickupRoutePoints, color: Colors.blueAccent, width: 6));
               }
+              // Add polyline from pickup to destination (including stops)
               if (_fullProposedRoutePoints.isNotEmpty) {
-                _activeRoutePolylines.add(Polyline(polylineId: const PolylineId('proposed_customer_journey'), points: _fullProposedRoutePoints, color: Colors.deepPurpleAccent, width: 6));
+                _activeRoutePolylines.add(gmf.Polyline(polylineId: const gmf.PolylineId('proposed_customer_journey'), points: _fullProposedRoutePoints, color: Colors.deepPurpleAccent, width: 6));
               }
               // Zoom to fit the entire initially proposed route
-              final LatLngBounds? bounds = MapUtils.boundsFromLatLngList(_entireActiveRidePoints);
-              if (_mapController != null) _mapController!.animateCamera(CameraUpdate.newLatLngBounds(bounds!, 60)); // Removed redundant bounds != null check
+              final gmf.LatLngBounds? bounds = MapUtils.boundsFromLatLngList(_entireActiveRidePoints); // This is correct
+              if (_mapController != null) _mapController!.animateCamera(gmf.CameraUpdate.newLatLngBounds(bounds!, 60)); // Fixed: use CameraUpdate instead of PolylineId
             });
+            }
           }
         });
 
     if (mounted) {
       debugPrint("DriverHome: _initiateFullProposedRideRouteForSheet - Setting markers for proposed ride ID: $newRideRequestId");
       setState(() {
-        _rideSpecificMarkers.clear();
-        _rideSpecificMarkers.add(Marker(
-          markerId: MarkerId('proposed_pickup'),
+        _rideSpecificMarkers.clear(); // Clear any previous ride-specific markers
+        _rideSpecificMarkers.add(gmf.Marker(
+          markerId: gmf.MarkerId('proposed_pickup'),
           position: ridePickupLocation, // Customer's pickup
-          infoWindow: InfoWindow(title: 'Pickup: ${rideData['pickupAddressName'] as String? ?? 'Customer Pickup'}'),
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+          infoWindow: gmf.InfoWindow(title: 'Pickup: ${rideData['pickupAddressName'] as String? ?? 'Customer Pickup'}'),
+          icon: gmf.BitmapDescriptor.defaultMarkerWithHue(gmf.BitmapDescriptor.hueGreen),
         ));
-        _rideSpecificMarkers.add(Marker(
-          markerId: MarkerId('proposed_dropoff'),
+        _rideSpecificMarkers.add(gmf.Marker(
+          markerId: gmf.MarkerId('proposed_dropoff'),
           position: rideDropoffLocation,
-          infoWindow: InfoWindow(title: 'Destination: ${rideData['dropoffAddressName'] ?? 'Customer Destination'}'),
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+          infoWindow: gmf.InfoWindow(title: 'Destination: ${rideData['dropoffAddressName'] ?? 'Customer Destination'}'),
+          icon: gmf.BitmapDescriptor.defaultMarkerWithHue(gmf.BitmapDescriptor.hueRed),
         ));
-                customerStops.asMap().forEach((index, stopLatLng) {
-          _rideSpecificMarkers.add(Marker(
-            markerId: MarkerId('proposed_stop_$index'),
+        customerStops.asMap().forEach((index, stopLatLng) {
+        _rideSpecificMarkers.add(gmf.Marker(
+            markerId: gmf.MarkerId('proposed_stop_$index'),
             position: stopLatLng,
-            infoWindow: InfoWindow(title: 'Stop ${index + 1}'), // You might need stop names from rideData
-            icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
+            infoWindow: gmf.InfoWindow(title: 'Stop ${index + 1}'), // You might need stop names from rideData
+            icon: gmf.BitmapDescriptor.defaultMarkerWithHue(gmf.BitmapDescriptor.hueOrange),
           ));
         });
       });
@@ -959,25 +1009,27 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
     // Update the ID of the currently displayed proposed route
     if (mounted && _activeRoutePolylines.isNotEmpty && !_isLoadingRoute) {
       // Set this regardless of whether markers were added, as long as polyline is there
-      debugPrint("DriverHome: _initiateFullProposedRideRouteForSheet - Setting _currentlyDisplayedProposedRideId to: $newRideRequestId");
+      debugPrint("DriverHome: _initiateFullProposedRideRouteForSheet - Setting _currentlyDisplayedProposedRideId to: $newRideRequestId"); // This is correct
       _currentlyDisplayedProposedRideId = newRideRequestId;
     }
   }
 
   // Modified to use pre-fetched segment points and handle zoom/dynamic polyline.
-  Future<void> _fetchAndDisplayRouteToPickup(BuildContext context, LatLng customerPickupLocation) async {
+  Future<void> _fetchAndDisplayRouteToPickup(BuildContext context, gmf.LatLng customerPickupLocation) async {
     final locationProvider = Provider.of<LocationProvider>(context, listen: false);
-    if (locationProvider.currentLocation == null) return;
-    final driverCurrentLocation = LatLng(locationProvider.currentLocation!.latitude, locationProvider.currentLocation!.longitude);
+    if (locationProvider.currentLocation == null || !mounted) return;
+    final gmf.LatLng driverCurrentLocation = gmf.LatLng(locationProvider.currentLocation!.latitude, locationProvider.currentLocation!.longitude); // This is correct
 
     // Use the pre-calculated segment points
     if (mounted && _driverToPickupRoutePoints.isNotEmpty) {
-      setState(() {
+      if (mounted) {
+        setState(() {
         _activeRoutePolylines.clear();
-        _activeRoutePolylines.add(Polyline(polylineId: const PolylineId('driver_to_pickup_active'), points: _driverToPickupRoutePoints, color: Colors.blueAccent, width: 6));
+        _activeRoutePolylines.add(gmf.Polyline(polylineId: const gmf.PolylineId('driver_to_pickup_active'), points: _driverToPickupRoutePoints, color: Colors.blueAccent, width: 6));
         // Distance and duration for this segment are not re-fetched here.
         // They could be calculated manually or parsed from the initial full route response if available.
       });
+      }
       _zoomToDriverToPickupSegment(driverCurrentLocation, customerPickupLocation);
       _updateDynamicPolylineForProgress(driverCurrentLocation);
     } else {
@@ -988,31 +1040,35 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
 
     // Add marker for customer's pickup when navigating to them
     if (mounted) {
-      setState(() {
+      if (mounted) {
+        setState(() { // Use setState to update markers
         _rideSpecificMarkers.clear(); // Clear previous proposed markers
-        _rideSpecificMarkers.add(Marker(
-          markerId: MarkerId('customer_pickup_active'),
+        _rideSpecificMarkers.add(gmf.Marker(
+          markerId: gmf.MarkerId('customer_pickup_active'),
           position: customerPickupLocation,
-          infoWindow: InfoWindow(title: 'Pickup: ${_activeRideDetails?.pickupAddressName ?? 'Customer Pickup'}'),
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+          infoWindow: gmf.InfoWindow(title: 'Pickup: ${_activeRideDetails?.pickupAddressName ?? 'Customer Pickup'}'),
+          icon: gmf.BitmapDescriptor.defaultMarkerWithHue(gmf.BitmapDescriptor.hueGreen),
         ));
       });
+      }
     }
   }
 
   // Fetches and displays route from CUSTOMER'S PICKUP to CUSTOMER'S DESTINATION (Main Ride)
   // Modified to use pre-fetched segment points and handle zoom/dynamic polyline.
-  Future<void> _fetchAndDisplayMainRideRoute(LatLng ridePickup, LatLng rideDropoff, List<LatLng>? stops) async {
+  Future<void> _fetchAndDisplayMainRideRoute(gmf.LatLng ridePickup, gmf.LatLng rideDropoff, List<gmf.LatLng> stops) async {
     if (!mounted) return;
 
     // Use the pre-calculated segment points
     if (mounted && _fullProposedRoutePoints.isNotEmpty) {
-      setState(() {
+      if (mounted) {
+        setState(() {
         _activeRoutePolylines.clear();
-        _activeRoutePolylines.add(Polyline(polylineId: const PolylineId('main_ride_active'), points: _fullProposedRoutePoints, color: Colors.greenAccent, width: 6));
+        _activeRoutePolylines.add(gmf.Polyline(polylineId: const gmf.PolylineId('main_ride_active'), points: _fullProposedRoutePoints, color: Colors.greenAccent, width: 6));
         // Distance and duration for this segment are not re-fetched here.
         // They could be calculated manually or parsed from the initial full route response if available.
       });
+      }
       _zoomToMainRideSegment(ridePickup, rideDropoff, stops);
       _updateDynamicPolylineForProgress(ridePickup); // Start dynamic polyline from pickup
     } else {
@@ -1023,39 +1079,41 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
 
     // Add markers for main ride (pickup, destination, stops)
     if (mounted) {
-      setState(() {
+      if (mounted) {
+        setState(() { // Use setState to update markers
         _rideSpecificMarkers.clear();
-        _rideSpecificMarkers.add(Marker(
-          markerId: MarkerId('main_ride_pickup'),
+        _rideSpecificMarkers.add(gmf.Marker(
+          markerId: gmf.MarkerId('main_ride_pickup'),
           position: ridePickup,
-          infoWindow: InfoWindow(title: 'Ride Pickup'),
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+          infoWindow: gmf.InfoWindow(title: 'Ride Pickup'),
+          icon: gmf.BitmapDescriptor.defaultMarkerWithHue(gmf.BitmapDescriptor.hueGreen),
         ));
-        _rideSpecificMarkers.add(Marker(
-          markerId: MarkerId('main_ride_destination'),
+        _rideSpecificMarkers.add(gmf.Marker(
+          markerId: gmf.MarkerId('main_ride_destination'),
           position: rideDropoff,
-          infoWindow: InfoWindow(title: 'Ride Destination'),
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+          infoWindow: gmf.InfoWindow(title: 'Ride Destination'),
+          icon: gmf.BitmapDescriptor.defaultMarkerWithHue(gmf.BitmapDescriptor.hueRed),
         ));
-        stops?.asMap().forEach((index, stopLatLng) {
-          _rideSpecificMarkers.add(Marker(
-            markerId: MarkerId('main_ride_stop_$index'),
+        stops.asMap().forEach((index, stopLatLng) {
+          _rideSpecificMarkers.add(gmf.Marker(
+            markerId: gmf.MarkerId('main_ride_stop_$index'),
             position: stopLatLng,
-            infoWindow: InfoWindow(title: 'Stop ${index + 1}'),
-            icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
+            infoWindow: gmf.InfoWindow(title: 'Stop ${index + 1}'),
+            icon: gmf.BitmapDescriptor.defaultMarkerWithHue(gmf.BitmapDescriptor.hueOrange),
           ));
         });
       });
+      }
     }
   }
 
   // Generic method to fetch and display a route
   Future<void> _fetchAndDisplayRoute({
-    required LatLng origin,
-    required LatLng destination,
-    List<LatLng>? waypoints,
+    required gmf.LatLng origin,
+    required gmf.LatLng destination,
+    List<gmf.LatLng>? waypoints,
     required Color polylineColor,
-    required Function(String? distance, String? duration, List<LatLng>? points) onRouteFetched,
+    required Function(String? distance, String? duration, List<gmf.LatLng>? points) onRouteFetched,
   }) async {
     if (origin.latitude == destination.latitude && origin.longitude == destination.longitude && (waypoints == null || waypoints.isEmpty)) {
       debugPrint("DriverHome: Origin and Destination are the same, and no waypoints. Skipping route draw.");
@@ -1066,7 +1124,8 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
     }
 
     if (!mounted) return;
-    setState(() {
+    if (mounted) {
+      setState(() {
       _isLoadingRoute = true;
       // _activeRoutePolylines.clear(); // Let the caller manage clearing polylines
       // _rideSpecificMarkers are managed by the calling functions like _initiateFullProposedRideRouteForSheet, _fetchAndDisplayRouteToPickup, etc.
@@ -1075,6 +1134,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
       _driverToPickupDistance = null; _driverToPickupDuration = null;
       _mainRideDistance = null; _mainRideDuration = null;
     });
+    }
 
     try {
       final List<Map<String, dynamic>>? routeDetailsList = await MapUtils.getRouteDetails(
@@ -1092,43 +1152,45 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
         onRouteFetched(
           primaryRouteDetails['distance'] as String?,
           primaryRouteDetails['duration'] as String?,
-          primaryRouteDetails['points'] as List<LatLng>?,
+          primaryRouteDetails['points'] as List<gmf.LatLng>?,
         );
         // No need to check mounted again here as onRouteFetched should handle it
-        if (mounted) setState(() => _isLoadingRoute = false);
+        if (mounted) if (mounted) setState(() => _isLoadingRoute = false);
       } else {
-        if (mounted) setState(() => _isLoadingRoute = false);
+        if (mounted) if (mounted) setState(() => _isLoadingRoute = false);
         if (!mounted) return; // Check before calling callback
         onRouteFetched(null, null, null);
       }
     } catch (e) {
-      debugPrint('Error in _fetchAndDisplayRoute: $e');
+      debugPrint('Error in _fetchAndDisplayRoute: $e'); // This is correct
       if (mounted) setState(() { _isLoadingRoute = false;});
       if (!mounted) return; // Check before calling callback
       onRouteFetched(null, null, null);    }
   }
 
-  void _zoomToDriverToPickupSegment(LatLng driverLocation, LatLng customerPickup) {
+  void _zoomToDriverToPickupSegment(gmf.LatLng driverLocation, gmf.LatLng customerPickup) {
     if (_mapController == null) return;
-    final bounds = MapUtils.boundsFromLatLngList([driverLocation, customerPickup]);
-    _mapController!.animateCamera(CameraUpdate.newLatLngBounds(bounds, 60));
+    final bounds = MapUtils.boundsFromLatLngList([driverLocation, customerPickup]); // This is correct
+    _mapController!.animateCamera(gmf.CameraUpdate.newLatLngBounds(bounds, 60));
   }
 
-  void _zoomToMainRideSegment(LatLng customerPickup, LatLng customerDestination, List<LatLng>? stops) {
+  void _zoomToMainRideSegment(gmf.LatLng customerPickup, gmf.LatLng customerDestination, List<gmf.LatLng>? stops) { // This is correct
     if (_mapController == null) return;
-    List<LatLng> pointsForBounds = [customerPickup, customerDestination];
+    List<gmf.LatLng> pointsForBounds = [customerPickup, customerDestination];
     if (stops != null && stops.isNotEmpty) {
       pointsForBounds.addAll(stops);
     }
     final bounds = MapUtils.boundsFromLatLngList(pointsForBounds);
-    _mapController!.animateCamera(CameraUpdate.newLatLngBounds(bounds, 60));
+    _mapController!.animateCamera(gmf.CameraUpdate.newLatLngBounds(bounds, 60));
   }
 
   void _clearAllRouteData() {
     _activeRoutePolylines.clear();
     _fullProposedRoutePoints.clear();
     _driverToPickupRoutePoints.clear();
-    _entireActiveRidePoints.clear();
+    _rideTrackingLastLocation = null;
+    _trackedDistanceKm = 0.0;
+    _trackedDrivingDurationSeconds = 0;
   }
    void _acceptRide(String rideId, String customerId, dynamic pickupLatRaw, dynamic pickupLngRaw, String? customerName) async {
     final driverProvider = Provider.of<DriverProvider>(context, listen: false);
@@ -1144,7 +1206,8 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
 
       if (!mounted) return;
       debugPrint("DriverHome: _acceptRide - Ride accepted in provider. Updating local state.");
-      setState(() {
+      if (mounted) {
+        setState(() {
         // Create a basic RideRequestModel instance.
         // The full details will come from the Firestore stream.
         _activeRideDetails = RideRequestModel(
@@ -1152,8 +1215,8 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
           customerId: customerId,
           status: 'accepted', // Initial status after acceptance
           customerName: customerName ?? 'Customer',
-          pickup: LatLng(double.parse(pickupLatRaw.toString()), double.parse(pickupLngRaw.toString())),
-          dropoff: LatLng(double.parse(dropoffLatRaw.toString()), double.parse(dropoffLngRaw.toString())),
+          pickup: gmf.LatLng(double.parse(pickupLatRaw.toString()), double.parse(pickupLngRaw.toString())),
+          dropoff: gmf.LatLng(double.parse(dropoffLatRaw.toString()), double.parse(dropoffLngRaw.toString())),
           pickupAddressName: pickupAddressName ?? 'Pickup Location',
           dropoffAddressName: dropoffAddressName ?? 'Destination',
           stops: [], // Initialize with empty stops, will be populated by stream if they exist
@@ -1161,29 +1224,29 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
         );
         _activeRoutePolylines.clear(); // Clear proposed full route polyline
         _rideSpecificMarkers.clear(); // Clear proposed full route markers
-        _proposedRideDistance = null; _proposedRideDuration = null; // Clear proposed route info
-        _clearAllRouteData(); // Clears _entireActiveRidePoints, _fullProposedRoutePoints, _driverToPickupRoutePoints
-        _currentlyDisplayedProposedRideId = null; // Clear the proposed ride ID
       });
+      }
 
       // Start listening to the active ride document
       _listenToActiveRide(rideId);
       
       // After setting state, call _fetchAndDisplayRouteToPickup which will handle zoom and initial dynamic polyline
       if (pickupLatRaw != null && pickupLngRaw != null) {
-        final LatLng customerPickupLoc = LatLng(double.parse(pickupLatRaw.toString()), double.parse(pickupLngRaw.toString()));
+        final gmf.LatLng customerPickupLoc = gmf.LatLng(double.parse(pickupLatRaw.toString()), double.parse(pickupLngRaw.toString()));
         await _fetchAndDisplayRouteToPickup(context, customerPickupLoc);
         if (!mounted) return; // Check after await
       }
       debugPrint("DriverHome: _acceptRide - UI state updated, snackbar shown.");
       // Ensure context is still valid before showing SnackBar
-      ScaffoldMessenger.of(context).showSnackBar(
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Ride accepted successfully')),
       );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          
+
           SnackBar(content: Text('Failed to accept ride: ${e.toString()}')),
         );
       }
@@ -1196,12 +1259,13 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
     // FirestoreService is not a Provider, so we instantiate it or get it from a Provider if it was set up as one.
     // Assuming you have a way to access FirestoreService instance, e.g., if it's a singleton or passed around.
     final firestoreService = FirestoreService(); // Or however you access your FirestoreService instance
-    _activeRideSubscription = firestoreService.getRideRequestDocumentStream(rideId).listen(
+    _activeRideSubscription = firestoreService.getRideRequestDocumentStream(rideId).listen( // Listen to the specific ride document
       (DocumentSnapshot rideSnapshot) {
         if (mounted && rideSnapshot.exists && rideSnapshot.data() != null) {
           final newRideDetails = RideRequestModel.fromJson(rideSnapshot.data() as Map<String, dynamic>, rideSnapshot.id);
           debugPrint("DriverHome: _listenToActiveRide - Received update for ride ID: ${newRideDetails.id}, Status: ${newRideDetails.status}");
-          setState(() {
+          if (mounted) {
+            setState(() {
             _activeRideDetails = newRideDetails;
             // Potentially update map/route based on new status if needed here,
             // though specific actions like _confirmArrival already handle this.
@@ -1211,7 +1275,15 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
               debugPrint("DriverHome: _listenToActiveRide - Ride ${newRideDetails.id} ended. Resetting active ride state.");
               _resetActiveRideState();
             }
+            // React to status changes to update map/route display
+            if (newRideDetails.status == 'arrivedAtPickup') {
+              final gmf.LatLng? pickup = newRideDetails.pickup;
+              final gmf.LatLng? dropoff = newRideDetails.dropoff;
+              final List<gmf.LatLng> stops = newRideDetails.stops.map((s) => s['location'] as gmf.LatLng).toList();
+              if (pickup != null && dropoff != null) _fetchAndDisplayMainRideRoute(pickup, dropoff, stops);
+            }
           });
+          }
         } else if (mounted && !rideSnapshot.exists) {
           debugPrint("DriverHome: _listenToActiveRide - Ride document $rideId no longer exists. Resetting active ride state.");
           // Ride document was deleted or doesn't exist anymore
@@ -1236,18 +1308,16 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
     try {
       await driverProvider.declineRideRequest(context, rideId, customerId);
       if (!mounted) return;
-      debugPrint("DriverHome: _declineRide - Ride declined in provider. Clearing local proposed ride state.");
+      debugPrint("DriverHome: _declineRide - Ride declined in provider. Clearing local proposed ride state."); // This is correct
       setState(() {
-        _rideSpecificMarkers.clear(); // Clear proposed markers
-        _proposedRideDistance = null; _proposedRideDuration = null;
-        _driverToPickupDistance = null; _driverToPickupDuration = null; // Also clear this if it was somehow set
-        _currentlyDisplayedProposedRideId = null; // Clear the proposed ride ID
-        _clearAllRouteData();
+        _proposedRideDistance = null; _proposedRideDuration = null; // This is correct
         _pendingRideCustomerName = null; // Clear customer name for sheet
       });
-      ScaffoldMessenger.of(context).showSnackBar(
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Ride declined')),
       );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1264,7 +1334,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
     }
 
     final String status = _activeRideDetails!.status;
-    LatLng? destinationLatLng;
+    gmf.LatLng? destinationLatLng;
     String destinationName = "Next Destination";
 
     if (status == 'accepted' || status == 'goingToPickup') {
@@ -1277,7 +1347,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
       if (stops.isNotEmpty) {
         // Find the first "unvisited" stop. This is a simplified logic.
         final firstStop = stops.first; // Assuming stops are ordered
-        destinationLatLng = firstStop['location'] as LatLng?;
+        destinationLatLng = firstStop['location'] as gmf.LatLng?;
         destinationName = firstStop['addressName'] as String? ?? "Next Stop";
       }
 
@@ -1306,13 +1376,13 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
     final customerId = details['customerId'];
 
     if (rideId == null || customerId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error: Ride details missing for arrival confirmation.')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error: Ride details missing for arrival confirmation.')));
       return;
     }
     debugPrint("DriverHome: _confirmArrival called for ride ID: $rideId");
 
     final driverProvider = Provider.of<DriverProvider>(context, listen: false);
-    try {
+    try { // This is correct
       if (!mounted) return;
       await driverProvider.confirmArrival(context, rideId, customerId);
       setState(() {
@@ -1326,9 +1396,9 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
       // We can then react to the 'arrivedAtPickup' status to draw the main ride route.
       // This logic might be better placed within the stream listener's setState block.
       if (_activeRideDetails?.status == 'arrivedAtPickup') {
-        final LatLng? pickup = _activeRideDetails?.pickup;
-        final LatLng? dropoff = _activeRideDetails?.dropoff;
-        final List<LatLng> stops = _activeRideDetails?.stops.map((s) => s['location'] as LatLng).toList() ?? [];
+        final gmf.LatLng? pickup = _activeRideDetails?.pickup;
+        final gmf.LatLng? dropoff = _activeRideDetails?.dropoff;
+        final List<gmf.LatLng> stops = _activeRideDetails?.stops.map((s) => s['location'] as gmf.LatLng).toList() ?? [];
         if (pickup != null && dropoff != null) {
           await _fetchAndDisplayMainRideRoute(pickup, dropoff, stops);
           _zoomToMainRideSegment(pickup, dropoff, stops);
@@ -1347,7 +1417,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
     final customerId = details['customerId'];
 
     if (rideId == null || customerId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error: Ride details missing for starting ride.')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error: Ride details missing for starting ride.')));
       return;
     }
     debugPrint("DriverHome: _startRide called for ride ID: $rideId");
@@ -1355,9 +1425,11 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
     try {
       if (!mounted) return;
       await driverProvider.startRide(context, rideId, customerId);
-      setState(() {
+      if (mounted) {
+        setState(() {
         // _activeRideDetails will be updated by the stream listener
       });
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to start ride: ${e.toString()}')));
@@ -1368,19 +1440,23 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
   void _completeRide(BuildContext context, String rideId) async {
     final customerId = _activeRideDetails?.customerId;
     if (customerId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error: Customer ID not found for this ride.')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error: Customer ID not found for this ride.')));
       return;
     }
     debugPrint("DriverHome: _completeRide called for ride ID: $rideId");
     final driverProvider = Provider.of<DriverProvider>(context, listen: false);
     try {
-      if (!mounted) return;
+      if (!mounted) {
+        debugPrint("DriverHome: _completeRide - Widget not mounted, cannot proceed.");
+        return;
+      }
+      // Pass the tracked data to the provider
       await driverProvider.completeRide(context, rideId, customerId);
       // UI update handled by stream listener or _resetActiveRideState.
       // We'll call _resetActiveRideState after attempting to show the dialog.
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ride completed successfully')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ride completed successfully')));
 
       // Schedule the dialog and state reset to occur after the current frame
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1399,17 +1475,18 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
   void _resetActiveRideState() {
     if (mounted) {
       debugPrint("DriverHome: _resetActiveRideState called.");
-      setState(() {
-        _activeRideDetails = null;
-        _activeRideSubscription?.cancel();
-        _activeRideSubscription = null;
-        _clearAllRouteData();
-        _rideSpecificMarkers.clear();
-        _mainRideDistance = null; _mainRideDuration = null;
-        _driverToPickupDistance = null; _driverToPickupDuration = null;
+      if (mounted) {
+        setState(() { // Use setState to trigger UI rebuild
+        _activeRideDetails = null; // Clear active ride details
+        _clearAllRouteData(); // This is correct
       });
+      // Explicitly clear pending ride from provider when resetting active state
+      Provider.of<DriverProvider>(context, listen: false).clearPendingRide();
+      }
     }
   }
+
+
 
     Future<void> _showRateCustomerDialog(String rideId, String customerId) async {
     double ratingValue = 0; // Renamed to avoid conflict with widget
@@ -1475,7 +1552,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
                         }
                       }
                     } else {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Please select a star rating.')));
+                      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Please select a star rating.')));
                     }
                   },
                 ),
@@ -1525,7 +1602,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
     final customerId = details['customerId'];
 
     if (rideId == null || customerId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error: Ride details missing for cancellation.')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error: Ride details missing for cancellation.')));
       return;
     }
     debugPrint("DriverHome: _cancelRide called for ride ID: $rideId");

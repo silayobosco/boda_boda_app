@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart'; // Import local notifications
 import 'package:firebase_messaging/firebase_messaging.dart'; // Import Firebase Messaging
@@ -30,6 +32,7 @@ class _HomeScreenState extends State<HomeScreen> {
   User? _currentUser; // Store the current Firebase user
   FlutterLocalNotificationsPlugin _flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
   bool _fcmActionsInitializedForCurrentUser = false; // Flag to track initialization
+  StreamSubscription? _onMessageSubscription; // To manage the FCM foreground listener
 
   // Store instances of the main screens for each role to preserve their state
   // Ensure these are initialized appropriately, perhaps in initState or as late final.
@@ -58,6 +61,13 @@ class _HomeScreenState extends State<HomeScreen> {
     _initializeLocalNotifications();
     // FCM initialization will now happen after userModel is loaded in the builder
   }
+  
+  @override
+  void dispose() {
+    _onMessageSubscription?.cancel(); // Cancel the FCM listener
+    super.dispose();
+  }
+
 
   Future<void> _initializeLocalNotifications() async {
     // Initialize settings for Android
@@ -118,24 +128,27 @@ class _HomeScreenState extends State<HomeScreen> {
     debugPrint('User granted permission: ${settings.authorizationStatus}');
 
     // Handle foreground messages
-    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+    _onMessageSubscription?.cancel(); // Cancel any existing subscription before creating a new one
+    _onMessageSubscription = FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      if (!mounted) return; // Ensure widget is mounted before processing
+
       debugPrint('HomeScreen: Foreground FCM message received!');
       debugPrint('Message data: ${message.data}');
       if (message.notification != null) {
         debugPrint('Message also contained a notification: ${message.notification!.title}, ${message.notification!.body}');
-        _showForegroundNotification(message);
+        if (mounted) _showForegroundNotification(message); // Check mounted
       }
       // You can update UI or show an in-app banner based on message.data
 
       // Check if the current user is a Driver and the message contains ride request data
-      if (_currentUserModel?.role == 'Driver' &&
+      if (mounted && _currentUserModel?.role == 'Driver' && // Check mounted
           message.data.isNotEmpty &&
           message.data.containsKey('rideRequestId')) {
          try {
            // Access DriverProvider without listening, assuming it's available in the context
            final driverProvider = Provider.of<DriverProvider>(context, listen: false);
            driverProvider.setNewPendingRide(message.data);
-           debugPrint("HomeScreen: Passed ride data to DriverProvider.");
+           debugPrint("HomeScreen: Foreground FCM - Passed ride data to DriverProvider.");
          } catch (e) {
            debugPrint("HomeScreen: Could not access DriverProvider or set pending ride: $e");
          }
@@ -145,7 +158,7 @@ class _HomeScreenState extends State<HomeScreen> {
     // Handle notification tap when app is in background
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
       debugPrint('HomeScreen: Message opened from background!');
-      // Navigate or perform action based on message.data
+      if (mounted) _handleNotificationTap(message.data); // Check mounted
       _handleNotificationTap(message.data);
     });
 
@@ -153,17 +166,19 @@ class _HomeScreenState extends State<HomeScreen> {
     FirebaseMessaging.instance.getInitialMessage().then((RemoteMessage? message) {
       if (message != null) {
         debugPrint('HomeScreen: Message opened from terminated state!');
-         if (_currentUserModel?.role == 'Driver' && message.data.isNotEmpty && message.data.containsKey('rideRequestId')) {
+         // No direct context here, but DriverProvider is a global provider instance
+         // This part might need careful handling if context is strictly needed for Provider.of
+         if (_currentUserModel?.role == 'Driver' && message.data.isNotEmpty && message.data.containsKey('rideRequestId') && mounted) {
            try {
              // Access DriverProvider without listening
              final driverProvider = Provider.of<DriverProvider>(context, listen: false);
              driverProvider.setNewPendingRide(message.data);
-             debugPrint("HomeScreen: Passed ride data from terminated state to DriverProvider.");
+             debugPrint("HomeScreen: Terminated FCM - Passed ride data to DriverProvider.");
            } catch (e) {
              debugPrint("HomeScreen: Could not access DriverProvider or set pending ride from terminated state: $e");
            }
         }
-        _handleNotificationTap(message.data);
+        if (mounted) _handleNotificationTap(message.data); // Check mounted
       }
     });
 
@@ -356,34 +371,52 @@ class _HomeScreenState extends State<HomeScreen> {
         _initializeFCMAndCurrentUserActions(userModel);// Initialize FCM and actions with the loaded userModel
 
 
-        if (userModel == null || userModel.uid == null) {
-          // User document doesn't exist or is incomplete.
-        }
-
         // Handle navigation to AdditionalInfoScreen if role is missing
-        if (userModel?.role == null) {
-          if (!_navigatedToAdditionalInfo) {
+        // Or if userModel itself is null (still loading, or document truly doesn't exist for a new user)
+        if (userModel == null || userModel.role == null) {
+          // Only attempt to navigate if not already done/in progress for the current lifecycle of this screen instance
+          if (!_navigatedToAdditionalInfo && mounted) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) { // Ensure widget is still in the tree
-                _navigatedToAdditionalInfo = true;
-                Navigator.pushReplacement(
+              // Re-check condition inside the callback as the stream might have updated
+              if (mounted && (snapshot.data == null || snapshot.data!.role == null)) {
+                // Set flag before pushing to prevent re-entry if this callback is triggered multiple times
+                // or if the stream emits null again quickly.
+                // This setState ensures the loading indicator is shown and we don't attempt to build _buildMainScreen.
+                setState(() {
+                  _navigatedToAdditionalInfo = true;
+                });
+                Navigator.push( // CHANGED from pushReplacement
                   context,
-                  MaterialPageRoute(
-                    builder: (context) => AdditionalInfoScreen(userUid: _currentUser!.uid),
-                  ),
-                );
+                  MaterialPageRoute(builder: (context) => AdditionalInfoScreen(userUid: _currentUser!.uid)),
+                ).then((_) {
+                  // When AdditionalInfoScreen is popped (either by saving or user backing out),
+                  // reset the flag. The StreamBuilder will then re-evaluate.
+                  // If role is still null, it will attempt to navigate again.
+                  // If role is set, _buildMainScreen will be called.
+                  if (mounted) {
+                    setState(() {
+                      _navigatedToAdditionalInfo = false;
+                    });
+                  }
+                });
               }
             });
           }
-          // Show loading indicator while navigating or if stuck
+          // Always show loading indicator if role is null and we're either navigating,
+          // waiting for AdditionalInfoScreen to pop, or waiting for the stream to update.
           return Scaffold(
             body: Center(child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary)),
           );
+        } else { // Role is present
+          // If we were previously in a state of navigating to AIS, but now have a role, ensure the flag is reset.
+          if (_navigatedToAdditionalInfo) {
+            // This reset is important if the stream updates to a non-null role
+            // while _navigatedToAdditionalInfo was true.
+            _navigatedToAdditionalInfo = false;
+            // No setState needed here as we are about to return _buildMainScreen, which causes a rebuild.
+          }
+          return _buildMainScreen(userModel.role!);
         }
-        // If role is present, reset the flag (in case user went back from AdditionalInfoScreen without completing)
-        _navigatedToAdditionalInfo = false;
-
-        return _buildMainScreen(userModel!.role!);
       },
     );
   }

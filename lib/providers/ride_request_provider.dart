@@ -5,8 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart' as google_maps_flutter;
 import '../services/firestore_service.dart';
-import 'package:geolocator/geolocator.dart'; // For distance calculation
-import 'package:geoflutterfire3/geoflutterfire3.dart'; // For Geo-queries
 import '../services/auth_service.dart';
 // import 'dart:convert'; // No longer needed for client-side FCM
 // import 'package:http/http.dart' as http; // No longer needed for client-side FCM

@@ -477,7 +477,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
       destination: LatLng(_dropOffLocation!.latitude, _dropOffLocation!.longitude),
       apiKey: _googlePlacesApiKey,
       waypoints: waypointsLatLng?.map((ll) => LatLng(ll.latitude, ll.longitude)).toList(),
-    ) as List<Map<String, dynamic>>?;
+    );
 
     if (!mounted) return;
 
@@ -821,10 +821,12 @@ void _updateDisplayedRoute() {
   void _confirmRideRequest() async {
     if (_isFindingDriver) return; // Prevent multiple requests
 
-    setState(() {
-      _isFindingDriver = true;
-    });
-
+    // Set _isFindingDriver = true HERE, immediately before async work
+    if (mounted) {
+      setState(() {
+        _isFindingDriver = true;
+      });
+    }
     final rideRequestProvider = Provider.of<RideRequestProvider>(context, listen: false); // Ensure RideRequestProvider is defined and imported
 
     if (_pickupLocation == null || _dropOffLocation == null) {
@@ -847,16 +849,7 @@ void _updateDisplayedRoute() {
       return;
     }
 
-    try {
-      final stopsData = _stops
-        .where((s) => s.location != null) 
-        .map((s) => {
-              'name': s.name,
-              // Ensure stop location is also converted to gmf.LatLng if RideRequestModel expects it
-              'location': LatLng(s.location!.latitude, s.location!.longitude), 
-            })
-        .toList();
-        
+    try {        
       // Create a ride request model
       String rideId = await rideRequestProvider.createRideRequest(
         pickup: _pickupLocation!, // _pickupLocation is already ll.LatLng (latlong2.LatLng)
@@ -1061,6 +1054,7 @@ void _updateDisplayedRoute() {
                   _activeRideRequestDetails = snapshot.data;
                   // Check if driver is assigned and we haven't fetched their details yet
                   if (_activeRideRequestDetails!.driverId != null && _assignedDriverModel == null) {
+                    debugPrint("CustomerHome: StreamBuilder - Detected driverId: ${_activeRideRequestDetails!.driverId}. Current _assignedDriverModel UID: ${_assignedDriverModel?.uid}. Fetching driver model.");
                     // Fetch driver details
                     FirebaseFirestore.instance
                         .collection('users')
@@ -1095,7 +1089,9 @@ void _updateDisplayedRoute() {
                   if (_activeRideRequestDetails!.status == 'completed' || 
                       _activeRideRequestDetails!.status == 'cancelled_by_customer' ||
                       _activeRideRequestDetails!.status == 'cancelled_by_driver') {
+                        final String? prevStatus = _activeRideRequestDetails!.status; // Capture status before potential reset
                         WidgetsBinding.instance.addPostFrameCallback((_) {
+                          final String endMessage = _getRideEndMessage(_activeRideRequestDetails!.status);
                           if (mounted) {
                             setState(() {
                               _activeRideRequestId = null;
@@ -1103,16 +1099,58 @@ void _updateDisplayedRoute() {
                               _assignedDriverModel = null;
                               _isFindingDriver = false;
                               _stopListeningToDriverLocation();
+                              _polylines.clear(); // Clear route polylines
+                              _markers.removeWhere((m) => m.markerId.value == 'driver_active_location');
                             });
+                            final String? rideIdForRating = _activeRideRequestId; // Capture before nulling
+                            final String? driverIdForRating = _assignedDriverModel?.uid; // Capture before nulling
+                            // After resetting UI, if ride was completed, show rating dialog
+                            // Ensure _activeRideRequestId and _assignedDriverModel are captured before they are nulled by setState
+                            if (prevStatus == 'completed' && rideIdForRating != null && driverIdForRating != null) _showRateDriverDialog(rideIdForRating, driverIdForRating);
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(endMessage)));
                           }
                         });
                       }
+                } else if (snapshot.connectionState == ConnectionState.active && snapshot.data == null && _activeRideRequestId != null) {
+                  // Stream is active, but data is null (e.g. document deleted)
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ride details are no longer available.')));
+                      setState(() {
+                        _activeRideRequestId = null;
+                        _activeRideRequestDetails = null;
+                        _assignedDriverModel = null;
+                        _isFindingDriver = false;
+                        _stopListeningToDriverLocation();
+                        _polylines.clear();
+                        _markers.removeWhere((m) => m.markerId.value == 'driver_active_location');
+                      });
+                    }
+                  });
                 }
                 return _buildRouteSheet(); // Always build the sheet, its content will change
               }) else _buildRouteSheet(), // Build sheet even if no active ride ID (initial state)
         ],
       ),
     );
+  }
+
+  String _getRideEndMessage(String? status) {
+    switch (status) {
+      case 'completed':
+        return 'Ride completed!';
+      case 'cancelled_by_customer':
+        return 'Ride cancelled by you.';
+      case 'cancelled_by_driver':
+        return 'Ride cancelled by driver.';
+      case 'no_drivers_available':
+        return 'No drivers available at the moment. Please try again later.';
+      case 'matching_error_missing_pickup':
+      case 'matching_error_kijiwe_fetch':
+        return 'There was an error matching your ride. Please check your pickup or try again.';
+      default:
+        return 'Ride has ended.';
+    }
   }
 
   Widget _buildFieldContainer(Widget child) {
@@ -1130,15 +1168,16 @@ void _updateDisplayedRoute() {
 
   Widget _buildRouteSheet() {
     // If a driver is assigned, show driver info and ride progress
-    if (_assignedDriverModel != null && _activeRideRequestDetails != null) {
-      return _buildDriverAssignedSheet();
+    if (_activeRideRequestDetails != null && _activeRideRequestDetails!.driverId != null) {
+      // A driver is assigned (driverId is present)
+      // _assignedDriverModel might still be loading, _buildDriverAssignedSheet will handle that
+      return _buildDriverAssignedSheet(); 
     }
 
     // If finding a driver, show loading state in the sheet
     if (_isFindingDriver) {
       return _buildFindingDriverSheet();
     }
-
     // Default: Show route planning sheet
     return DraggableScrollableSheet(
       controller: _sheetController,
@@ -1551,6 +1590,48 @@ void _updateDisplayedRoute() {
   Widget _buildDriverAssignedSheet() {
     final theme = Theme.of(context);
     final rideStatus = _activeRideRequestDetails?.status ?? 'N/A';
+
+    // Add this debug print to inspect the data
+    debugPrint("CustomerHome - _buildDriverAssignedSheet - _activeRideRequestDetails: ${_activeRideRequestDetails?.toJson()}");
+    debugPrint("CustomerHome - _buildDriverAssignedSheet - Driver Gender: ${_activeRideRequestDetails?.driverGender}");
+    debugPrint("CustomerHome - _buildDriverAssignedSheet - Driver Age Group: ${_activeRideRequestDetails?.driverAgeGroup}");
+    debugPrint("CustomerHome - _buildDriverAssignedSheet - Driver License: ${_activeRideRequestDetails?.driverLicenseNumber}");
+    debugPrint("CustomerHome - _buildDriverAssignedSheet - Driver Avg Rating (denorm): ${_activeRideRequestDetails?.driverAverageRating}");
+    debugPrint("CustomerHome - _buildDriverAssignedSheet - Driver Rides Count (denorm): ${_activeRideRequestDetails?.driverCompletedRidesCount}");
+
+    if (_activeRideRequestDetails == null) { // Should not happen if this sheet is shown
+        return Container(child: Center(child: Text("Error: Ride details missing.")));
+    }
+
+    // If driver details are still loading (_assignedDriverModel is null but driverId is present)
+    if (_assignedDriverModel == null && _activeRideRequestDetails!.driverId != null) {
+      return Positioned(
+        bottom: 0, left: 0, right: 0,
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            boxShadow: [BoxShadow(blurRadius: 10, color: Colors.black12, offset: Offset(0, -2))],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(color: theme.colorScheme.primary),
+              verticalSpaceMedium,
+              Text('Driver assigned. Loading details...', style: theme.textTheme.titleMedium),
+              verticalSpaceSmall,
+              Chip(
+                label: Text('Status: $rideStatus', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSecondaryContainer)),
+                backgroundColor: theme.colorScheme.secondaryContainer,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    if (_assignedDriverModel == null) return Container(); // Should be caught by above or means no driver assigned
+
     return Positioned(
       bottom: 0, left: 0, right: 0,
       child: Container(
@@ -1563,7 +1644,7 @@ void _updateDisplayedRoute() {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (_assignedDriverModel?.profileImageUrl != null && _assignedDriverModel!.profileImageUrl!.isNotEmpty)
+            if (_assignedDriverModel!.profileImageUrl != null && _assignedDriverModel!.profileImageUrl!.isNotEmpty)
               CircleAvatar(
                 radius: 30,
                 backgroundImage: NetworkImage(_assignedDriverModel!.profileImageUrl!),
@@ -1575,22 +1656,50 @@ void _updateDisplayedRoute() {
                 child: Icon(Icons.person, size: 30, color: theme.colorScheme.onPrimaryContainer),
               ),
             verticalSpaceSmall,
-            Text(_assignedDriverModel?.name ?? 'Driver', style: theme.textTheme.titleLarge),
-            if (_assignedDriverModel?.driverDetails?['vehicleType'] != null)
-              Text('Vehicle: ${_assignedDriverModel!.driverDetails!['vehicleType']}', style: theme.textTheme.bodySmall),
+            Text(_assignedDriverModel!.name ?? 'Driver', style: theme.textTheme.titleLarge),
+            if (_activeRideRequestDetails?.driverVehicleType != null && _activeRideRequestDetails!.driverVehicleType != "N/A")
+              Text('Vehicle: ${_activeRideRequestDetails!.driverVehicleType}', style: theme.textTheme.bodySmall),
+            
+            // Display Gender and Age Group if available
+            Builder(builder: (context) {
+              final gender = _activeRideRequestDetails?.driverGender; // Use denormalized data
+              final ageGroup = _activeRideRequestDetails?.driverAgeGroup; // Use denormalized data
+              List<String> details = [];
+              if (gender != null && gender.isNotEmpty && gender != "Unknown") details.add(gender); 
+              if (ageGroup != null && ageGroup.isNotEmpty && ageGroup != "Unknown") details.add(ageGroup);
+              if (details.isNotEmpty) {
+                return Text(details.join(', '), style: theme.textTheme.bodySmall);
+              }
+              return SizedBox.shrink();
+            }),
+
             verticalSpaceSmall,
             // Display Driver's Average Rating
-            if (_assignedDriverModel?.driverDetails?['averageRating'] != null)
+            if (_activeRideRequestDetails?.driverAverageRating != null && _activeRideRequestDetails!.driverAverageRating! > 0)
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(Icons.star, color: accentColor, size: 16),
                   horizontalSpaceSmall,
                   Text(
-                    (_assignedDriverModel!.driverDetails!['averageRating'] as num).toStringAsFixed(1),
+                    _activeRideRequestDetails!.driverAverageRating!.toStringAsFixed(1),
                     style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold),
                   ),
+                  if (_activeRideRequestDetails?.driverCompletedRidesCount != null && _activeRideRequestDetails!.driverCompletedRidesCount! > 0)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 8.0),
+                    child: Text(
+                      "(${_activeRideRequestDetails!.driverCompletedRidesCount} rides)",
+                      style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
+                    ),
+                  ),
                 ],
+              ),
+            // Display License Number from denormalized data
+            if (_activeRideRequestDetails?.driverLicenseNumber != null && rideStatus == 'onRide') // Example: Show only during active ride
+              Padding(
+                padding: const EdgeInsets.only(top: 4.0),
+                child: Text('License: ${_activeRideRequestDetails!.driverLicenseNumber}', style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor)),
               ),
             verticalSpaceSmall,
             Chip(
@@ -1838,6 +1947,87 @@ void _updateDisplayedRoute() {
   );
  }
 
+  Future<void> _showRateDriverDialog(String rideId, String driverId) async {
+    double ratingValue = 0;
+    final theme = Theme.of(context);
+    TextEditingController commentController = TextEditingController();
+
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false, // User must explicitly submit or skip
+      builder: (BuildContext dialogContext) {
+        return StatefulBuilder( // To update stars in the dialog
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: Text('Rate Your Driver', style: theme.textTheme.titleLarge),
+              content: SingleChildScrollView(
+                child: ListBody(
+                  children: <Widget>[
+                    Text('How was your ride?', style: theme.textTheme.bodyMedium),
+                    verticalSpaceMedium,
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: List.generate(5, (index) {
+                        return IconButton(
+                          icon: Icon(
+                            index < ratingValue ? Icons.star : Icons.star_border,
+                            color: accentColor, // From ui_utils
+                            size: 30,
+                          ),
+                          onPressed: () {
+                            setDialogState(() => ratingValue = index + 1.0);
+                          },
+                        );
+                      }),
+                    ),
+                    verticalSpaceSmall,
+                    TextField(
+                      controller: commentController,
+                      decoration: appInputDecoration(hintText: "Add a comment (optional)"),
+                      maxLines: 2,
+                    ),
+                  ],
+                ),
+              ),
+              actions: <Widget>[
+                TextButton(
+                  child: Text('Skip', style: TextStyle(color: theme.hintColor)),
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                ),
+                ElevatedButton(
+                  child: const Text('Submit Rating'),
+                  onPressed: () async {
+                    if (ratingValue > 0) {
+                      try {
+                        await Provider.of<RideRequestProvider>(context, listen: false).rateUser(
+                          rideId: rideId, // rideId passed to _showRateDriverDialog
+                          ratedUserId: driverId, // driverId passed to _showRateDriverDialog
+                          ratedUserRole: 'driver', // Customer is rating a driver
+                          rating: ratingValue,
+                          comment: commentController.text.trim().isNotEmpty ? commentController.text.trim() : null,
+                        );
+                        Navigator.of(dialogContext).pop(); // Close the dialog
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Rating submitted! Thank you.')));
+                        }
+                      } catch (e) {
+                        Navigator.of(dialogContext).pop(); // Close the dialog
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to submit rating: $e')));
+                        }
+                      }
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select a star rating.')));
+                    }
+                  },
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
   @override
   void dispose() {
     _sheetController.dispose();

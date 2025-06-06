@@ -270,17 +270,20 @@ exports.matchRideRequest = onDocumentCreated("/rideRequests/{rideRequestId}", as
           // Send notifications
           try {
             const rideDetailsForNotification = {
-              ...rideRequestData, // Original ride data
-              ...denormalizedCustomerData, // Add denormalized customer data
-              rideRequestId: rideRequestId, // Changed 'id' to 'rideRequestId'
-              status: "pending_driver_acceptance", // Current status for the driver
+              rideRequestId: rideRequestId,
+              status: "pending_driver_acceptance",
               click_action: "FLUTTER_NOTIFICATION_CLICK",
+              customerId: customerId,
+              customerName: customerName,
+              customerProfileImageUrl: customerProfileImageUrl || "",
+              customerDetails: customerDetailsString,
+              pickupAddressName: rideRequestData.pickupAddressName || "",
+              dropoffAddressName: rideRequestData.dropoffAddressName || "",
+              pickupLat: rideRequestData.pickup.latitude.toString(),
+              pickupLng: rideRequestData.pickup.longitude.toString(),
+              dropoffLat: rideRequestData.dropoff.latitude.toString(),
+              dropoffLng: rideRequestData.dropoff.longitude.toString(),
             };
-            // Explicitly convert GeoPoints and other non-string types to strings for FCM data payload
-            rideDetailsForNotification.pickupLat = rideRequestData.pickup.latitude.toString();
-            rideDetailsForNotification.pickupLng = rideRequestData.pickup.longitude.toString();
-            rideDetailsForNotification.dropoffLat = rideRequestData.dropoff.latitude.toString();
-            rideDetailsForNotification.dropoffLng = rideRequestData.dropoff.longitude.toString();
 
             // Handle stops: stringify the array of stops or critical parts of it
             // For simplicity, let's stringify the whole stops array.
@@ -352,31 +355,122 @@ exports.handleDriverRideAction = onCall(async (request) => {
   const customerId = rideData.customerId; // Needed for some actions
 
   const batch = admin.firestore().batch();
+  // Fetch fare configuration
+  let fareConfig;
+  try {
+    const fareConfigDoc = await admin.firestore().collection("appConfiguration").doc("fareSettings").get();
+    if (!fareConfigDoc.exists) {
+      logger.error("Fare configuration not found in Firestore!");
+      // Fallback to default values or throw an error
+      // For now, let's use some defaults to prevent complete failure, but log an error.
+      fareConfig = { minimumFare: 1250, startingFare: 300, farePerKilometer: 350, farePerMinuteDriving: 60, farePerMinuteWaiting: 60, commissionRate: 0.20, roundingIncrement: 500, currency: "TZS" };
+    } else {
+      fareConfig = fareConfigDoc.data();
+    }
+  } catch (error) {
+    logger.error("Error fetching fare configuration:", error);
+    // Fallback to default values or throw an error
+    fareConfig = { minimumFare: 1250, startingFare: 300, farePerKilometer: 350, farePerMinuteDriving: 60, farePerMinuteWaiting: 60, commissionRate: 0.20, roundingIncrement: 500, currency: "TZS" };
+  }
+
+  logger.log("Using Fare Configuration:", fareConfig);
+
   const driverUserRef = admin.firestore().collection("users").doc(driverUid);
   const customerUserRef = customerId ? admin.firestore().collection("users").doc(customerId) : null;
   const kijiweId = driverDoc.data().driverProfile?.kijiweId; // Driver's current kijiwe
 
   try {
     switch (action) {
-      case "accept":
+      case "accept": { // Added block scope
         if (rideData.driverId !== driverUid || rideData.status !== "pending_driver_acceptance") {
           throw new HttpsError("failed-precondition", "Ride cannot be accepted by this driver or is not in the correct state.");
         }
+
+        // Denormalize driver details for the customer
+        const driverDataForDenorm = driverDoc.data();
+        logger.log(`[handleDriverRideAction - accept] Raw driver data for denorm (driverId: ${driverUid}):`, JSON.stringify(driverDataForDenorm));
+
+
+        const driverGender = driverDataForDenorm.gender || "Unknown"; // Changed to const
+        let driverAgeGroup = "Unknown";
+        const driverName = driverDataForDenorm.name || "Driver";
+        const driverProfileImageUrl = driverDataForDenorm.profileImageUrl || null;
+        const driverVehicleType = driverDataForDenorm.driverProfile?.vehicleType || "N/A"; // Example: Denormalize vehicle type too
+
+        if (driverDataForDenorm.dob) {
+          let birthDate;
+          logger.log(`[handleDriverRideAction - accept] Driver DOB found:`, driverDataForDenorm.dob, typeof driverDataForDenorm.dob);
+          if (driverDataForDenorm.dob instanceof admin.firestore.Timestamp) {
+            birthDate = driverDataForDenorm.dob.toDate();
+          } else if (typeof driverDataForDenorm.dob === "string") {
+            birthDate = new Date(driverDataForDenorm.dob);
+          }
+          if (birthDate && !isNaN(birthDate.getTime())) {
+            const currentDate = new Date();
+            let age = currentDate.getFullYear() - birthDate.getFullYear();
+            const m = currentDate.getMonth() - birthDate.getMonth();
+            if (m < 0 || (m === 0 && currentDate.getDate() < birthDate.getDate())) {
+              age--;
+            }
+            if (age >= 0 && age >= 18) { // Only show for 18+
+              driverAgeGroup = `${Math.floor(age / 10) * 10}s`;
+            }
+          }
+        }
+        const driverLicenseNumber = driverDataForDenorm.driverProfile?.licenseNumber || "N/A";
+        logger.log(`[handleDriverRideAction - accept] Denormalized values calculated:`, {
+          gender: driverGender,
+          ageGroup: driverAgeGroup,
+          license: driverLicenseNumber,
+          name: driverName,
+          profileImageUrl: driverProfileImageUrl,
+          vehicleType: driverVehicleType,
+        });
+
         batch.update(rideRequestRef, {
           status: "accepted", // Or "goingToPickup"
           acceptedTime: admin.firestore.FieldValue.serverTimestamp(),
-          driverName: driverDoc.data().name || "Driver", // Denormalize
-          driverProfileImageUrl: driverDoc.data().profileImageUrl || null, // Denormalize
+          driverName: driverName,
+          driverProfileImageUrl: driverProfileImageUrl,
+          // Add new denormalized driver details
+          driverGender: driverGender,
+          driverAgeGroup: driverAgeGroup,
+          driverLicenseNumber: driverLicenseNumber,
+          driverVehicleType: driverVehicleType, // Store denormalized vehicle type
         });
         batch.update(driverUserRef, { "driverProfile.status": "goingToPickup" });
         if (rideData.kijiweId) { // Remove from the kijiwe queue the ride was matched from
           const kijiweRef = admin.firestore().collection("kijiwe").doc(rideData.kijiweId);
           batch.update(kijiweRef, { queue: admin.firestore.FieldValue.arrayRemove(driverUid) });
         }
-        // TODO: Notify customer
-        break;
 
-      case "decline":
+        // Commit Firestore changes BEFORE sending notification
+        await batch.commit();
+        logger.log(`[handleDriverRideAction - accept] Firestore batch committed for ride ${rideRequestId}.`);
+
+        // Notify customer
+        if (customerId) {
+          const notificationPayloadToCustomer = {
+            rideRequestId: rideRequestId,
+            status: "accepted",
+            driverName: driverName,
+            driverProfileImageUrl: driverProfileImageUrl || "", // Ensure string for FCM
+            driverGender: driverGender,
+            driverAgeGroup: driverAgeGroup,
+            driverLicenseNumber: driverLicenseNumber,
+            driverVehicleType: driverVehicleType,
+            pickupAddressName: rideData.pickupAddressName || "",
+            dropoffAddressName: rideData.dropoffAddressName || "",
+            click_action: "FLUTTER_NOTIFICATION_CLICK", // Important for Flutter
+            // Add any other info the customer app might need directly from the notification
+          };
+          await sendFCMNotification(customerId, "Driver Found!", `${driverName} is on the way to pick you up.`, notificationPayloadToCustomer);
+          logger.log(`[handleDriverRideAction - accept] Sent FCM to customer ${customerId} for ride ${rideRequestId}.`);
+        }
+        break;
+      }
+
+      case "decline": { // Added block scope
         if (rideData.driverId !== driverUid || rideData.status !== "pending_driver_acceptance") {
           throw new HttpsError("failed-precondition", "Ride cannot be declined.");
         }
@@ -385,34 +479,122 @@ exports.handleDriverRideAction = onCall(async (request) => {
           "driverProfile.status": "waitingForRide",
           "driverProfile.declinedByDriverCount": admin.firestore.FieldValue.increment(1),
         });
-        // TODO: Trigger re-matching for rideRequestId or notify customer
-        break;
-
-      case "arrivedAtPickup":
-        if (rideData.driverId !== driverUid || rideData.status !== "accepted") { // Or "goingToPickup"
-          throw new HttpsError("failed-precondition", "Cannot confirm arrival.");
+        await batch.commit();
+        logger.log(`[handleDriverRideAction - decline] Firestore batch committed for ride ${rideRequestId}.`);
+        if (customerId) {
+          // Note: Re-matching logic should ideally be triggered here if desired,
+          // or the customer app can prompt to search again.
+          await sendFCMNotification(customerId, "Ride Update", "The driver declined the ride. Please try requesting again.", {
+            rideRequestId: rideRequestId,
+            status: "declined_by_driver",
+            click_action: "FLUTTER_NOTIFICATION_CLICK",
+          });
+          logger.log(`[handleDriverRideAction - decline] Sent FCM to customer ${customerId} for ride ${rideRequestId}.`);
         }
+        break;
+      } // Closed block scope
+
+      case "arrivedAtPickup": { // Added block scope
+        if (rideData.driverId !== driverUid || rideData.status !== "accepted") { // Or "goingToPickup"
+          throw new HttpsError("failed-precondition", "Cannot confirm arrival. Ride not accepted by this driver or not in 'accepted' state.");
+        }
+        const driverNameForArrival = driverDoc.data().name || "Your driver";
         batch.update(rideRequestRef, { status: "arrivedAtPickup" });
         batch.update(driverUserRef, { "driverProfile.status": "arrivedAtPickup" });
-        // TODO: Notify customer
-        break;
-
-      case "startRide":
-        if (rideData.driverId !== driverUid || rideData.status !== "arrivedAtPickup") {
-          throw new HttpsError("failed-precondition", "Cannot start ride.");
+        await batch.commit();
+        logger.log(`[handleDriverRideAction - arrivedAtPickup] Firestore batch committed for ride ${rideRequestId}.`);
+        if (customerId) {
+          await sendFCMNotification(customerId, "Driver Arrived!", `${driverNameForArrival} has arrived at your pickup location.`, {
+            rideRequestId: rideRequestId,
+            status: "arrivedAtPickup",
+            driverName: driverNameForArrival,
+            click_action: "FLUTTER_NOTIFICATION_CLICK",
+          });
+          logger.log(`[handleDriverRideAction - arrivedAtPickup] Sent FCM to customer ${customerId} for ride ${rideRequestId}.`);
         }
+        break;
+      } // Closed block scope
+
+      case "startRide": { // Added block scope
+        if (rideData.driverId !== driverUid || rideData.status !== "arrivedAtPickup") {
+          throw new HttpsError("failed-precondition", "Cannot start ride. Ride not at pickup or not assigned to this driver.");
+        }
+        const driverNameForStart = driverDoc.data().name || "Your driver";
         batch.update(rideRequestRef, { status: "onRide" });
         batch.update(driverUserRef, { "driverProfile.status": "onRide" });
-        // TODO: Notify customer
+        await batch.commit();
+        logger.log(`[handleDriverRideAction - startRide] Firestore batch committed for ride ${rideRequestId}.`);
+        if (customerId) {
+          await sendFCMNotification(customerId, "Ride Started", `Your ride with ${driverNameForStart} has started.`, {
+            rideRequestId: rideRequestId,
+            status: "onRide",
+            click_action: "FLUTTER_NOTIFICATION_CLICK",
+          });
+          logger.log(`[handleDriverRideAction - startRide] Sent FCM to customer ${customerId} for ride ${rideRequestId}.`);
+        }
         break;
+      } // Closed block scope
 
-      case "completeRide":
+      case "completeRide": { // Added block scope
         if (rideData.driverId !== driverUid || rideData.status !== "onRide") {
           throw new HttpsError("failed-precondition", "Cannot complete ride.");
         }
+
+        // Extract actual ride data from the request if provided by the driver app
+        const {
+          actualDistanceKm: requestedActualDistanceKm,
+          actualDrivingDurationMinutes: requestedActualDrivingDurationMinutes,
+          actualTotalWaitingTimeMinutes: requestedActualTotalWaitingTimeMinutes,
+        } = request.data;
+
+        // --- FARE CALCULATION ---
+        // These would ideally come from the driver's app or be calculated based on tracked data
+        // Use actual data from the request if available, otherwise fall back to estimated or defaults
+        const actualDistanceKm = requestedActualDistanceKm ?? rideData.estimatedDistanceKm ?? 1.0; // Default to 1.0 km if not provided
+        const actualDrivingDurationMinutes = requestedActualDrivingDurationMinutes ?? rideData.estimatedDurationMinutes ?? 1; // Default to 1 minute if not provided
+        const actualTotalWaitingTimeMinutes = requestedActualTotalWaitingTimeMinutes ?? rideData.estimatedWaitingMinutes ?? 1; // Default to 1 minute if not provided
+
+        const distanceFare = actualDistanceKm * fareConfig.farePerKilometer;
+        const drivingTimeFare = actualDrivingDurationMinutes * fareConfig.farePerMinuteDriving; // eslint-disable-line max-len
+        const waitingTimeFare = actualTotalWaitingTimeMinutes * fareConfig.farePerMinuteWaiting;
+
+        const subtotal = fareConfig.startingFare + distanceFare + drivingTimeFare + waitingTimeFare;
+        const fareBeforeCommission = Math.max(subtotal, fareConfig.minimumFare);
+
+        const commissionAmount = fareBeforeCommission * fareConfig.commissionRate;
+        // const driverEarnings = fareBeforeCommission - commissionAmount; // Marked as unused, consider storing or removing
+        logger.log(`Calculated driverEarnings: ${fareBeforeCommission - commissionAmount}`); // Log if not storing
+
+        const driverEarnings = fareBeforeCommission - commissionAmount; // Declare driverEarnings
+        // Rounding logic for final customer fare
+        let finalCustomerFare;
+        const roundingInc = fareConfig.roundingIncrement; // e.g., 500
+        if (roundingInc > 0) {
+          const base = Math.floor(fareBeforeCommission / roundingInc) * roundingInc;
+          const diff = fareBeforeCommission - base;
+
+          if (diff === 0) {
+            finalCustomerFare = fareBeforeCommission;
+          } else if (diff <= roundingInc / 2 && roundingInc / 2 > 0) { // e.g., if diff <= 250 for roundingIncrement 500
+            finalCustomerFare = base + (roundingInc / 2);
+          } else {
+            finalCustomerFare = base + roundingInc;
+          }
+        } else { // No rounding if increment is 0 or less
+          finalCustomerFare = fareBeforeCommission;
+        }
+        // --- END FARE CALCULATION ---
+
         batch.update(rideRequestRef, {
           status: "completed",
           completedTime: admin.firestore.FieldValue.serverTimestamp(),
+          fare: finalCustomerFare,
+          commissionAmount: commissionAmount, // Storing commission amount
+          // Store the actual tracked data for record-keeping
+          actualDistanceKm: actualDistanceKm,
+          actualDrivingDurationMinutes: actualDrivingDurationMinutes,
+          actualTotalWaitingTimeMinutes: actualTotalWaitingTimeMinutes,
+          driverEarnings: driverEarnings, // storing driverEarnings if needed
         });
         batch.update(driverUserRef, {
           "driverProfile.status": "waitingForRide",
@@ -425,10 +607,21 @@ exports.handleDriverRideAction = onCall(async (request) => {
           const kijiweRef = admin.firestore().collection("kijiwe").doc(kijiweId);
           batch.update(kijiweRef, { queue: admin.firestore.FieldValue.arrayUnion(driverUid) });
         }
-        // TODO: Notify customer
+        await batch.commit();
+        logger.log(`[handleDriverRideAction - completeRide] Firestore batch committed for ride ${rideRequestId}.`);
+        if (customerId) {
+          await sendFCMNotification(customerId, "Ride Completed!", "Your ride has been completed. Thank you!", {
+            rideRequestId: rideRequestId,
+            status: "completed",
+            fare: finalCustomerFare.toString(), // Send the newly calculated fare
+            click_action: "FLUTTER_NOTIFICATION_CLICK",
+          });
+          logger.log(`[handleDriverRideAction - completeRide] Sent FCM to customer ${customerId} for ride ${rideRequestId}.`);
+        }
         break;
+      } // Closed block scope
 
-      case "cancelRideByDriver":
+      case "cancelRideByDriver": { // Added block scope
         if (rideData.driverId !== driverUid || ["accepted", "arrivedAtPickup"].indexOf(rideData.status) === -1) {
           throw new HttpsError("failed-precondition", "Ride cannot be cancelled by driver at this stage.");
         }
@@ -444,10 +637,21 @@ exports.handleDriverRideAction = onCall(async (request) => {
           const kijiweRef = admin.firestore().collection("kijiwe").doc(kijiweId);
           batch.update(kijiweRef, { queue: admin.firestore.FieldValue.arrayUnion(driverUid) });
         }
-        // TODO: Notify customer
+        await batch.commit();
+        logger.log(`[handleDriverRideAction - cancelRideByDriver] Firestore batch committed for ride ${rideRequestId}.`);
+        if (customerId) {
+          const driverNameForCancel = driverDoc.data().name || "The driver";
+          await sendFCMNotification(customerId, "Ride Cancelled", `Your ride has been cancelled by ${driverNameForCancel}.`, {
+            rideRequestId: rideRequestId,
+            status: "cancelled_by_driver",
+            click_action: "FLUTTER_NOTIFICATION_CLICK",
+          });
+          logger.log(`[handleDriverRideAction - cancelRideByDriver] Sent FCM to customer ${customerId} for ride ${rideRequestId}.`);
+        }
         break;
+      } // Closed block scope
 
-      case "rateCustomer":
+      case "rateCustomer": { // Added block scope
         if (rideData.driverId !== driverUid || rideData.status !== "completed") {
           throw new HttpsError("failed-precondition", "Cannot rate customer for this ride.");
         }
@@ -464,13 +668,14 @@ exports.handleDriverRideAction = onCall(async (request) => {
             "customerProfile.totalRatingsReceivedCount": admin.firestore.FieldValue.increment(1),
           });
         }
+        // No direct FCM to customer needed for this action, but batch commit is important.
+        await batch.commit();
+        logger.log(`[handleDriverRideAction - rateCustomer] Firestore batch committed for ride ${rideRequestId}.`);
         break;
-
+      } // Closed block scope
       default:
         throw new HttpsError("invalid-argument", "Unknown action specified.");
     }
-
-    await batch.commit();
     logger.log(`Driver ${driverUid} performed action '${action}' on ride ${rideRequestId}.`);
     return { success: true, message: `Action '${action}' successful.` };
   } catch (error) {

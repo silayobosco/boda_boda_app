@@ -176,7 +176,6 @@ class DriverProvider extends ChangeNotifier {
       }
 
       // Create GeoPoint for GeoFlutterFire
-      GeoPoint geoPoint = GeoPoint(newKijiweLocation.latitude, newKijiweLocation.longitude);
       GeoFirePoint geoFirePoint = geo.point(latitude: newKijiweLocation.latitude, longitude: newKijiweLocation.longitude);
 
       // Create the new Kijiwe
@@ -281,9 +280,16 @@ class DriverProvider extends ChangeNotifier {
 
   // Method to set new pending ride details from FCM
   void setNewPendingRide(Map<String, dynamic> rideData) {
-    _pendingRideRequestDetails = rideData;
-    notifyListeners();
-  }
+    // Only set as pending if it's a new request meant for driver acceptance
+    final status = rideData['status'] as String?;
+    if (status == 'pending_driver_acceptance') {
+      _pendingRideRequestDetails = rideData;
+      notifyListeners();
+    } else {
+      // If it's an update for an existing ride (e.g., completed, cancelled) or not a new offer,
+      // do not treat it as a new pending request.
+      debugPrint("DriverProvider: Received ride data with status '$status', not setting as new pending ride.");
+    }  }
 
   // Method to clear pending ride details
   void clearPendingRide() {
@@ -415,7 +421,14 @@ class DriverProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> completeRide(BuildContext context, String rideId, String customerId) async {
+  Future<void> completeRide(
+    BuildContext context,
+    String rideId,
+    String customerId, {
+    double? actualDistanceKm,
+    double? actualDrivingDurationMinutes,
+    double? actualTotalWaitingTimeMinutes, // Placeholder for future implementation
+  }) async {
     final userId = _authService.currentUser?.uid;
     if (userId == null) {
       throw Exception('Driver not logged in');
@@ -423,12 +436,20 @@ class DriverProvider extends ChangeNotifier {
     setLoading(true);
     try {
       HttpsCallable callable = FirebaseFunctions.instance.httpsCallable('handleDriverRideAction');
-      final result = await callable.call(<String, dynamic>{
+      // Define callableData before use
+      final Map<String, dynamic> callableData = {
         'rideRequestId': rideId,
         'action': 'completeRide',
-      });
-      debugPrint("Cloud function 'completeRide' result: ${result.data}");
+        // customerId is implicitly known by the backend via rideId
+      };
 
+      // Pass actual tracking data to the Cloud Function
+      if (actualDistanceKm != null) callableData['actualDistanceKm'] = actualDistanceKm;
+      if (actualDrivingDurationMinutes != null) callableData['actualDrivingDurationMinutes'] = actualDrivingDurationMinutes;
+      if (actualTotalWaitingTimeMinutes != null) callableData['actualTotalWaitingTimeMinutes'] = actualTotalWaitingTimeMinutes;
+
+      final result = await callable.call(callableData); // Call with the populated data map
+      debugPrint("Cloud function 'completeRide' result: ${result.data}");
       // The Cloud Function now handles updating driver's status and Kijiwe queue.
       notifyListeners();
     } catch (e) {

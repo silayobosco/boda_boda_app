@@ -36,6 +36,16 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Rules for the 'appConfiguration' collection
+    match /appConfiguration/{configId} {
+      // Allow read access to the service account used by Cloud Functions
+      // This typically uses 'service account' authentication.
+      // You might restrict this further if needed, but for config, read is usually safe.
+      allow read: if true; // Or a more specific condition if needed
+      // Prevent client apps from writing to this configuration
+      allow create, update, delete: if false; // Or restrict to specific admin UIDs if needed
+    }
+
     // Rules for the 'rideHistory' collection
     match /rideHistory/{rideHistoryId} {
       // Allow customers and drivers to read their ride history
