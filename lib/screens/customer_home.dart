@@ -16,6 +16,7 @@ import '../models/user_model.dart'; // For Driver's UserModel
 import '../utils/ui_utils.dart'; // Import ui_utils
 import '../utils/map_utils.dart'; // Import the new map utility
 import 'package:boda_boda/services/firestore_service.dart';
+import 'chat_screen.dart'; // Import the ChatScreen
 
 class CustomerHome extends StatefulWidget {
   const CustomerHome({super.key});
@@ -69,12 +70,19 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
   // Ride Lifecycle State
   bool _isFindingDriver = false;
   String? _activeRideRequestId;
-  RideRequestModel? _activeRideRequestDetails;
+  RideRequestModel? _activeRideRequestDetails; // This will be updated by the stream
   UserModel? _assignedDriverModel;
   StreamSubscription? _driverLocationSubscription;
   BitmapDescriptor? _driverIcon; // For the driver's marker
   bool _isDriverIconLoaded = false;
-  @override
+  //@override
+  // Scheduling limits - @override was incorrect here
+  int _maxSchedulingDaysAhead = 30; // Default
+  int _minSchedulingMinutesAhead = 5; // Default
+  double? _estimatedFare; // Declare _estimatedFare
+  Map<String, dynamic>? _fareConfig; // Declare _fareConfig
+  final TextEditingController _customerNoteController = TextEditingController(); // For the initial note
+
   bool get wantKeepAlive => true;
 
   @override
@@ -85,6 +93,8 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
     _setupFocusListeners();
     _sheetController.addListener(_onSheetChanged);
     _loadSearchHistory(); 
+    _fetchSchedulingLimits();
+    _fetchFareConfig(); // Ensure this is called
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_destinationController.text.isEmpty) {
         setState(() {
@@ -93,7 +103,75 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
       }
     });
   }
+
+  Future<void> _fetchFareConfig() async {
+    debugPrint("CustomerHome: _fetchFareConfig called");
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('appConfiguration')
+          .doc('fareSettings')
+          .get();
+      if (doc.exists && doc.data() != null) {
+        if (mounted) setState(() => _fareConfig = doc.data());
+        debugPrint("CustomerHome: Fare config loaded: $_fareConfig");
+        _calculateEstimatedFare(); // Calculate fare once config is loaded
+      } else {
+        debugPrint("CustomerHome: Fare config document does not exist.");
+      }
+    } catch (e) {
+      debugPrint("Error fetching fare config: $e. Using defaults for now.");
+    }
+  }
+
+  Future<void> _fetchSchedulingLimits() async {
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('appConfiguration')
+          .doc('schedulingSettings')
+          .get();
+      if (doc.exists && doc.data() != null) {
+        final data = doc.data()!;
+        if (mounted) {
+          setState(() {
+            _maxSchedulingDaysAhead = data['maxSchedulingDaysAhead'] as int? ?? _maxSchedulingDaysAhead;
+            _minSchedulingMinutesAhead = data['minSchedulingMinutesAhead'] as int? ?? _minSchedulingMinutesAhead;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint("Error fetching scheduling limits: $e. Using defaults.");
+    }
+  }
   
+  void _calculateEstimatedFare() {
+    debugPrint("CustomerHome: _calculateEstimatedFare called. FareConfig: $_fareConfig, Distance: $_selectedRouteDistance, Duration: $_selectedRouteDuration");
+    if (!mounted || _fareConfig == null || _selectedRouteDistance == null || _selectedRouteDuration == null) {
+      if (mounted) setState(() => _estimatedFare = null);
+      debugPrint("CustomerHome: Conditions for fare calculation not met. Estimated fare set to null.");
+      return;
+    }
+
+    final distanceMatch = RegExp(r'([\d\.]+)').firstMatch(_selectedRouteDistance!);
+    final double distanceKm = double.tryParse(distanceMatch?.group(1) ?? '0') ?? 0;
+    double durationMinutes = 0;
+    final hourMatch = RegExp(r'(\d+)\s*hr').firstMatch(_selectedRouteDuration!);
+    if (hourMatch != null) durationMinutes += (double.tryParse(hourMatch.group(1) ?? '0') ?? 0) * 60;
+    final minMatch = RegExp(r'(\d+)\s*min').firstMatch(_selectedRouteDuration!);
+    if (minMatch != null) durationMinutes += double.tryParse(minMatch.group(1) ?? '0') ?? 0;
+    if (durationMinutes == 0 && _selectedRouteDuration!.contains("min")) {
+        final simpleMinMatch = RegExp(r'([\d\.]+)').firstMatch(_selectedRouteDuration!);
+        durationMinutes = double.tryParse(simpleMinMatch?.group(1) ?? '0') ?? 0;
+    }
+    final double baseFare = (_fareConfig!['startingFare'] as num?)?.toDouble() ?? 0.0;
+    final double perKmRate = (_fareConfig!['farePerKilometer'] as num?)?.toDouble() ?? 0.0;
+    final double perMinRate = (_fareConfig!['farePerMinuteDriving'] as num?)?.toDouble() ?? 0.0;
+    final double minFare = (_fareConfig!['minimumFare'] as num?)?.toDouble() ?? 0.0;    double calculatedFare = baseFare + (distanceKm * perKmRate) + (durationMinutes * perMinRate);
+    calculatedFare = calculatedFare > minFare ? calculatedFare : minFare;    final double roundingInc = (_fareConfig!['roundingIncrement'] as num?)?.toDouble() ?? 0.0;
+    if (roundingInc > 0) calculatedFare = (calculatedFare / roundingInc).ceil() * roundingInc;
+    if (mounted) setState(() => _estimatedFare = calculatedFare);
+    debugPrint("CustomerHome: Calculated estimated fare: $_estimatedFare");
+  }
+
   Future<void> _loadDriverMarkerIcon() async {
     try {
       _driverIcon = await BitmapDescriptor.fromAssetImage(
@@ -485,6 +563,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
       setState(() {
         _allFetchedRoutes = routes;
         _selectedRouteIndex = 0; // Default to the first route
+        _calculateEstimatedFare(); // Recalculate fare when routes change
         _updateDisplayedRoute();
       });
 
@@ -497,11 +576,11 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
       }
     } else {
       // Handle no routes found or API error (MapUtils prints errors)
-      setState(() {
-        _polylines.clear();
-        _selectedRouteDistance = null;
-        _selectedRouteDuration = null;
-      });
+setState(() {
+      _polylines.clear();
+      _selectedRouteDistance = _allFetchedRoutes[_selectedRouteIndex]['distance'] as String?;
+      _calculateEstimatedFare(); // Recalculate fare when route selection changes
+      _selectedRouteDuration = _allFetchedRoutes[_selectedRouteIndex]['duration'] as String?;      });
     }
   } catch (e) {
     debugPrint('Error in _drawRoute (CustomerHome): $e');
@@ -823,39 +902,49 @@ void _updateDisplayedRoute() {
 
     // Set _isFindingDriver = true HERE, immediately before async work
     if (mounted) {
-      setState(() {
-        _isFindingDriver = true;
-      });
+      // We will set _isFindingDriver and _activeRideRequestId after the ride request is created
+      // to ensure _activeRideRequestId is available when _isFindingDriver is true.
+      // For now, just show a generic loading state if needed, or rely on button press feedback.
+      // setState(() {
+      //   _isFindingDriver = true; // Temporarily set to true to show loading
+      // });
     }
     final rideRequestProvider = Provider.of<RideRequestProvider>(context, listen: false); // Ensure RideRequestProvider is defined and imported
 
-    if (_pickupLocation == null || _dropOffLocation == null) {
-      if (mounted) {
+    if (!mounted || _pickupLocation == null || _dropOffLocation == null) { // Add !mounted check
+      // Check mounted BEFORE using context
+      if (mounted) { 
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Please select both pickup and drop-off locations')),
         );
-        setState(() => _isFindingDriver = false);
+        // setState(() => _isFindingDriver = false); // No longer needed here
       }
       return;
     }
     final currentUserId = rideRequestProvider.currentUserId;
-    if (currentUserId == null) {
+    if (!mounted || currentUserId == null) { // Add !mounted check
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('User not authenticated. Cannot create ride request.')),
         );
-        setState(() => _isFindingDriver = false);
+        // if (mounted) setState(() => _isFindingDriver = false); // No longer needed here
       }
       return;
     }
 
     try {        
       // Create a ride request model
+      if (mounted) { // Set finding driver true just before the async call
+        setState(() => _isFindingDriver = true);
+      }
+      // final BuildContext currentContext = context; // Unused variable
+
       String rideId = await rideRequestProvider.createRideRequest(
         pickup: _pickupLocation!, // _pickupLocation is already ll.LatLng (latlong2.LatLng)
         pickupAddressName: _pickupController.text,
         dropoff: _dropOffLocation!, // _dropOffLocation is already ll.LatLng (latlong2.LatLng)
         dropoffAddressName: _destinationController.text,
+        customerNote: _customerNoteController.text.trim(), // Pass the note
         stops: _stops.map((s) => {
           'name': s.name,
           // s.location is ll.LatLng (latlong2.LatLng), which is what createRideRequest expects for stops' location
@@ -864,29 +953,57 @@ void _updateDisplayedRoute() {
         }).toList(),
       );
 
-      if (mounted) {
+      // After await, check if the widget is still mounted before using context or calling setState.
+      if (mounted) { 
         setState(() {
-          _activeRideRequestId = rideId;
-          // _isFindingDriver remains true, the StreamBuilder will handle UI changes
+          _activeRideRequestId = rideId; // Now _activeRideRequestId is set
+          _isFindingDriver = true;      // And _isFindingDriver is also true
+                                        // The StreamBuilder will now listen to this rideId
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Ride request created. Finding a driver...')),
-        );
+        // Use the captured context if showing a SnackBar immediately after success.
+        // However, it's often better to let the StreamBuilder update the UI,
+        // and show SnackBars based on those state changes if needed.
+        // For now, let's assume the "Finding a driver..." state is clear enough from the UI.
+        // ScaffoldMessenger.of(currentContext).showSnackBar(
+        //   const SnackBar(content: Text('Ride request created. Finding a driver...')),
+        // );
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+      // After await (in catch), check if the widget is still mounted.
+      if (mounted) { 
+        // Use the initially captured context for the SnackBar.
+        ScaffoldMessenger.of(context).showSnackBar( // Using the current context here, assuming it's still valid if mounted.
           SnackBar(content: Text('Failed to create ride request: $e')),
         );
-        setState(() => _isFindingDriver = false); // Stop loading on error
-      }
-    } finally {
-      // Only set _isFindingDriver to false here if an error occurred AND _activeRideRequestId was NOT set.
-      // If _activeRideRequestId IS set, the StreamBuilder is now responsible for the UI.
-      if (mounted && _activeRideRequestId == null) {
-         setState(() => _isFindingDriver = false);
+        // If creation fails, reset both
+        setState(() {
+          _isFindingDriver = false; _activeRideRequestId = null;}); 
       }
     }
+  }
+
+  Future<void> _showAddNoteDialog(String rideId, String? currentNote) async {
+    final noteController = TextEditingController(text: currentNote);
+    final rideRequestProvider = Provider.of<RideRequestProvider>(context, listen: false);
+
+    return showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Add Note to Driver'),
+        content: TextField(
+          controller: noteController,
+          decoration: appInputDecoration(hintText: 'e.g., I am wearing a red shirt'),
+          maxLines: 3,
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+          ElevatedButton(onPressed: () async {
+            await rideRequestProvider.updateCustomerNote(rideId, noteController.text.trim());
+            Navigator.pop(dialogContext);
+          }, child: const Text('Save Note')),
+        ],
+      ),
+    );
   }
 
   Future<void> _scheduleRide(
@@ -895,78 +1012,233 @@ void _updateDisplayedRoute() {
     LatLng dropOffLocation,
     String pickupAddress,
     String dropOffAddress,
-    String customerId, 
     List<Map<String, dynamic>> stops 
-
     ) async {
-  final TextEditingController titleController = TextEditingController();
-  DateTime? selectedDate;
-  TimeOfDay? selectedTime;
+  final TextEditingController titleController = TextEditingController(text: "Scheduled Ride to ${dropOffAddress.isNotEmpty ? dropOffAddress : 'Destination'}");
+  DateTime? selectedDate = DateTime.now(); // Default to today
+  TimeOfDay? selectedTime = TimeOfDay.fromDateTime(DateTime.now().add(const Duration(hours: 1))); // Default to one hour from now
+  // Recurrence state variables
+  bool _isRecurring = false;
+  String _recurrenceType = 'None'; // 'None', 'Daily', 'Weekly'
+  List<bool> _selectedRecurrenceDays = List.filled(7, false); // For weekly: Mon, Tue, Wed, Thu, Fri, Sat, Sun
+  DateTime? _recurrenceEndDate;
+  final List<String> _dayAbbreviations = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-  await showDialog(
-    context: context,
-    builder: (context) {
-      return AlertDialog(
-        title: const Text('Schedule Ride'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: titleController,
-              decoration: const InputDecoration(
-                labelText: 'Title',
-                hintText: 'Enter a title for your ride',
+  final theme = Theme.of(context); // Get theme for styling
+ 
+   await showDialog(
+      context: context,
+      builder: (dialogContext) { // Renamed context to avoid conflict
+        return StatefulBuilder( // Use StatefulBuilder to update dialog content
+          builder: (stfContext, stfSetState) {
+            return AlertDialog(
+              title: const Text('Schedule New Ride'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(
+                    controller: titleController,
+                    decoration: appInputDecoration(
+                      labelText: 'Title',
+                      hintText: 'Enter a title for your ride',
+                    ),
+                  ),
+                  verticalSpaceMedium,
+                  Text("Select Date & Time:", style: theme.textTheme.titleSmall),
+                  verticalSpaceSmall,
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          icon: const Icon(Icons.calendar_today),
+                          label: Text(selectedDate != null ? "${selectedDate!.toLocal()}".split(' ')[0] : 'Pick Date'),
+                          onPressed: () async {
+                            final now = DateTime.now();
+                            final DateTime? pickedDate = await showDatePicker(
+                              context: stfContext, // Use StatefulBuilder context
+                              initialDate: selectedDate ?? now,
+                              firstDate: now,
+                              lastDate: now.add(Duration(days: _maxSchedulingDaysAhead)),
+                            );
+                            if (pickedDate != null) {
+                              stfSetState(() {
+                                selectedDate = pickedDate;
+                                // If date changed to today, ensure time is valid
+                                if (selectedDate!.isAtSameMomentAs(DateTime(now.year, now.month, now.day))) {
+                                  final minTimeToday = now.add(Duration(minutes: _minSchedulingMinutesAhead));
+                                  if (selectedTime != null) {
+                                    final currentSelectedDateTime = DateTime(selectedDate!.year, selectedDate!.month, selectedDate!.day, selectedTime!.hour, selectedTime!.minute);
+                                    if (currentSelectedDateTime.isBefore(minTimeToday)) {
+                                      selectedTime = TimeOfDay.fromDateTime(minTimeToday);
+                                    }
+                                  } else {
+                                    selectedTime = TimeOfDay.fromDateTime(minTimeToday);
+                                  }
+                                }
+                              });
+                            }
+                          },
+                        ),
+                      ),
+                      horizontalSpaceSmall,
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          icon: const Icon(Icons.access_time),
+                          label: Text(selectedTime != null ? selectedTime!.format(stfContext) : 'Pick Time'),
+                          onPressed: () async {
+                            final now = DateTime.now();
+                            TimeOfDay initialTime = selectedTime ?? TimeOfDay.fromDateTime(now.add(Duration(minutes: _minSchedulingMinutesAhead + 5))); // Default with a small buffer
+
+                            if (selectedDate != null && selectedDate!.year == now.year && selectedDate!.month == now.month && selectedDate!.day == now.day) {
+                              final minTimeToday = now.add(Duration(minutes: _minSchedulingMinutesAhead));
+                              if (initialTime.hour < minTimeToday.hour || (initialTime.hour == minTimeToday.hour && initialTime.minute < minTimeToday.minute)) {
+                                initialTime = TimeOfDay.fromDateTime(minTimeToday);
+                              }
+                            }
+
+                            final TimeOfDay? pickedTime = await showTimePicker(
+                              context: stfContext, // Use StatefulBuilder context
+                              initialTime: initialTime,
+                            );
+                            if (pickedTime != null) {
+                              stfSetState(() => selectedTime = pickedTime);
+                            }
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  verticalSpaceMedium,
+                  // --- Recurrence Section ---
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text("Repeat this ride?", style: theme.textTheme.titleSmall),
+                      Switch(
+                        value: _isRecurring,
+                        onChanged: (value) {
+                          stfSetState(() {
+                            _isRecurring = value;
+                            if (!_isRecurring) {
+                              _recurrenceType = 'None';
+                              _selectedRecurrenceDays = List.filled(7, false);
+                              _recurrenceEndDate = null;
+                            } else {
+                              _recurrenceType = 'Daily'; // Default to Daily when enabled
+                              _recurrenceEndDate = selectedDate?.add(const Duration(days: 30)); // Default end date
+                            }
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                  if (_isRecurring) ...[
+                    verticalSpaceSmall,
+                    DropdownButtonFormField<String>(
+                      value: _recurrenceType,
+                      decoration: appInputDecoration(labelText: 'Frequency'),
+                      items: ['Daily', 'Weekly']
+                          .map((label) => DropdownMenuItem(
+                                value: label,
+                                child: Text(label),
+                              ))
+                          .toList(),
+                      onChanged: (value) {
+                        stfSetState(() {
+                          _recurrenceType = value!;
+                          if (_recurrenceType != 'Weekly') {
+                            _selectedRecurrenceDays = List.filled(7, false);
+                          }
+                        });
+                      },
+                    ),
+                    if (_recurrenceType == 'Weekly') ...[
+                      verticalSpaceSmall,
+                      Text("Repeat on:", style: theme.textTheme.bodyMedium),
+                      Wrap( // Using Wrap for days of the week
+                        spacing: 6.0,
+                        runSpacing: 0.0,
+                        children: List<Widget>.generate(7, (index) {
+                          return FilterChip(
+                            label: Text(_dayAbbreviations[index]),
+                            selected: _selectedRecurrenceDays[index],
+                            onSelected: (bool selected) {
+                              stfSetState(() {
+                                _selectedRecurrenceDays[index] = selected;
+                              });
+                            },
+                          );
+                        }),
+                      ),
+                    ],
+                    verticalSpaceSmall,
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.calendar_today),
+                      label: Text(_recurrenceEndDate != null ? "Repeat until: ${_recurrenceEndDate!.toLocal()}".split(' ')[0] : 'Set End Date'),
+                      onPressed: () async {
+                        final DateTime? pickedEndDate = await showDatePicker(
+                          context: stfContext,
+                          initialDate: _recurrenceEndDate ?? selectedDate!.add(const Duration(days: 30)),
+                          firstDate: selectedDate!.add(const Duration(days: 1)), // End date must be after selectedDate
+                          lastDate: DateTime.now().add(const Duration(days: 365 * 2)), // Max 2 years for recurrence
+                        );
+                        if (pickedEndDate != null) stfSetState(() => _recurrenceEndDate = pickedEndDate);
+                      },
+                    ),
+                  ],
+                ],
               ),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () async {
-                final now = DateTime.now();
-                selectedDate = await showDatePicker(
-                  context: context,
-                  initialDate: now,
-                  firstDate: now,
-                  lastDate: now.add(const Duration(days: 365)),
-                );
-                if (selectedDate != null) {
-                  selectedTime = await showTimePicker(
-                    context: context,
-                    initialTime: TimeOfDay.fromDateTime(now),
-                  );
-                }
-              },
-              child: const Text('Pick Date & Time'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              if (titleController.text.isNotEmpty &&
-                  selectedDate != null &&
-                  selectedTime != null) {
-                Navigator.of(context).pop();
-              } else {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                      content: Text('Please provide a title, date, and time')),
-                );
-              }
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      );
-    },
-  );
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    if (titleController.text.isNotEmpty && selectedDate != null && selectedTime != null) {
+                      final DateTime scheduledDateTime = DateTime(
+                        selectedDate!.year, selectedDate!.month, selectedDate!.day,
+                        selectedTime!.hour, selectedTime!.minute,
+                      );
+                      final DateTime now = DateTime.now();
+                      final DateTime minValidDateTime = now.add(Duration(minutes: _minSchedulingMinutesAhead));
 
-  if (titleController.text.isNotEmpty &&
-      selectedDate != null &&
-      selectedTime != null) {
+                      if (_isRecurring && _recurrenceType == 'Weekly' && !_selectedRecurrenceDays.contains(true)) {
+                        ScaffoldMessenger.of(stfContext).showSnackBar(
+                          const SnackBar(content: Text('Please select at least one day for weekly recurrence.')),
+                        );
+                        return;
+                      }
+                      if (_isRecurring && _recurrenceEndDate == null) {
+                        ScaffoldMessenger.of(stfContext).showSnackBar(
+                          const SnackBar(content: Text('Please set an end date for the recurring ride.')),
+                        );
+                        return;
+                      }
+
+                      if (scheduledDateTime.isBefore(minValidDateTime)) {
+                        ScaffoldMessenger.of(stfContext).showSnackBar(
+                          SnackBar(content: Text('Scheduled time must be at least $_minSchedulingMinutesAhead minutes from now.')),
+                        );
+                        return;
+                      }
+                      Navigator.of(dialogContext).pop(true); // Return true for save
+                    } else {
+                      ScaffoldMessenger.of(stfContext).showSnackBar(
+                        const SnackBar(content: Text('Please provide a title, date, and time')),
+                      );
+                    }
+                  },
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    ).then((saved) async { // Handle the result of the dialog
+  if (saved == true && titleController.text.isNotEmpty && selectedDate != null && selectedTime != null) {
     final DateTime scheduledDateTime = DateTime(
       selectedDate!.year,
       selectedDate!.month,
@@ -974,40 +1246,52 @@ void _updateDisplayedRoute() {
       selectedTime!.hour,
       selectedTime!.minute,
     );
+    final rideRequestProvider = Provider.of<RideRequestProvider>(context, listen: false);
+    final String? customerId = rideRequestProvider.authService.currentUser?.uid;
 
+    if (customerId == null) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error: User not authenticated.')));
+      return;
+    }
     try {
       final rideData = {
-        'customerId': Provider.of<RideRequestProvider>(context, listen: false).authService.currentUser?.uid,   
+        'customerId': customerId, // Use the passed customerId
         'title': titleController.text,
-        'scheduledDateTime': scheduledDateTime.toIso8601String(),
-        'createdAt': DateTime.now().toIso8601String(),
-        'pickupLocation': GeoPoint(pickupLocation.latitude, pickupLocation.longitude), 
-        'dropOffLocation': GeoPoint(dropOffLocation.latitude, dropOffLocation.longitude), 
-        //'pickupAddress': pickupAddress, 
-        //'dropOffAddress': dropOffAddress,  
-        'status': 'scheduled', 
-        'stops': stops.map((stop) => {
-          'name': stop['name'],
-          'location': stop['location'] != null
-              ? GeoPoint(stop['location'].latitude, stop['location'].longitude)
+        'scheduledDateTime': Timestamp.fromDate(scheduledDateTime), // Store as Timestamp
+        'createdAt': FieldValue.serverTimestamp(), // Use server timestamp
+        'pickup': GeoPoint(pickupLocation.latitude, pickupLocation.longitude), // Use 'pickup'
+        'dropoff': GeoPoint(dropOffLocation.latitude, dropOffLocation.longitude), // Use 'dropoff'
+        'pickupAddressName': pickupAddress,
+        'dropoffAddressName': dropOffAddress,
+        'status': 'scheduled',
+          'isRecurring': _isRecurring,
+          'recurrenceType': _isRecurring ? _recurrenceType : null,
+          'recurrenceDaysOfWeek': _isRecurring && _recurrenceType == 'Weekly'
+              ? _selectedRecurrenceDays.asMap().entries.where((e) => e.value).map((e) => _dayAbbreviations[e.key]).toList()
               : null,
-        }).toList(), 
-
+          'recurrenceEndDate': _isRecurring && _recurrenceEndDate != null ? Timestamp.fromDate(_recurrenceEndDate!) : null,
+        'stops': stops.map((stop) => { // 'stops' is already List<Map<String, dynamic>>
+          'name': stop['name'],
+          'location': stop['location'], // This is already GeoPoint? from the argument
+          'addressName': stop['addressName'], // This is String? from the argument
+        }).toList(),
       };
 
-      await FirebaseFirestore.instance
-          .collection('scheduledRides')
-          .add(rideData);
+      await FirebaseFirestore.instance.collection('scheduledRides').add(rideData);
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Ride scheduled successfully!')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Ride scheduled successfully!')),
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to schedule ride: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to schedule ride: $e')),
+        );
+      }
     }
-  }
+  }});
 }
 
   @override
@@ -1052,34 +1336,31 @@ void _updateDisplayedRoute() {
               builder: (context, snapshot) {
                 if (snapshot.hasData && snapshot.data != null) {
                   _activeRideRequestDetails = snapshot.data;
-                  // Check if driver is assigned and we haven't fetched their details yet
-                  if (_activeRideRequestDetails!.driverId != null && _assignedDriverModel == null) {
-                    debugPrint("CustomerHome: StreamBuilder - Detected driverId: ${_activeRideRequestDetails!.driverId}. Current _assignedDriverModel UID: ${_assignedDriverModel?.uid}. Fetching driver model.");
-                    // Fetch driver details
-                    FirebaseFirestore.instance
-                        .collection('users')
-                        .doc(_activeRideRequestDetails!.driverId)
-                        .get()
-                        .then((doc) {
-                      if (doc.exists && mounted) {
-                        setState(() {
-                          _assignedDriverModel = UserModel.fromJson(doc.data()!);
-                          _isFindingDriver = false; // Driver found
-                          _startListeningToDriverLocation(_assignedDriverModel!.uid!);
-                          // TODO: Add driver marker
-                        });
+                  final rideStatus = _activeRideRequestDetails!.status;
+                  final driverId = _activeRideRequestDetails!.driverId;
+
+                  if (driverId != null) {
+                    if (rideStatus == 'pending_driver_acceptance') {
+                      if (mounted && !_isFindingDriver) { // Update if not already in this state
+                        setState(() => _isFindingDriver = true); // Keep showing "finding/waiting"
                       }
-                    }).catchError((e) {
-                       debugPrint("Error fetching assigned driver details: $e");
-                       if (mounted) setState(() => _isFindingDriver = false); // Stop loading on error
-                    });
-                  } else if (_activeRideRequestDetails!.driverId == null && _assignedDriverModel != null) {
+                    } else if (rideStatus == 'accepted' || rideStatus == 'goingToPickup' || rideStatus == 'arrivedAtPickup' || rideStatus == 'onRide') {
+                      if (mounted) {
+                        if (_isFindingDriver) setState(() => _isFindingDriver = false); // Driver accepted, stop "finding"
+                        // Start listening to driver location if not already, or if driverId changed
+                        if (_driverLocationSubscription == null || _assignedDriverModel?.uid != driverId) {
+                           _assignedDriverModel = UserModel(uid: driverId); // Minimal model for UID tracking
+                           _startListeningToDriverLocation(driverId);
+                        }
+                      }
+                    }
+                  } else if (driverId == null && _assignedDriverModel != null) {
                     // Driver was unassigned or ride cancelled by driver before pickup
                     if (mounted) {
                       setState(() {
+                        _isFindingDriver = false; // Stop finding if driver is unassigned
                         _assignedDriverModel = null;
                         _stopListeningToDriverLocation();
-                        _isFindingDriver = false; // Or set to true if rematching
                         // Potentially clear _activeRideRequestId if ride is fully cancelled
                       });
                     }
@@ -1087,12 +1368,15 @@ void _updateDisplayedRoute() {
                   // Handle other status updates like 'arrived', 'onRide', 'completed'
                   // For example, if status is 'completed', reset _activeRideRequestId
                   if (_activeRideRequestDetails!.status == 'completed' || 
-                      _activeRideRequestDetails!.status == 'cancelled_by_customer' ||
-                      _activeRideRequestDetails!.status == 'cancelled_by_driver') {
+                      _activeRideRequestDetails!.status.contains('cancelled') || // More generic cancel check
+                      _activeRideRequestDetails!.status == 'no_drivers_available') {
                         final String? prevStatus = _activeRideRequestDetails!.status; // Capture status before potential reset
                         WidgetsBinding.instance.addPostFrameCallback((_) {
                           final String endMessage = _getRideEndMessage(_activeRideRequestDetails!.status);
                           if (mounted) {
+                            final String? rideIdForRating = _activeRideRequestDetails?.id; // Capture before nulling
+                            final String? driverIdForRating = _activeRideRequestDetails?.driverId; // Capture before nulling
+
                             setState(() {
                               _activeRideRequestId = null;
                               _activeRideRequestDetails = null;
@@ -1102,11 +1386,10 @@ void _updateDisplayedRoute() {
                               _polylines.clear(); // Clear route polylines
                               _markers.removeWhere((m) => m.markerId.value == 'driver_active_location');
                             });
-                            final String? rideIdForRating = _activeRideRequestId; // Capture before nulling
-                            final String? driverIdForRating = _assignedDriverModel?.uid; // Capture before nulling
                             // After resetting UI, if ride was completed, show rating dialog
-                            // Ensure _activeRideRequestId and _assignedDriverModel are captured before they are nulled by setState
-                            if (prevStatus == 'completed' && rideIdForRating != null && driverIdForRating != null) _showRateDriverDialog(rideIdForRating, driverIdForRating);
+                            if (prevStatus == 'completed' && rideIdForRating != null && driverIdForRating != null) {
+                               _showRateDriverDialog(rideIdForRating, driverIdForRating);
+                            }
                             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(endMessage)));
                           }
                         });
@@ -1169,6 +1452,7 @@ void _updateDisplayedRoute() {
   Widget _buildRouteSheet() {
     // If a driver is assigned, show driver info and ride progress
     if (_activeRideRequestDetails != null && _activeRideRequestDetails!.driverId != null) {
+      debugPrint("CustomerHome: _buildRouteSheet -> Showing DriverAssignedSheet. ActiveRideDetails Status: ${_activeRideRequestDetails?.status}");
       // A driver is assigned (driverId is present)
       // _assignedDriverModel might still be loading, _buildDriverAssignedSheet will handle that
       return _buildDriverAssignedSheet(); 
@@ -1176,9 +1460,11 @@ void _updateDisplayedRoute() {
 
     // If finding a driver, show loading state in the sheet
     if (_isFindingDriver) {
+      debugPrint("CustomerHome: _buildRouteSheet -> Showing FindingDriverSheet.");
       return _buildFindingDriverSheet();
     }
     // Default: Show route planning sheet
+    debugPrint("CustomerHome: _buildRouteSheet -> Showing default route planning sheet. Estimated Fare: $_estimatedFare");
     return DraggableScrollableSheet(
       controller: _sheetController,
       initialChildSize: 0.35,
@@ -1477,13 +1763,24 @@ void _updateDisplayedRoute() {
               ),
               
               // Action Buttons (only shown when both pickup and destination are set)
-              if (_pickupLocation != null && _dropOffLocation != null && !_isFindingDriver)
+              if (_pickupLocation != null && _dropOffLocation != null && !_isFindingDriver && _activeRideRequestId == null) // Ensure no active ride request
                 Container(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                   // Use theme surface color to blend with sheet
                   color: Theme.of(context).colorScheme.surface,
                   child: Row(
                     children: [
+                      Expanded(
+                        flex: 3, // Confirm Route button larger
+                        child: ElevatedButton(
+                          onPressed: _confirmRideRequest,
+                          style: Theme.of(context).elevatedButtonTheme.style?.copyWith(
+                                minimumSize: MaterialStateProperty.all(const Size(double.infinity, 50)),
+                              ),
+                          child: const Text('Confirm Route', style: TextStyle(color: Colors.white)),
+                        ),
+                      ),
+                      horizontalSpaceMedium,
                       Expanded(
                         flex: 2,
                         child: OutlinedButton(
@@ -1493,12 +1790,12 @@ void _updateDisplayedRoute() {
                             LatLng(_dropOffLocation!.latitude, _dropOffLocation!.longitude),
                             _pickupController.text,
                             _destinationController.text,
-                            Provider.of<RideRequestProvider>(context, listen: false).authService.currentUser?.uid ?? '',
                             _stops.map((stop) => {
                               'name': stop.name,
                               'location': stop.location != null
                                   ? GeoPoint(stop.location!.latitude, stop.location!.longitude)
                                   : null,
+                              'addressName': stop.controller.text, // Pass addressName
                             }).toList(),
                           ),
                           // Style comes from OutlinedButtonThemeData
@@ -1506,21 +1803,6 @@ void _updateDisplayedRoute() {
                                 minimumSize: MaterialStateProperty.all(const Size(double.infinity, 50)),
                               ),
                           child: const Text('Schedule'),
-                        ),
-                      ),
-                      horizontalSpaceMedium, // Use spacing constant
-                      Expanded(
-                        flex: 3,
-                        child: ElevatedButton(
-                          onPressed: _confirmRideRequest,
-                          // Style comes from ElevatedButtonThemeData
-                          style: Theme.of(context).elevatedButtonTheme.style?.copyWith(
-                                minimumSize: MaterialStateProperty.all(const Size(double.infinity, 50)),
-                              ),
-                          child: const Text(
-                            'Confirm Route',
-                            style: TextStyle(color: Colors.white),
-                          ),
                         ),
                       ),
                     ],
@@ -1564,18 +1846,29 @@ void _updateDisplayedRoute() {
                 foregroundColor: theme.colorScheme.error,
                 side: BorderSide(color: theme.colorScheme.error),
               ),
-              onPressed: () async {
+              onPressed: () async { // Make this async
                 if (_activeRideRequestId != null) {
+                  // Capture context-dependent items BEFORE await
+                  final rideProvider = Provider.of<RideRequestProvider>(context, listen: false);
+                  final scaffoldMessenger = ScaffoldMessenger.of(context); // Capture ScaffoldMessenger
+                  final bool isMounted = mounted; // Capture mounted state
+
                   try {
-                    await Provider.of<RideRequestProvider>(context, listen: false)
-                        .cancelRideByCustomer(_activeRideRequestId!);
+                    await rideProvider.cancelRideByCustomer(_activeRideRequestId!);
                     // StreamBuilder will handle UI reset when status changes to cancelled
                   } catch (e) {
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
+                    if (isMounted) { // Use captured mounted state
+                      scaffoldMessenger.showSnackBar( // Use captured ScaffoldMessenger
                         SnackBar(content: Text('Failed to cancel ride: $e')),
                       );
+                    } else {
+                      debugPrint("Cancel ride failed, but widget was unmounted: $e");
                     }
+                  }
+                } else {
+                  debugPrint("Cancel Search pressed, but _activeRideRequestId is null.");
+                  if (mounted) { // Check mounted before showing SnackBar
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cannot cancel: Ride request not fully processed.')));
                   }
                 }
               },
@@ -1589,7 +1882,10 @@ void _updateDisplayedRoute() {
 
   Widget _buildDriverAssignedSheet() {
     final theme = Theme.of(context);
-    final rideStatus = _activeRideRequestDetails?.status ?? 'N/A';
+    final rideDetails = _activeRideRequestDetails; // Use a local variable for null safety
+
+    if (rideDetails == null) return Container(child: Center(child: Text("Waiting for ride details...")));
+    debugPrint("CustomerHome: _buildDriverAssignedSheet - Status: ${rideDetails.status}");
 
     // Add this debug print to inspect the data
     debugPrint("CustomerHome - _buildDriverAssignedSheet - _activeRideRequestDetails: ${_activeRideRequestDetails?.toJson()}");
@@ -1599,13 +1895,11 @@ void _updateDisplayedRoute() {
     debugPrint("CustomerHome - _buildDriverAssignedSheet - Driver Avg Rating (denorm): ${_activeRideRequestDetails?.driverAverageRating}");
     debugPrint("CustomerHome - _buildDriverAssignedSheet - Driver Rides Count (denorm): ${_activeRideRequestDetails?.driverCompletedRidesCount}");
 
-    if (_activeRideRequestDetails == null) { // Should not happen if this sheet is shown
-        return Container(child: Center(child: Text("Error: Ride details missing.")));
-    }
+    final rideStatus = rideDetails.status;
 
-    // If driver details are still loading (_assignedDriverModel is null but driverId is present)
-    if (_assignedDriverModel == null && _activeRideRequestDetails!.driverId != null) {
-      return Positioned(
+    // Show loading/waiting state if status is 'pending_driver_acceptance' or if driver details are not yet on rideDetails
+    if (rideStatus == 'pending_driver_acceptance' || (rideDetails.driverId != null && rideDetails.driverName == null)) {
+       return Positioned(
         bottom: 0, left: 0, right: 0,
         child: Container(
           padding: const EdgeInsets.all(20),
@@ -1619,18 +1913,67 @@ void _updateDisplayedRoute() {
             children: [
               CircularProgressIndicator(color: theme.colorScheme.primary),
               verticalSpaceMedium,
-              Text('Driver assigned. Loading details...', style: theme.textTheme.titleMedium),
+              Text(
+                rideStatus == 'pending_driver_acceptance' ? 'Waiting for driver to accept...' : 'Driver assigned. Loading details...',
+                style: theme.textTheme.titleMedium,
+                textAlign: TextAlign.center,
+              ),
+              verticalSpaceSmall,
+              // Cancel button if waiting for driver to accept - Ensure rideStatus is correctly 'pending_driver_acceptance'
+              if (rideStatus == 'pending_driver_acceptance')
+                OutlinedButton(
+                  style: OutlinedButton.styleFrom(foregroundColor: theme.colorScheme.error, side: BorderSide(color: theme.colorScheme.error)),
+                  onPressed: () async {
+                    // Similar safe cancel logic as in _buildFindingDriverSheet
+                    if (_activeRideRequestId != null) {
+                      final rideProvider = Provider.of<RideRequestProvider>(context, listen: false);
+                      try { await rideProvider.cancelRideByCustomer(_activeRideRequestId!); } catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to cancel: $e'))); }
+                    }
+                  },
+                  child: const Text('Cancel Ride'),
+                ),
+            // Chat with Driver Button
+            if (rideDetails.driverId != null && (rideStatus == 'accepted' || rideStatus == 'goingToPickup' || rideStatus == 'arrivedAtPickup' || rideStatus == 'onRide')) ...[
+              verticalSpaceSmall,
+              TextButton.icon(
+                icon: Icon(Icons.chat_bubble_outline, color: theme.colorScheme.primary),
+                label: Text('Chat with Driver', style: TextStyle(color: theme.colorScheme.primary)),
+                onPressed: () {
+                  debugPrint("CustomerHome: Chat button pressed for ride ID: ${rideDetails.id} with driver ID: ${rideDetails.driverId}");
+                  Navigator.push(context, MaterialPageRoute(builder: (context) => ChatScreen(
+                    rideRequestId: rideDetails.id!,
+                    recipientId: rideDetails.driverId!, // This is the driver's UID
+                    recipientName: rideDetails.driverName ?? "Driver",
+                    // We'll need to determine the current user's role to pass to ChatScreen later
+                  )));
+                },
+              ),
+            ],
+
+            // Add/Edit Note Button - Ensure rideStatus is correctly 'accepted' or 'goingToPickup'
+            // and rideDetails is not null.
+            if (rideStatus == 'accepted' || rideStatus == 'goingToPickup') ...[
+              verticalSpaceSmall,
+              TextButton.icon(
+                icon: Icon(Icons.edit_note_outlined, color: theme.colorScheme.secondary),
+                label: Text(
+                  rideDetails.customerNoteToDriver != null && rideDetails.customerNoteToDriver!.isNotEmpty
+                      ? 'Edit Note'
+                      : 'Add Note for Driver',
+                  style: TextStyle(color: theme.colorScheme.secondary),
+                ),
+                onPressed: () => _showAddNoteDialog(rideDetails.id!, rideDetails.customerNoteToDriver),
+              ),
+            ],
               verticalSpaceSmall,
               Chip(
                 label: Text('Status: $rideStatus', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSecondaryContainer)),
                 backgroundColor: theme.colorScheme.secondaryContainer,
               ),
             ],
-          ),
-        ),
-      );
+          )
+        ));
     }
-    if (_assignedDriverModel == null) return Container(); // Should be caught by above or means no driver assigned
 
     return Positioned(
       bottom: 0, left: 0, right: 0,
@@ -1644,26 +1987,26 @@ void _updateDisplayedRoute() {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (_assignedDriverModel!.profileImageUrl != null && _assignedDriverModel!.profileImageUrl!.isNotEmpty)
+            if (rideDetails.driverProfileImageUrl != null && rideDetails.driverProfileImageUrl!.isNotEmpty)
               CircleAvatar(
                 radius: 30,
-                backgroundImage: NetworkImage(_assignedDriverModel!.profileImageUrl!),
+                backgroundImage: NetworkImage(rideDetails.driverProfileImageUrl!),
               )
             else
               CircleAvatar(
                 radius: 30,
                 backgroundColor: theme.colorScheme.primaryContainer,
-                child: Icon(Icons.person, size: 30, color: theme.colorScheme.onPrimaryContainer),
+                child: Icon(Icons.drive_eta, size: 30, color: theme.colorScheme.onPrimaryContainer), // Changed icon
               ),
             verticalSpaceSmall,
-            Text(_assignedDriverModel!.name ?? 'Driver', style: theme.textTheme.titleLarge),
-            if (_activeRideRequestDetails?.driverVehicleType != null && _activeRideRequestDetails!.driverVehicleType != "N/A")
-              Text('Vehicle: ${_activeRideRequestDetails!.driverVehicleType}', style: theme.textTheme.bodySmall),
+            Text(rideDetails.driverName ?? 'Driver', style: theme.textTheme.titleLarge),
+            if (rideDetails.driverVehicleType != null && rideDetails.driverVehicleType != "N/A")
+              Text('Vehicle: ${rideDetails.driverVehicleType}', style: theme.textTheme.bodySmall),
             
             // Display Gender and Age Group if available
             Builder(builder: (context) {
-              final gender = _activeRideRequestDetails?.driverGender; // Use denormalized data
-              final ageGroup = _activeRideRequestDetails?.driverAgeGroup; // Use denormalized data
+              final gender = rideDetails.driverGender;
+              final ageGroup = rideDetails.driverAgeGroup;
               List<String> details = [];
               if (gender != null && gender.isNotEmpty && gender != "Unknown") details.add(gender); 
               if (ageGroup != null && ageGroup.isNotEmpty && ageGroup != "Unknown") details.add(ageGroup);
@@ -1675,28 +2018,28 @@ void _updateDisplayedRoute() {
 
             verticalSpaceSmall,
             // Display Driver's Average Rating
-            if (_activeRideRequestDetails?.driverAverageRating != null && _activeRideRequestDetails!.driverAverageRating! > 0)
+            if (rideDetails.driverAverageRating != null && rideDetails.driverAverageRating! > 0)
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(Icons.star, color: accentColor, size: 16),
                   horizontalSpaceSmall,
                   Text(
-                    _activeRideRequestDetails!.driverAverageRating!.toStringAsFixed(1),
+                    rideDetails.driverAverageRating!.toStringAsFixed(1),
                     style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold),
                   ),
-                  if (_activeRideRequestDetails?.driverCompletedRidesCount != null && _activeRideRequestDetails!.driverCompletedRidesCount! > 0)
+                  if (rideDetails.driverCompletedRidesCount != null && rideDetails.driverCompletedRidesCount! > 0)
                   Padding(
                     padding: const EdgeInsets.only(left: 8.0),
                     child: Text(
-                      "(${_activeRideRequestDetails!.driverCompletedRidesCount} rides)",
+                      "(${rideDetails.driverCompletedRidesCount} rides)",
                       style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
                     ),
                   ),
                 ],
               ),
             // Display License Number from denormalized data
-            if (_activeRideRequestDetails?.driverLicenseNumber != null && rideStatus == 'onRide') // Example: Show only during active ride
+            if (rideDetails.driverLicenseNumber != null && rideStatus == 'onRide') // Example: Show only during active ride
               Padding(
                 padding: const EdgeInsets.only(top: 4.0),
                 child: Text('License: ${_activeRideRequestDetails!.driverLicenseNumber}', style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor)),
@@ -2033,6 +2376,7 @@ void _updateDisplayedRoute() {
     _sheetController.dispose();
     _destinationFocusNode.dispose();
     _pickupFocusNode.dispose();
+    _customerNoteController.dispose(); // Dispose the new controller
     _stopFocusNode.dispose();
     _driverLocationSubscription?.cancel();
     super.dispose();

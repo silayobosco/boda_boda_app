@@ -21,6 +21,7 @@ module.exports = {
     "prefer-arrow-callback": "error",
     "quotes": ["error", "double", { "allowTemplateLiterals": true }],
     "eol-last": "off",
+    "linebreak-style": ["error", "unix"], // Explicitly set to LF
     "max-len": ["warn", { "code": 180 }], // Allow lines up to 120 characters
     // "indent": ["error", 2], // Enforce 2 spaces for indentation
     "object-curly-spacing": ["error", "always"], // Enforce spacing inside curly braces

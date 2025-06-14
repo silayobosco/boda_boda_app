@@ -5,6 +5,7 @@ import '../screens/home_screen.dart';
 import '../screens/profile_screen.dart';
 import '../screens/login_screen.dart';
 import '../screens/driver_registration_screen.dart';
+import '../screens/chat_list_screen.dart'; // Import ChatListScreen
 
 class AppDrawer extends StatelessWidget {
   const AppDrawer({super.key});
@@ -12,6 +13,7 @@ class AppDrawer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     User? user = FirebaseAuth.instance.currentUser;
+    final theme = Theme.of(context); // Define theme here
 
     return Drawer(
       child: Column(
@@ -83,6 +85,14 @@ class AppDrawer extends StatelessWidget {
                 context,
                 MaterialPageRoute(builder: (context) => const ProfileScreen()),
               );
+            },
+          ),
+          ListTile(
+            leading: Icon(Icons.chat_bubble_outline, color: theme.colorScheme.secondary),
+            title: Text('Chats', style: theme.textTheme.titleMedium),
+            onTap: () {
+              Navigator.of(context).pop(); // Close drawer
+              Navigator.of(context).push(MaterialPageRoute(builder: (context) => const ChatListScreen()));
             },
           ),
           ListTile(

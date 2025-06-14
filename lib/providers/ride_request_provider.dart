@@ -6,6 +6,8 @@ import 'package:latlong2/latlong.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart' as google_maps_flutter;
 import '../services/firestore_service.dart';
 import '../services/auth_service.dart';
+import 'package:cloud_functions/cloud_functions.dart';
+
 // import 'dart:convert'; // No longer needed for client-side FCM
 // import 'package:http/http.dart' as http; // No longer needed for client-side FCM
 
@@ -13,6 +15,7 @@ import '../services/auth_service.dart';
 class RideRequestProvider extends ChangeNotifier {
   final FirestoreService _firestoreService; //= FirestoreService();
   final AuthService authService = AuthService(); 
+  final FirebaseFunctions _functions = FirebaseFunctions.instance;
   List<RideRequestModel> _rideRequests = [];
   List<RideRequestModel> get rideRequests => _rideRequests;
 
@@ -43,6 +46,7 @@ class RideRequestProvider extends ChangeNotifier {
     required String pickupAddressName,
     required LatLng dropoff,
     required String dropoffAddressName,
+    String? customerNote, // Add customerNote parameter
     required List<Map<String, dynamic>> stops, // Expecting {'name': String, 'location': latlong2.LatLng, 'addressName': String}
   }) async {
     final currentUser = authService.currentUser; // Use local authService instance
@@ -120,6 +124,7 @@ class RideRequestProvider extends ChangeNotifier {
       pickupAddressName: pickupAddressName,
       dropoffAddressName: dropoffAddressName,
       customerDetails: formattedCustomerDetails, // Include formatted details
+      customerNoteToDriver: customerNote, // Store the note in the ride request document
     );
 
     // Create the request in Firestore
@@ -128,6 +133,27 @@ class RideRequestProvider extends ChangeNotifier {
     String rideRequestId = await _firestoreService.createRideRequest(
       rideRequestData
     );
+
+    // If a customer note was provided, add it as the first message in the chat
+    if (customerNote != null && customerNote.isNotEmpty) {
+      try {
+        await FirebaseFirestore.instance
+            .collection('rideChats')
+            .doc(rideRequestId)
+            .collection('messages')
+            .add({
+          'senderId': currentUser.uid,
+          'senderRole': 'Customer', // Assuming the role is Customer here
+          'text': customerNote,
+          'timestamp': FieldValue.serverTimestamp(),
+          'isRead': false,
+        });
+        debugPrint("RideRequestProvider: Initial customer note added to chat for ride $rideRequestId");
+      } catch (e) {
+        debugPrint("RideRequestProvider: Error adding initial customer note to chat: $e");
+        // Non-fatal error, ride request is already created.
+      }
+    }
 
     // Increment customer's requestedRidesCount
     if (currentUser.uid.isNotEmpty) {
@@ -171,6 +197,78 @@ class RideRequestProvider extends ChangeNotifier {
 
     await batch.commit();
     notifyListeners();
+  }
+
+  Future<void> updateCustomerNote(String rideRequestId, String note) async {
+    await _firestoreService.updateRideRequestFields(
+      rideRequestId,
+      {'customerNoteToDriver': note},
+    );
+    // No notifyListeners needed if UI listens to the ride stream directly for this field.
+  }
+
+  Future<void> editScheduledRide(String rideId, Map<String, dynamic> rideUpdateData) async {
+    final HttpsCallable callable = _functions.httpsCallable('manageScheduledRide');
+    try {
+      // Ensure DateTime objects are converted to ISO 8601 strings for JSON serialization
+      Map<String, dynamic> payload = Map.from(rideUpdateData); 
+
+      if (payload['scheduledDateTime'] is DateTime) {
+        payload['scheduledDateTime'] = (payload['scheduledDateTime'] as DateTime).toIso8601String();
+      }
+      if (payload['recurrenceEndDate'] is DateTime) {
+        payload['recurrenceEndDate'] = (payload['recurrenceEndDate'] as DateTime).toIso8601String();
+      }
+      // Convert google_maps_flutter.LatLng to a map for GeoPoint conversion in CF
+      if (payload['pickup'] != null && payload['pickup'] is google_maps_flutter.LatLng) {
+          final gmfLatLng = payload['pickup'] as google_maps_flutter.LatLng;
+          payload['pickup'] = {'latitude': gmfLatLng.latitude, 'longitude': gmfLatLng.longitude};
+      }
+      if (payload['dropoff'] != null && payload['dropoff'] is google_maps_flutter.LatLng) {
+          final gmfLatLng = payload['dropoff'] as google_maps_flutter.LatLng;
+          payload['dropoff'] = {'latitude': gmfLatLng.latitude, 'longitude': gmfLatLng.longitude};
+      }
+      if (payload['stops'] != null && payload['stops'] is List) {
+          payload['stops'] = (payload['stops'] as List).map((stop) {
+              if (stop is Map && stop['location'] is google_maps_flutter.LatLng) {
+                  final gmfLatLng = stop['location'] as google_maps_flutter.LatLng;
+                  // Ensure other stop properties like 'name' and 'addressName' are preserved
+                  return {
+                    'name': stop['name'],
+                    'addressName': stop['addressName'],
+                    'location': {'latitude': gmfLatLng.latitude, 'longitude': gmfLatLng.longitude}
+                  };
+              }
+              return stop; // Return as is if not a LatLng that needs conversion
+          }).toList();
+      }
+
+      final response = await callable.call(<String, dynamic>{
+        'action': 'edit',
+        'rideId': rideId,
+        'rideData': payload,
+      });
+      debugPrint("Edit scheduled ride result: ${response.data}");
+      // Consider calling notifyListeners() if your UI needs to react to this change directly
+      // or rely on Firestore stream updates for the scheduledRides collection.
+    } on FirebaseFunctionsException catch (e) {
+      debugPrint('Functions Error editing scheduled ride: ${e.code} - ${e.message}');
+      throw Exception('Failed to edit scheduled ride: ${e.message}');
+    } catch (e) {
+      debugPrint('General Error editing scheduled ride: $e');
+      throw Exception('An unexpected error occurred while editing the ride.');
+    }
+  }
+
+  Future<void> deleteScheduledRide(String rideId) async {
+    final HttpsCallable callable = _functions.httpsCallable('manageScheduledRide');
+    try {
+      final response = await callable.call(<String, dynamic>{'action': 'delete', 'rideId': rideId});
+      debugPrint("Delete scheduled ride result: ${response.data}");
+    } catch (e) {
+      debugPrint('Error deleting scheduled ride: $e');
+      throw Exception('Failed to delete scheduled ride: ${e.toString()}');
+    }
   }
 
   // The rateUser method is now split.
@@ -227,6 +325,23 @@ class RideRequestProvider extends ChangeNotifier {
       return null;
     });
   }
+
+  // Method to get ride history based on role
+  Stream<List<RideRequestModel>> getRideHistory(String userId, String role) {
+    if (role == 'Customer') {
+      return _firestoreService.getCustomerRideHistory(userId);
+    } else if (role == 'Driver') {
+      return _firestoreService.getDriverRideHistory(userId);
+    }
+    return Stream.value([]); // Return empty stream for unknown roles or if userId is null
+  }
+
+  // Method to get scheduled rides for a customer
+  Stream<List<RideRequestModel>> getScheduledRides(String customerId) {
+    // Assuming scheduled rides are only for customers for now
+    return _firestoreService.getScheduledRidesForCustomer(customerId);
+  }
+
 
   // Add this new method to get current user's assigned rides
   Stream<List<RideRequestModel>> getAssignedRides() {

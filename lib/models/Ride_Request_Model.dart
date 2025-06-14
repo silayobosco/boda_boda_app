@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart' as gmf;
 
 class RideRequestModel {
@@ -34,6 +35,8 @@ class RideRequestModel {
   final String? driverVehicleType; // Added for consistency
   final double? driverAverageRating;
   final int? driverCompletedRidesCount;
+  final DateTime? scheduledDateTime; // Added for scheduled rides
+  final String? customerNoteToDriver; // Note from customer to driver
 
 
   RideRequestModel({
@@ -66,45 +69,63 @@ class RideRequestModel {
     this.driverVehicleType,
     this.driverAverageRating,
     this.driverCompletedRidesCount,
+    this.scheduledDateTime,
+    this.customerNoteToDriver,
   });
 
   factory RideRequestModel.fromJson(Map<String, dynamic> json, String rideRequestId) {
+    DateTime? parsedScheduledDateTime;
+    if (json['scheduledDateTime'] is Timestamp) {
+      parsedScheduledDateTime = (json['scheduledDateTime'] as Timestamp).toDate();
+    } else if (json['scheduledDateTime'] is String) {
+      // Attempt to parse the string. This assumes ISO 8601 format.
+      // If your string format is different, adjust the parsing accordingly.
+      parsedScheduledDateTime = DateTime.tryParse(json['scheduledDateTime'] as String);
+    }
     return RideRequestModel(
       id: rideRequestId,
       customerId: json['customerId'] as String,
       driverId: json['driverId'] as String?,
-      pickup: gmf.LatLng(
-        (json['pickup'] as GeoPoint).latitude,
-        (json['pickup'] as GeoPoint).longitude,
-      ),
-      dropoff: gmf.LatLng(
-        (json['dropoff'] as GeoPoint).latitude,
-        (json['dropoff'] as GeoPoint).longitude,
-      ),
-      stops: (json['stops'] as List<dynamic>?)
-              ?.map((stopData) {
-                final stopMap = stopData as Map<String, dynamic>;
-                final locationData = stopMap['location'];
-                gmf.LatLng stopLocation;
-                if (locationData is GeoPoint) {
-                  stopLocation = gmf.LatLng(locationData.latitude, locationData.longitude);
-                } else if (locationData is Map) {
-                  // Fallback if location is stored as a map {latitude: ..., longitude: ...}
-                  stopLocation = gmf.LatLng(
-                      (locationData['latitude'] as num).toDouble(),
-                      (locationData['longitude'] as num).toDouble());
-                } else {
-                  // Handle unexpected format or throw error
-                  stopLocation = gmf.LatLng(0,0); // Default or error
+      pickup: json['pickup'] is GeoPoint
+          ? gmf.LatLng(
+              (json['pickup'] as GeoPoint).latitude,
+              (json['pickup'] as GeoPoint).longitude,
+            )
+          : const gmf.LatLng(0, 0), // Default or error handling for missing pickup
+      dropoff: json['dropoff'] is GeoPoint
+          ? gmf.LatLng(
+              (json['dropoff'] as GeoPoint).latitude,
+              (json['dropoff'] as GeoPoint).longitude,
+            )
+          : const gmf.LatLng(0, 0), // Default or error handling for missing dropoff
+      stops: (json['stops'] as List<dynamic>?) 
+              ?.map((stopDataElement) { // Renamed to avoid conflict
+                if (stopDataElement is Map<String, dynamic>) {
+                  final stopMap = stopDataElement; // Safe cast
+                  final locationData = stopMap['location']; // This is GeoPoint?
+                  gmf.LatLng stopLocation;
+
+                  if (locationData is GeoPoint) {
+                    stopLocation = gmf.LatLng(locationData.latitude, locationData.longitude);
+                  } else {
+                    // If location is null or not a GeoPoint, use a default.
+                    stopLocation = const gmf.LatLng(0, 0); // Default placeholder
+                    if (locationData != null) {
+                      debugPrint("RideRequestModel.fromJson: Stop location was not a GeoPoint, using default. Data: $locationData");
+                    }
+                  }
+                  return {
+                    'name': stopMap['name'] as String? ?? 'Unnamed Stop', // Handle if name is unexpectedly null
+                    'location': stopLocation, // gmf.LatLng, non-null
+                    'addressName': stopMap['addressName'] as String?,
+                  };
                 }
-                return {
-                  'name': stopMap['name'] as String,
-                  'location': stopLocation,
-                  'addressName': stopMap['addressName'] as String?, // Parse addressName
-                };
-              }).toList() ??
+                return null; // If stopDataElement is not a map, return null for this element
+              })
+              .whereType<Map<String, dynamic>>() // Filter out any nulls returned above
+              .toList() ??
           [],
-      status: json['status'] as String,
+      status: json['status'] as String? ?? 'unknown', // Provide default for status
       requestTime: (json['requestTime'] as Timestamp?)?.toDate(),
       kijiweId: json['kijiweId'] as String?,
       fare: (json['fare'] as num?)?.toDouble(),
@@ -127,6 +148,8 @@ class RideRequestModel {
       driverVehicleType: json['driverVehicleType'] as String?,
       driverAverageRating: (json['driverAverageRating'] as num?)?.toDouble(),
       driverCompletedRidesCount: (json['driverCompletedRidesCount'] as num?)?.toInt(),
+      customerNoteToDriver: json['customerNoteToDriver'] as String?,
+      scheduledDateTime: parsedScheduledDateTime,
     );
   }
 
@@ -166,6 +189,8 @@ class RideRequestModel {
       'driverVehicleType': driverVehicleType,
       'driverAverageRating': driverAverageRating,
       'driverCompletedRidesCount': driverCompletedRidesCount,
+      'customerNoteToDriver': customerNoteToDriver,
+      'scheduledDateTime': scheduledDateTime != null ? Timestamp.fromDate(scheduledDateTime!) : null, // Save scheduledDateTime
     };
   }
 
@@ -199,6 +224,8 @@ class RideRequestModel {
     String? driverVehicleType,
     double? driverAverageRating,
     int? driverCompletedRidesCount,
+    String? customerNoteToDriver,
+    DateTime? scheduledDateTime,
   }) {
     return RideRequestModel(
       // Corrected logic: use the provided 'id' parameter if not null, otherwise use current instance's 'id'.
@@ -231,22 +258,25 @@ class RideRequestModel {
       driverVehicleType: driverVehicleType ?? this.driverVehicleType,
       driverAverageRating: driverAverageRating ?? this.driverAverageRating,
       driverCompletedRidesCount: driverCompletedRidesCount ?? this.driverCompletedRidesCount,
+      customerNoteToDriver: customerNoteToDriver ?? this.customerNoteToDriver,
+      scheduledDateTime: scheduledDateTime ?? this.scheduledDateTime,
     );
   }
 
   @override
   String toString() {
     return 'RideRequestModel(id: $id, customerId: $customerId, driverId: $driverId, '
-        'kijiweId: $kijiweId, pickup: $pickup, dropoff: $dropoff, stops: $stops, '
+        'kijiweId: $kijiweId, scheduledDateTime: $scheduledDateTime, pickup: $pickup, dropoff: $dropoff, stops: $stops, '
         'status: $status, requestTime: $requestTime, fare: $fare, '
         'acceptedTime: $acceptedTime, completedTime: $completedTime, '
         'customerName: $customerName, pickupAddressName: $pickupAddressName, driverName: $driverName, customerProfileImageUrl: $customerProfileImageUrl, '
-        'driverProfileImageUrl: $driverProfileImageUrl, dropoffAddressName: $dropoffAddressName, '
+        'driverProfileImageUrl: $driverProfileImageUrl, dropoffAddressName: $dropoffAddressName, customerNoteToDriver: $customerNoteToDriver, '
         'customerRatingToDriver: $customerRatingToDriver, customerCommentToDriver: $customerCommentToDriver, '
         'driverRatingToCustomer: $driverRatingToCustomer, driverCommentToCustomer: $driverCommentToCustomer, customerDetails: $customerDetails, driverVehicleType: $driverVehicleType, '
         'driverGender: $driverGender, driverAgeGroup: $driverAgeGroup, driverLicenseNumber: $driverLicenseNumber, driverAverageRating: $driverAverageRating, driverCompletedRidesCount: $driverCompletedRidesCount)';
   }
 }
+
 
 class RideHistoryModel {
   final String? rideHistoryId;
@@ -315,13 +345,13 @@ class RideHistoryModel {
                 final locationData = stopMap['location'];
                 gmf.LatLng stopLocation;
                  if (locationData is GeoPoint) {
-                  stopLocation = gmf.LatLng(locationData.latitude, locationData.longitude);
+                  stopLocation = gmf.LatLng(locationData.latitude, locationData.longitude); // This is correct
                 } else if (locationData is Map) {
                   stopLocation = gmf.LatLng(
                       (locationData['latitude'] as num).toDouble(),
                       (locationData['longitude'] as num).toDouble());
                 } else {
-                  stopLocation = gmf.LatLng(0,0); 
+                  stopLocation = const gmf.LatLng(0,0); // Default or error
                 }
                 return {
                   'name': stopMap['name'] as String,

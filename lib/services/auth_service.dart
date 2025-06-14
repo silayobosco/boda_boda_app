@@ -71,14 +71,28 @@ class AuthService {
   }
 
   Future<void> saveFCMTokenToFirestore(String token) async {
-    User? currentUser = _auth.currentUser;
-    if (currentUser != null) {
-      try {
-        await _firestore.collection('users').doc(currentUser.uid).update({'fcmToken': token});
-        debugPrint('FCM token saved to Firestore for user ${currentUser.uid}');
-      } catch (e) {
-        debugPrint('Error saving FCM token to Firestore: $e');
+    final userId = _auth.currentUser?.uid;
+    if (userId == null || token.isEmpty) {
+      debugPrint('AuthService: User not logged in or token is empty. Cannot save FCM token.');
+      return;
+    }
+
+    final userRef = _firestore.collection('users').doc(userId);
+
+    try {
+      final userDoc = await userRef.get();
+      if (userDoc.exists) {
+        final existingToken = userDoc.data()?['fcmToken'] as String?;
+        if (existingToken == token) {
+          debugPrint('AuthService: FCM token "$token" is already up-to-date in Firestore for user $userId. Skipping update.');
+          return; // Token is the same, no need to update
+        }
       }
+      // If document doesn't exist, or token is different or not present, update it.
+      await userRef.set({'fcmToken': token}, SetOptions(merge: true));
+      debugPrint('AuthService: FCM token saved/updated in Firestore for user $userId: $token');
+    } catch (e) {
+      debugPrint('AuthService: Error saving FCM token to Firestore for user $userId: $e');
     }
   }
 
@@ -143,24 +157,33 @@ class AuthService {
         await _firestore.collection('users').doc(user.uid).get();
 
     if (!userDoc.exists) {
-      await _firestore.collection('users').doc(user.uid).set({
-        'uid': user.uid,
-        'name': user.displayName,
-        'email': user.email,
-        'photoURL': user.photoURL,
-        'role': 'customer', // set default role to customer
-        'phoneNumber': null,
-        'dob': null,
-        'gender': null,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
+      try {
+        await _firestore.collection('users').doc(user.uid).set({
+          'uid': user.uid,
+          'name': user.displayName,
+          'email': user.email,
+          'photoURL': user.photoURL,
+          'role': 'Customer', // set default role to customer
+          'phoneNumber': null,
+          'dob': null,
+          'gender': null,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
 
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => AdditionalInfoScreen(userUid: user.uid), // Pass user UID
-        ),
-      );
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => AdditionalInfoScreen(userUid: user.uid), // Pass user UID
+          ),
+        );
+      } catch (e) {
+        // Handle potential errors during Firestore write or navigation
+        print("Error in _handleGoogleSignInUser during user creation or navigation: $e");
+        // Optionally, show a SnackBar to the user
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error setting up your account: ${e.toString()}")),
+        );
+      }
     }
   }
 

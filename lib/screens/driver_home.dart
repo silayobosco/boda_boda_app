@@ -13,6 +13,7 @@ import '../services/auth_service.dart'; // Import AuthService to get current use
 import '../models/Ride_Request_Model.dart'; // Import RideRequestModel
 import 'package:latlong2/latlong.dart' as ll; // Use latlong2 for calculations
 import '../utils/ui_utils.dart'; // Import UI Utils for styles and spacing
+import 'chat_screen.dart'; // Import ChatScreen
 
 class DriverHome extends StatefulWidget {
   const DriverHome({super.key});
@@ -109,30 +110,44 @@ void _onDriverProviderChange() {
     debugPrint("DriverHome: _onDriverProviderChange called but widget not mounted.");
     return;
   }
-  debugPrint("DriverHome: _onDriverProviderChange triggered.");
   final driverProvider = Provider.of<DriverProvider>(context, listen: false);
+  // Add this debug print
+  debugPrint("DriverHome: _onDriverProviderChange triggered. PendingDetails: ${(driverProvider.pendingRideRequestDetails != null) ? driverProvider.pendingRideRequestDetails!['rideRequestId'] : null}, ActiveRide: ${_activeRideDetails?.id}");
 
   if (driverProvider.pendingRideRequestDetails != null && _activeRideDetails == null) {
     final newRideId = driverProvider.pendingRideRequestDetails!['rideRequestId'] as String?;
+     // Add this debug print
+    debugPrint("DriverHome: Condition met for new pending ride. NewRideID: $newRideId, isLoadingRoute: $_isLoadingRoute, currentProposedID: $_currentlyDisplayedProposedRideId, polylinesEmpty: ${_activeRoutePolylines.isEmpty}");
+
     // Only initiate if not already loading a route AND the new ride ID is different from the one currently being proposed (or if no route is proposed)
     if (!_isLoadingRoute && (newRideId != _currentlyDisplayedProposedRideId || _activeRoutePolylines.isEmpty)) {
-      debugPrint("DriverHome: New pending ride detected. ID: $newRideId. Active ride is null. Initiating full proposed route for sheet.");
+      debugPrint("DriverHome: Initiating full proposed route for sheet for ride ID: $newRideId.");
       _initiateFullProposedRideRouteForSheet(driverProvider.pendingRideRequestDetails!);
     } else {
       debugPrint("DriverHome: New pending ride detected (ID: $newRideId), but either already loading a route or this route is already proposed/displayed. Skipping initiation.");
     }
   } else if (driverProvider.pendingRideRequestDetails == null && _activeRideDetails == null) {
-    if (_currentlyDisplayedProposedRideId != null || _activeRoutePolylines.isNotEmpty || _rideSpecificMarkers.isNotEmpty) {
-      debugPrint("DriverHome: No pending ride and no active ride. Clearing proposed route visuals.");
-    }
+    
     // No pending ride and no active ride, clear any proposed route visuals if mounted.
+    // Add this debug print
+    debugPrint("DriverHome: No pending ride and no active ride. CurrentProposedID: $_currentlyDisplayedProposedRideId, polylinesEmpty: ${_activeRoutePolylines.isEmpty}");
+    if (_currentlyDisplayedProposedRideId != null || _activeRoutePolylines.isNotEmpty || _rideSpecificMarkers.isNotEmpty) {
+      debugPrint("DriverHome: Clearing proposed route visuals.");
+    }
     if (mounted) {
       setState(() {
         _activeRoutePolylines.clear();
         _rideSpecificMarkers.clear();
         _currentlyDisplayedProposedRideId = null;
+        // Also clear distance/duration for proposed route
+        _proposedRideDistance = null;
+        _proposedRideDuration = null;
       });
     }
+  } else {
+    // Add this debug print
+    debugPrint("DriverHome: _onDriverProviderChange - Neither condition met. PendingDetails: ${(driverProvider.pendingRideRequestDetails?['rideRequestId'])}, ActiveRide: ${_activeRideDetails?.id}");
+
   }
   // If pendingRideRequestDetails is null but _activeRideDetails is NOT null, we do nothing here,
   // as the active ride sheet (_buildActiveRideSheet) will be shown.
@@ -257,12 +272,18 @@ void _onDriverProviderChange() {
               child: _buildOnlineStatusWidget(),
             ),
 
+          // Add this debug print
+          // Positioned(top: 100, left: 10, child: Text("DEBUG: Active: ${_activeRideDetails?.id}, Pending: ${driverProvider.pendingRideRequestDetails?['rideRequestId']}", style: TextStyle(backgroundColor: Colors.yellow, color: Colors.black))),
+
           // Bottom Sheet for Ride Control
+          // Add this debug print inside the build method, right before the sheet conditions
+          // Text("DEBUG: isOnline: ${driverProvider.isOnline}, activeRideDetails: ${_activeRideDetails?.id}, pendingRideDetails: ${driverProvider.pendingRideRequestDetails?['rideRequestId']}, currentKijiweId: ${driverProvider.currentKijiweId}", style: TextStyle(backgroundColor: Colors.white)),
           if (driverProvider.isOnline && _activeRideDetails == null && driverProvider.pendingRideRequestDetails == null && driverProvider.currentKijiweId != null)
             _buildIdleOnlineDriverView(context, driverProvider),
           if (_activeRideDetails != null) 
             _buildActiveRideSheet(), // Show if there's an active ride
-          if (driverProvider.isOnline && // This condition was fine
+          // This is the crucial condition for the accept/decline sheet
+          if (driverProvider.isOnline &&
               driverProvider.pendingRideRequestDetails != null && // Data for the sheet exists
               _activeRideDetails == null) // And no other ride is active
             _buildRideRequestSheet(driverProvider.pendingRideRequestDetails!),
@@ -444,6 +465,29 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
                   style: theme.textTheme.bodySmall,
                 ),
                 // subtitle: Text('Status: ${_currentRide?['status'] ?? 'Unknown'}', style: theme.textTheme.bodySmall), // Status is shown in Chip below
+              ),
+
+              // Chat with Customer Button
+              if (_activeRideDetails?.customerId != null && (_activeRideDetails?.status == 'accepted' || _activeRideDetails?.status == 'goingToPickup' || _activeRideDetails?.status == 'arrivedAtPickup' || _activeRideDetails?.status == 'onRide')) ...[
+                verticalSpaceSmall,
+                TextButton.icon(
+                  icon: Icon(Icons.chat_bubble_outline, color: theme.colorScheme.primary),
+                  label: Text('Chat with Customer', style: TextStyle(color: theme.colorScheme.primary)),
+                  onPressed: () {
+                    debugPrint("DriverHome: Chat button pressed for ride ID: ${_activeRideDetails!.id} with customer ID: ${_activeRideDetails!.customerId}");
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => ChatScreen(
+                      rideRequestId: _activeRideDetails!.id!,
+                      recipientId: _activeRideDetails!.customerId,
+                      recipientName: _activeRideDetails!.customerName ?? "Customer",
+                    )));
+                  },
+                ),
+              ],
+              // Display Customer Note if available
+              if (_activeRideDetails?.customerNoteToDriver != null && _activeRideDetails!.customerNoteToDriver!.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                child: Text("Note: ${_activeRideDetails!.customerNoteToDriver}", style: theme.textTheme.bodyMedium?.copyWith(fontStyle: FontStyle.italic, color: theme.colorScheme.secondary)),
               ),
 
               // Display route to pickup or main ride information if available
@@ -630,6 +674,14 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
                     style: theme.textTheme.bodySmall, // Ensure consistent styling
                   ),
               ),
+              // Display Customer Note if available
+              if (rideData['customerNoteToDriver'] != null && (rideData['customerNoteToDriver'] as String).isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                  child: Text("Note: ${rideData['customerNoteToDriver']}",
+                      style: theme.textTheme.bodyMedium?.copyWith(fontStyle: FontStyle.italic, color: theme.colorScheme.secondary)),
+                ),
+
               // Display Pickup Address Name
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),

@@ -1,17 +1,22 @@
 import 'dart:async';
-
-import 'package:flutter/material.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart'; // Import local notifications
 import 'package:firebase_messaging/firebase_messaging.dart'; // Import Firebase Messaging
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/auth_service.dart'; // Import AuthService
 import '../providers/driver_provider.dart'; // Import DriverProvider
 import '../services/user_service.dart';
+import '../services/firestore_service.dart'; // Import FirestoreService
 import '../models/user_model.dart';
 import 'customer_home.dart';
 import 'driver_home.dart';
 import 'admin_home.dart';
 import 'additional_info_screen.dart';
+import '../providers/location_provider.dart'; // Ensure LocationProvider is imported
+import 'customer_account_screen.dart'; // Import CustomerAccountScreen
+import 'driver_account_screen.dart'; // Import DriverAccountScreen
+import 'chat_screen.dart'; // Import ChatScreen
+import 'rides_screen.dart'; // Import the new RidesScreen
+import '../providers/Notification_Provider.dart'; // Import NotificationProvider
+import 'package:flutter/material.dart'; // Import Material package
 import '../widgets/app_drawer.dart'; 
 import 'package:provider/provider.dart';
 
@@ -28,171 +33,123 @@ class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
   UserModel? _currentUserModel; // Store the UserModel from the StreamBuilder
   final UserService _userService = UserService();
-  final AuthService _authService = AuthService(); // Add AuthService instance
+  late final AuthService _authService; // Use late final
   User? _currentUser; // Store the current Firebase user
-  FlutterLocalNotificationsPlugin _flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
-  bool _fcmActionsInitializedForCurrentUser = false; // Flag to track initialization
+  StreamSubscription? _authStateSubscription; // To listen to auth state changes
   StreamSubscription? _onMessageSubscription; // To manage the FCM foreground listener
 
   // Store instances of the main screens for each role to preserve their state
   // Ensure these are initialized appropriately, perhaps in initState or as late final.
   // For simplicity, initializing directly here.
-  final List<Widget> _driverScreens = [
-    const DriverHome(), // Screen for index 0
-    const Text("Driver Rides Screen"), // Placeholder for index 1
-    const Text("Driver Account Screen"), // Placeholder for index 2
+  final List<Widget> _driverScreens = const [ // Make the list itself const
+    DriverHome(key: PageStorageKey('DriverHome')),
+    RidesScreen(key: PageStorageKey('DriverRides'), role: 'Driver'),
+    DriverAccountScreen(key: PageStorageKey('DriverAccountScreen')),
   ];
-  final List<Widget> _customerScreens = [
-    const CustomerHome(), // Screen for index 0
-    const Text("Customer Rides Screen"), // Placeholder for index 1
-    const Text("Customer Account Screen"), // Placeholder for index 2
+  final List<Widget> _customerScreens = const [ // Make the list itself const
+    CustomerHome(key: PageStorageKey('CustomerHome')),
+    RidesScreen(key: PageStorageKey('CustomerRides'), role: 'Customer'),
+    CustomerAccountScreen(key: PageStorageKey('CustomerAccountScreen')),
   ];
-  final List<Widget> _adminScreens = [
-    const AdminHome(), // Screen for index 0
-    const Text("Admin Dashboard Screen"), // Placeholder for index 1
-    const Text("Admin Screen"), // Placeholder for index 2
-    const Text("Admin Account Screen"), // Placeholder for index 3 (if needed)
+  final List<Widget> _adminScreens = const [ // Make the list itself const
+    AdminHome(key: PageStorageKey('AdminHome')),
+    Text("Admin Dashboard Screen", key: PageStorageKey('AdminDashboard')),
+    Text("Admin Screen", key: PageStorageKey('AdminScreenContent')), // Changed key to be more specific
+    Text("Admin Account Screen", key: PageStorageKey('AdminAccount')),
   ];
+
+  late final NotificationProvider _notificationProvider; // Add NotificationProvider instance
 
   @override
   void initState() {
     super.initState();
+    _authService = Provider.of<AuthService>(context, listen: false); 
+    _notificationProvider = NotificationProvider( // Initialize NotificationProvider
+      authService: _authService, firestoreService: Provider.of<FirestoreService>(context, listen: false), onForegroundMessageReceived: _showForegroundNotification, onNotificationTap: _handleNotificationTap,
+    );
+
+    // Listen to authentication state changes
+    _authStateSubscription = FirebaseAuth.instance.authStateChanges().listen((User? user) {
+      if (mounted) {
+        setState(() {
+          _currentUser = user;
+        });
+      }
+    });
+    // Perform an initial check for the current user, as authStateChanges might not fire immediately
+    // if the user is already logged in when the widget initializes.
     _currentUser = FirebaseAuth.instance.currentUser;
-    _initializeLocalNotifications();
-    // FCM initialization will now happen after userModel is loaded in the builder
   }
   
   @override
   void dispose() {
+    _authStateSubscription?.cancel(); // Cancel the auth state listener
     _onMessageSubscription?.cancel(); // Cancel the FCM listener
     super.dispose();
   }
 
-
-  Future<void> _initializeLocalNotifications() async {
-    // Initialize settings for Android
-    const AndroidInitializationSettings initializationSettingsAndroid =
-        AndroidInitializationSettings('@mipmap/ic_launcher'); // Replace with your app icon name
-
-    // Initialize settings for iOS (optional, if you target iOS)
-    // const DarwinInitializationSettings initializationSettingsIOS = DarwinInitializationSettings(
-    //   requestAlertPermission: true,
-    //   requestBadgePermission: true,
-    //   requestSoundPermission: true,
-    // );
-
-    const InitializationSettings initializationSettings = InitializationSettings(
-      android: initializationSettingsAndroid,
-      // iOS: initializationSettingsIOS,
-    );
-    await _flutterLocalNotificationsPlugin.initialize(initializationSettings,
-        onDidReceiveNotificationResponse: _onDidReceiveLocalNotificationResponse);
-  }
-
-  void _onDidReceiveLocalNotificationResponse(NotificationResponse notificationResponse) async {
-    final String? payload = notificationResponse.payload;
-    if (payload != null) {
-      debugPrint('Local notification payload: $payload');
-      // You can parse the payload (if it's JSON, for example) and navigate
-      // For now, we'll assume the payload might be the message.data stringified
-      // Or you can pass specific data like rideRequestId
-      // Map<String, dynamic> data = jsonDecode(payload); // If payload is a JSON string
-      // _handleNotificationTap(data);
-    }
-    // Example: Navigate to a specific screen or handle the tap
-  }
-
   // Accept UserModel as a parameter
-  Future<void> _initializeFCMAndCurrentUserActions(UserModel? userModel) async {
-    // Store the userModel in state
-    // If userModel changes (e.g., user logs out and logs in as someone else), reset the flag.
-    if (_currentUserModel?.uid != userModel?.uid) {
-      _fcmActionsInitializedForCurrentUser = false;
+  Future<void> _initializeUserDependentServices(UserModel? userModel) async {
+    if (userModel == null) {
+      debugPrint("HomeScreen: No user model, cannot initialize user-dependent services.");
+      return;
     }
+
+    // Only update _currentUserModel if it's actually different or not set yet.
+    // This helps prevent re-running this logic if the stream emits the same userModel.
+    if (_currentUserModel?.uid == userModel.uid && _notificationProvider.isFcmSetupComplete) {
+       // User is the same and FCM is already set up.
+       // We might still want to re-check permissions if app comes from background.
+       // For now, we can skip full re-initialization of NotificationProvider.
+       // However, let's ensure permissions are checked.
+       await _checkAppPermissions();
+       return;
+    }
+
     _currentUserModel = userModel;
+    debugPrint("HomeScreen: Initializing user-dependent services for ${userModel.name}");
 
-    if (_fcmActionsInitializedForCurrentUser) return; // Already initialized for this user
+    // Initialize NotificationProvider (it has its own _isFcmInitialized guard)
+    // This will also handle its internal notification permission request.
+    await _notificationProvider.initialize();
 
-    if (_currentUser == null || _currentUserModel == null) return;
+    // Explicitly check/request other critical permissions like location.
+    await _checkAppPermissions();
+  }
 
-    // Request notification permissions (iOS and web)
-    NotificationSettings settings = await FirebaseMessaging.instance.requestPermission(
-      alert: true,
-      announcement: false,
-      badge: true,
-      carPlay: false,
-      criticalAlert: false,
-      provisional: false,
-      sound: true,
-    );
-    debugPrint('User granted permission: ${settings.authorizationStatus}');
+  Future<void> _checkAppPermissions() async {
+    // Notification permissions are handled by _notificationProvider.initialize()
+    // or can be re-checked via _notificationProvider.checkAndRequestNotificationPermissions()
 
-    // Handle foreground messages
-    _onMessageSubscription?.cancel(); // Cancel any existing subscription before creating a new one
-    _onMessageSubscription = FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      if (!mounted) return; // Ensure widget is mounted before processing
-
-      debugPrint('HomeScreen: Foreground FCM message received!');
-      debugPrint('Message data: ${message.data}');
-      if (message.notification != null) {
-        debugPrint('Message also contained a notification: ${message.notification!.title}, ${message.notification!.body}');
-        if (mounted) _showForegroundNotification(message); // Check mounted
+    // Check and request Location Permissions (via LocationProvider)
+    final locationProvider = Provider.of<LocationProvider>(context, listen: false);
+    // Assuming LocationProvider has a method like this:
+    bool locationPermissionsGranted = await locationProvider.checkAndRequestLocationPermission();
+    if (!locationPermissionsGranted) {
+      debugPrint("HomeScreen: Location permissions were not granted.");
+      // Optionally, show a persistent message or guide the user to settings.
+      if (mounted) {
+        // ScaffoldMessenger.of(context).showSnackBar(
+        //   const SnackBar(content: Text("Location permission is required for full app functionality.")),
+        // );
       }
-      // You can update UI or show an in-app banner based on message.data
-
-      // Check if the current user is a Driver and the message contains ride request data
-      if (mounted && _currentUserModel?.role == 'Driver' && // Check mounted
-          message.data.isNotEmpty &&
-          message.data.containsKey('rideRequestId')) {
-         try {
-           // Access DriverProvider without listening, assuming it's available in the context
-           final driverProvider = Provider.of<DriverProvider>(context, listen: false);
-           driverProvider.setNewPendingRide(message.data);
-           debugPrint("HomeScreen: Foreground FCM - Passed ride data to DriverProvider.");
-         } catch (e) {
-           debugPrint("HomeScreen: Could not access DriverProvider or set pending ride: $e");
-         }
-      }
-    });
-
-    // Handle notification tap when app is in background
-    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-      debugPrint('HomeScreen: Message opened from background!');
-      if (mounted) _handleNotificationTap(message.data); // Check mounted
-      _handleNotificationTap(message.data);
-    });
-
-    // Handle notification tap when app is terminated
-    FirebaseMessaging.instance.getInitialMessage().then((RemoteMessage? message) {
-      if (message != null) {
-        debugPrint('HomeScreen: Message opened from terminated state!');
-         // No direct context here, but DriverProvider is a global provider instance
-         // This part might need careful handling if context is strictly needed for Provider.of
-         if (_currentUserModel?.role == 'Driver' && message.data.isNotEmpty && message.data.containsKey('rideRequestId') && mounted) {
-           try {
-             // Access DriverProvider without listening
-             final driverProvider = Provider.of<DriverProvider>(context, listen: false);
-             driverProvider.setNewPendingRide(message.data);
-             debugPrint("HomeScreen: Terminated FCM - Passed ride data to DriverProvider.");
-           } catch (e) {
-             debugPrint("HomeScreen: Could not access DriverProvider or set pending ride from terminated state: $e");
-           }
-        }
-        if (mounted) _handleNotificationTap(message.data); // Check mounted
-      }
-    });
-
-    // Get and save FCM token
-    _authService.getAndSaveFCMToken(); // Assumes AuthService has this method
-
-    // Listen for token refresh
-    FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
-      _authService.saveFCMTokenToFirestore(newToken); // Assumes AuthService has this method
-    });
-    _fcmActionsInitializedForCurrentUser = true; // Mark as initialized
+    }
   }
 
   Future<void> _showForegroundNotification(RemoteMessage message) async {
+        // This method is now primarily for HomeScreen-specific UI updates
+    // when a foreground message is received.
+    // The NotificationProvider itself handles showing the actual local notification.
+    debugPrint('HomeScreen: _showForegroundNotification callback triggered by NotificationProvider.');
+    debugPrint('Message data: ${message.data}');
+    if (message.notification != null) {
+      debugPrint('Message also contained a notification: ${message.notification!.title}, ${message.notification!.body}');
+    }
+
+    // Example: Update DriverProvider if the message is a new ride request
+    _updateDriverProviderFromFCM(message.data);
+
+    /* Remove direct access to _localNotificationsPlugin
     const AndroidNotificationDetails androidPlatformChannelSpecifics =
         AndroidNotificationDetails(
       'your_channel_id', // Must match the channel ID in AndroidManifest.xml if you set one, or create one here
@@ -207,13 +164,14 @@ class _HomeScreenState extends State<HomeScreen> {
     const NotificationDetails platformChannelSpecifics =
         NotificationDetails(android: androidPlatformChannelSpecifics /*, iOS: iOSPlatformChannelSpecifics*/);
 
-    await _flutterLocalNotificationsPlugin.show(
-        message.hashCode, // Unique ID for the notification
-        message.notification?.title,
-        message.notification?.body,
-        platformChannelSpecifics,
-        payload: message.data.toString() // Optional: Pass data to be used when notification is tapped
-        );
+    await _notificationProvider._localNotificationsPlugin.show( // Use the plugin from NotificationProvider
+      message.hashCode, // Unique ID for the notification
+      message.notification?.title,
+      message.notification?.body,
+      platformChannelSpecifics,
+      payload: message.data.toString() 
+      );
+    */
   }
 
   List<BottomNavigationBarItem> _getNavigationItems(String role) {
@@ -277,18 +235,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // This method is no longer strictly needed if IndexedStack directly uses the list,
-  // but can be kept if you need to get a single screen instance for other purposes.
-  Widget _getScreen(int index, String role) {
-    final screenList = _getCurrentScreenList(role);
-    if (index >= 0 && index < screenList.length) {
-      return screenList[index];
-    } else {
-      // Fallback for invalid index, though IndexedStack handles this by crashing if index is out of bounds.
-      // Consider logging this error.
-      return Text('Error: Invalid screen index $index for role $role');
-    }
-  }
 
   void _onItemTapped(int index) {
     setState(() {
@@ -296,30 +242,80 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  void _handleNotificationTap(Map<String, dynamic> data) {
-    final String? rideRequestId = data['rideRequestId'] as String?;
-    // Check if the current user is a Driver and the data contains a rideRequestId
-    if (_currentUserModel?.role == 'Driver' && rideRequestId != null) {
-      debugPrint("Notification tap: Navigating for ride ID $rideRequestId");
-      // Ensure we are on the DriverHome screen.
-      // This assumes DriverHome is the screen at index 0 for the Driver role.
-      // If your navigation is more complex, you might need Navigator.pushNamed or a global key.
-      if (_selectedIndex != 0 || _currentUserModel?.role != 'Driver') {
-         // Navigate to DriverHome (index 0 for Driver)
-         // Using pushReplacement to avoid stacking screens if already deep in navigation
-         Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const HomeScreen()));
-         // Note: This will rebuild HomeScreen and the StreamBuilder, which will then
-         // re-initialize FCM handlers with the correct context and userModel.
-         // The getInitialMessage/onMessageOpenedApp might need to be re-processed slightly.
-      }
-
-      // Now that we are (or are ensuring we are) on the correct screen, update the provider.
+  // Helper method to update DriverProvider from FCM data
+  void _updateDriverProviderFromFCM(Map<String, dynamic> data) {
+    // Add this debug print
+    debugPrint("HomeScreen: _updateDriverProviderFromFCM called with data: $data");
+    if (mounted && _currentUserModel?.role == 'Driver' &&
+        data.isNotEmpty &&
+        data.containsKey('rideRequestId')) {
       try {
         final driverProvider = Provider.of<DriverProvider>(context, listen: false);
+        // Add this debug print
+        debugPrint("HomeScreen: Calling driverProvider.setNewPendingRide with data: $data");
         driverProvider.setNewPendingRide(data);
+        debugPrint("HomeScreen: Passed ride data to DriverProvider from FCM.");
       } catch (e) {
-        debugPrint("HomeScreen: Could not access DriverProvider from notification tap handler: $e");
+        debugPrint("HomeScreen: Could not access DriverProvider or set pending ride from FCM: $e");
       }
+    } else {
+      // Add this debug print
+      debugPrint("HomeScreen: _updateDriverProviderFromFCM - Conditions not met. Mounted: $mounted, Role: ${_currentUserModel?.role}, Data empty: ${data.isEmpty}, Has rideRequestId: ${data.containsKey('rideRequestId')}");
+    }
+  }
+
+  // Make the method async to allow fetching user details
+  Future<void> _handleNotificationTap(Map<String, dynamic> data) async {
+    debugPrint("HomeScreen: _handleNotificationTap called with data: $data");
+    final String? rideRequestId = data['rideRequestId'] as String?;
+
+    if (data['type'] == 'chat_message' && rideRequestId != null) {
+      debugPrint("HomeScreen: Chat notification tapped for ride ID: $rideRequestId");
+      final String? senderId = data['senderId'] as String?;
+      String recipientName = "Chat User"; // Placeholder
+
+      if (senderId != null && senderId.isNotEmpty) {
+        try {
+          // Assuming _userService is available and has a method like getUser.
+          // If UserService doesn't have it, you might use FirestoreService directly.
+          UserModel? senderProfile = await _userService.getUser(senderId); // Fetch sender's profile
+          if (senderProfile != null) {
+            recipientName = senderProfile.name ?? "Chat User";
+          }
+        } catch (e) {
+          debugPrint("HomeScreen: Error fetching sender's profile for chat notification: $e");
+          // recipientName remains "Chat User"
+        }
+      }
+
+      // Ensure context is still valid if operations are async before navigation
+      if (!mounted) return;
+
+      // Navigate to ChatScreen
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => ChatScreen(
+          rideRequestId: rideRequestId,
+          recipientId: senderId ?? '', // The person who sent the message
+          recipientName: recipientName, // Name of the person who sent the message
+        )),
+      );
+    } else if (_currentUserModel?.role == 'Driver' && rideRequestId != null && data['type'] != 'chat_message') { 
+      debugPrint("HomeScreen: Ride Action notification tap for Driver, ride ID $rideRequestId. Current selectedIndex: $_selectedIndex");
+      // DriverHome is at index 0 in _driverScreens.
+      if (_selectedIndex != 0) {
+        if (mounted) {
+          setState(() {
+            _selectedIndex = 0;
+            debugPrint("HomeScreen: Switched to DriverHome tab (index 0).");
+          });
+        }
+      }
+      // Update the DriverProvider with the new ride data.
+      // DriverHome listens to this provider and will show the accept/decline sheet.
+      _updateDriverProviderFromFCM(data);
+    } else {
+      debugPrint("HomeScreen: _handleNotificationTap - Unhandled notification type or conditions not met. Type: ${data['type']}, Role: ${_currentUserModel?.role}, rideRequestId: $rideRequestId");
     }
   }
 
@@ -368,8 +364,8 @@ class _HomeScreenState extends State<HomeScreen> {
         }
 
         final userModel = snapshot.data;
-        _initializeFCMAndCurrentUserActions(userModel);// Initialize FCM and actions with the loaded userModel
-
+        _initializeUserDependentServices(userModel); // Update local userModel state
+        _notificationProvider.initialize(); // Initialize FCM listeners via the provider
 
         // Handle navigation to AdditionalInfoScreen if role is missing
         // Or if userModel itself is null (still loading, or document truly doesn't exist for a new user)
@@ -421,34 +417,34 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
   
-    Widget _buildMainScreen(String role) {
-      final List<Widget> currentScreenList = _getCurrentScreenList(role);
-      return Scaffold(
-        drawer: const AppDrawer(),
-        body: IndexedStack( // Use IndexedStack to preserve state of screens
-          index: _selectedIndex,
-          children: currentScreenList,
+  Widget _buildMainScreen(String role) {
+    final List<Widget> currentScreenList = _getCurrentScreenList(role);
+    return Scaffold(
+      drawer: const AppDrawer(),
+      body: IndexedStack( // Use IndexedStack to preserve state of screens
+        index: _selectedIndex,
+        children: currentScreenList,
+      ),
+      bottomNavigationBar: BottomNavigationBar(
+        items: _getNavigationItems(role),
+        currentIndex: _selectedIndex,
+        // Use theme colors
+        selectedItemColor: Theme.of(context).colorScheme.primary,
+        unselectedItemColor: Theme.of(context).hintColor, // Use theme hint color
+        onTap: _onItemTapped,
+        backgroundColor: Theme.of(context).colorScheme.surface, // Use theme surface color
+        type: BottomNavigationBarType.fixed, // Ensures background color is applied
+      ),
+      floatingActionButton: Builder(
+        builder: (context) => FloatingActionButton(
+          onPressed: () => Scaffold.of(context).openDrawer(),
+          // Use theme colors for FAB
+          backgroundColor: Theme.of(context).colorScheme.surface,
+          foregroundColor: Theme.of(context).colorScheme.onSurface,
+          child: const Icon(Icons.menu),
         ),
-        bottomNavigationBar: BottomNavigationBar(
-          items: _getNavigationItems(role),
-          currentIndex: _selectedIndex,
-          // Use theme colors
-          selectedItemColor: Theme.of(context).colorScheme.primary,
-          unselectedItemColor: Theme.of(context).hintColor, // Use theme hint color
-          onTap: _onItemTapped,
-          backgroundColor: Theme.of(context).colorScheme.surface, // Use theme surface color
-          type: BottomNavigationBarType.fixed, // Ensures background color is applied
-        ),
-        floatingActionButton: Builder(
-          builder: (context) => FloatingActionButton(
-            onPressed: () => Scaffold.of(context).openDrawer(),
-            // Use theme colors for FAB
-            backgroundColor: Theme.of(context).colorScheme.surface,
-            foregroundColor: Theme.of(context).colorScheme.onSurface,
-            child: const Icon(Icons.menu),
-          ),
-        ),
-        floatingActionButtonLocation: FloatingActionButtonLocation.startTop,
-      );
-    }
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.startTop,
+    );
+  }
 }

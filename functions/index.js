@@ -19,9 +19,19 @@ const {
   onKijiweUpdate, // Changed from updateKijiwe to match the export from matchRideRequest.js
 } = require("./matchRideRequest");
 
+// Import functions from scheduledRidesManager.js
+const { manageScheduledRide, processScheduledRides } = require("./scheduledRidesManager");
+
+// Import functions from chatNotifications.js
+const { onChatMessageCreated } = require("./chatNotifications.js");
+
 // Export functions
 exports.matchRideRequest = matchRideRequest;
 exports.updateRideRequest = updateRideRequest;
 exports.deleteRideRequest = deleteRideRequest;
 exports.handleDriverRideAction = handleDriverRideAction; // Export the new callable function
 exports.onKijiweUpdate = onKijiweUpdate; // Exporting the renamed function
+
+exports.manageScheduledRide = manageScheduledRide;
+exports.processScheduledRides = processScheduledRides;
+exports.onChatMessageCreated = onChatMessageCreated;

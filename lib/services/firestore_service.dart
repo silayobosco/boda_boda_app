@@ -71,6 +71,19 @@ Future<String> createRideRequest(RideRequestModel rideRequest) async {
     });
   }
 
+  // Stream scheduled rides for a customer
+  Stream<List<RideRequestModel>> getScheduledRidesForCustomer(String customerId) {
+    return _firestore
+        .collection('scheduledRides') // Assuming 'scheduledRides' collection
+        .where('customerId', isEqualTo: customerId)
+        .where('status', isEqualTo: 'scheduled') // Or other relevant statuses
+        .orderBy('scheduledDateTime', descending: false) // Example ordering
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs.map((doc) => RideRequestModel.fromJson(doc.data(), doc.id)).toList();
+    });
+  }
+
   // Stream a single ride request document
   Stream<DocumentSnapshot> getRideRequestDocumentStream(String rideRequestId) {
     return _firestore.collection('rideRequests').doc(rideRequestId).snapshots();
@@ -93,19 +106,57 @@ Future<String> createRideRequest(RideRequestModel rideRequest) async {
     }
   }
 
-  // Ride History
-
-  Future<void> createRideHistory(RideHistoryModel rideHistory) async {
+  Future<void> updateRideRequestFields(String rideRequestId, Map<String, dynamic> data) async {
     try {
-      await _firestore.collection('rideHistory').add(rideHistory.toJson());
+      await _firestore.collection('rideRequests').doc(rideRequestId).update(data);
     } catch (e) {
-      print('Error creating ride history: $e');   
+      print('Error updating ride request fields: $e');
       rethrow;
     }
   }
 
-  Stream<List<RideHistoryModel>> getRideHistory(String userId) {
+  // Ride History
+
+  // Fetches ride history for a customer
+  Stream<List<RideRequestModel>> getCustomerRideHistory(String customerId) {
     return _firestore
+        .collection('rideRequests') // Assuming history is derived from rideRequests
+        .where('customerId', isEqualTo: customerId)
+        .where('status', whereIn: ['completed', 'cancelled_by_customer', 'cancelled_by_driver']) // Example statuses for history
+        .orderBy('requestTime', descending: true) // Or completedTime
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs.map((doc) => RideRequestModel.fromJson(doc.data(), doc.id)).toList();
+    });
+  }
+
+  // Fetches ride history for a driver
+  Stream<List<RideRequestModel>> getDriverRideHistory(String driverId) {
+    return _firestore
+        .collection('rideRequests') // Assuming history is derived from rideRequests
+        .where('driverId', isEqualTo: driverId)
+        .where('status', whereIn: ['completed', 'cancelled_by_customer', 'cancelled_by_driver']) // Example statuses for history
+        .orderBy('requestTime', descending: true) // Or completedTime
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs.map((doc) => RideRequestModel.fromJson(doc.data(), doc.id)).toList();
+    });
+  }
+
+  // scheduleRide (The old createRideHistory method might be repurposed or removed if history is derived)
+  // If you have a separate 'rideHistory' collection, the old method was:
+  /*
+  Future<void> createRideHistory(RideHistoryModel rideHistory) async {
+    try {
+      await _firestore.collection('rideHistory').add(rideHistory.toJson());
+    } catch (e) {
+      print('Error creating ride history: $e');
+      rethrow;
+    }
+  }
+
+  Stream<List<RideHistoryModel>> getRideHistory(String userId) { // This was generic, now split
+     return _firestore
         .collection('rideHistory')
         .where('customerId', isEqualTo: userId)
         .snapshots()
@@ -113,6 +164,7 @@ Future<String> createRideRequest(RideRequestModel rideRequest) async {
       return snapshot.docs.map((doc) => RideHistoryModel.fromJson(doc.data(), doc.id)).toList();
     });
   }
+  */
 
   // scheduleRide
 

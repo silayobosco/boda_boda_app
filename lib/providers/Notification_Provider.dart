@@ -1,45 +1,78 @@
-import 'package:firebase_messaging/firebase_messaging.dart';
+ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart'; // Example for local notifications
 import '../services/firestore_service.dart';
-// Assuming UserModel is in models/user_model.dart
-// import '../models/user_model.dart';
+import '../services/auth_service.dart'; // Import AuthService
 
 class NotificationProvider {
   final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
-  final FirestoreService _firestoreService = FirestoreService();
-  // Example: For flutter_local_notifications
+  final FirestoreService _firestoreService;
+  final AuthService _authService; // Add AuthService dependency
   final FlutterLocalNotificationsPlugin _localNotificationsPlugin = FlutterLocalNotificationsPlugin();
 
+  // Callbacks to interact with the UI layer (e.g., HomeScreen)
+  final Function(RemoteMessage message) onForegroundMessageReceived;
+  final Function(Map<String, dynamic> data) onNotificationTap;
+
+  bool _isFcmInitialized = false; // Flag to ensure FCM setup runs once
+
+  NotificationProvider({
+    required AuthService authService,
+    required FirestoreService firestoreService,
+    required this.onForegroundMessageReceived,
+    required this.onNotificationTap,
+  }) : _authService = authService,
+       _firestoreService = firestoreService {
+    _initializeLocalNotifications(); // Initialize local notifications immediately
+  }
+
   Future<void> initialize() async {
-    await _requestPermissions();
+    // This method now focuses on FCM related setup and permissions
+    // Local notifications are initialized in the constructor.
+    if (_isFcmInitialized) {
+      debugPrint("NotificationProvider: FCM already initialized. Verifying permissions.");
+      // Even if initialized, it's good to check notification permissions
+      // as they can be changed by the user in system settings.
+      await checkAndRequestNotificationPermissions();
+      return;
+    }
+    debugPrint("NotificationProvider: Initializing FCM setup...");
+
+    // Request notification permissions first
+    await checkAndRequestNotificationPermissions();
+
+    // Then proceed with token and listeners
     await _getAndSaveDeviceToken();
     _setupForegroundNotifications();
     _listenForTokenRefresh();
     _setupInteractionHandlers(); // For taps on notifications
-    await _initializeLocalNotifications(); // Initialize local notifications
+    _isFcmInitialized = true; // Mark FCM setup as complete
+    debugPrint("NotificationProvider: FCM setup completed.");
   }
 
-  Future<void> _requestPermissions() async {
-    try {
-      NotificationSettings settings = await _firebaseMessaging.requestPermission(
-        alert: true,
-        badge: true,
-        sound: true,
-        provisional: false, // Set to true if you want provisional authorization on iOS
-      );
-      debugPrint('User granted notification permission: ${settings.authorizationStatus}');
-    } catch (e) {
-      debugPrint('Error requesting notification permissions: $e');
-    }
+  bool get isFcmSetupComplete => _isFcmInitialized;
+
+    Future<bool> checkAndRequestNotificationPermissions() async {
+    NotificationSettings settings = await _firebaseMessaging.requestPermission(
+      alert: true,
+      announcement: false,
+      badge: true,
+      carPlay: false,
+      criticalAlert: false,
+      provisional: false,
+      sound: true,
+    );
+    debugPrint('NotificationProvider: User granted notification permission status: ${settings.authorizationStatus}');
+    return settings.authorizationStatus == AuthorizationStatus.authorized ||
+           settings.authorizationStatus == AuthorizationStatus.provisional;
   }
 
   Future<void> _getAndSaveDeviceToken() async {
     try {
       String? token = await _firebaseMessaging.getToken();
       if (token != null) {
-        await _saveTokenToFirestore(token);
+        await _authService.saveFCMTokenToFirestore(token); // Use AuthService to save token
       }
     } catch (e) {
       debugPrint('Error getting FCM token: $e');
@@ -48,14 +81,8 @@ class NotificationProvider {
 
   Future<void> _saveTokenToFirestore(String token) async {
     final userId = FirebaseAuth.instance.currentUser?.uid;
-    if (userId != null) {
-      try {
-        // Update only the fcmToken field
-        await _firestoreService.updateUserPartial(userId, {'fcmToken': token});
-        debugPrint('FCM token saved/updated in Firestore: $token');
-      } catch (e) {
-        debugPrint('Error saving FCM token to Firestore: $e');
-      }
+     if (userId != null) {
+       await _authService.saveFCMTokenToFirestore(token); // Use AuthService
     }
   }
 
@@ -68,40 +95,44 @@ class NotificationProvider {
 
   void _setupForegroundNotifications() {
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      debugPrint('Foreground FCM message received!');
-      debugPrint('Message data: ${message.data}');
-      if (message.notification != null) {
-        debugPrint('Message also contained a notification: ${message.notification!.title}, ${message.notification!.body}');
-        // Show a local notification when the app is in the foreground
+      debugPrint('NotificationProvider: Foreground FCM message received!');
+      // Show the local notification first
+      if (message.notification != null) { // Only show if there's a notification part
         _showLocalNotification(message);
       }
-    });
+      // If it's a chat message and the user is not on the chat screen for this ride,
+      // NotificationProvider could show a generic local notification here.
+      // However, the current setup relies on the onForegroundMessageReceived callback
+      // in HomeScreen to decide on further actions or UI updates based on the message type
+      // and app state (e.g., current screen).
+
+      onForegroundMessageReceived(message); // Then call the UI callback for other actions
+      }
+    );
   }
 
   void _setupInteractionHandlers() {
     // When the app is opened from a background state (not terminated)
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
       debugPrint('Message opened from background: ${message.messageId}');
-      _handleNotificationInteraction(message);
+      onNotificationTap(message.data); // Use the callback
+      // Example of how onNotificationTap might be used in HomeScreen:
+      // if (message.data['type'] == 'chat_message') {
+      //   final rideRequestId = message.data['rideRequestId'];
+      //   // Navigate to ChatScreen(rideRequestId: rideRequestId, ...);
+      // }
     });
 
     // When the app is opened from a terminated state
     FirebaseMessaging.instance.getInitialMessage().then((RemoteMessage? message) {
       if (message != null) {
         debugPrint('Message opened from terminated state: ${message.messageId}');
-        _handleNotificationInteraction(message);
+        // Example of how onNotificationTap might be used in HomeScreen:
+        // if (message.data['type'] == 'chat_message') { ... }
+
+      onNotificationTap(message.data); // Use the callback
       }
     });
-  }
-
-  void _handleNotificationInteraction(RemoteMessage message) {
-    debugPrint('Handling notification interaction: ${message.data}');
-    // TODO: Implement navigation or specific actions based on message.data
-    // For example, if your data payload contains a 'rideId':
-    // final String? rideId = message.data['rideId'];
-    // if (rideId != null) {
-    //   // Navigate to ride details screen
-    // }
   }
 
   Future<void> _initializeLocalNotifications() async {

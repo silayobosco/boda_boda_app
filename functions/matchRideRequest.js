@@ -283,6 +283,7 @@ exports.matchRideRequest = onDocumentCreated("/rideRequests/{rideRequestId}", as
               pickupLng: rideRequestData.pickup.longitude.toString(),
               dropoffLat: rideRequestData.dropoff.latitude.toString(),
               dropoffLng: rideRequestData.dropoff.longitude.toString(),
+              customerNoteToDriver: rideRequestData.customerNoteToDriver || "", // Include note
             };
 
             // Handle stops: stringify the array of stops or critical parts of it
@@ -459,6 +460,7 @@ exports.handleDriverRideAction = onCall(async (request) => {
             driverAgeGroup: driverAgeGroup,
             driverLicenseNumber: driverLicenseNumber,
             driverVehicleType: driverVehicleType,
+            customerNoteToDriver: rideData.customerNoteToDriver || "", // Include note for customer
             pickupAddressName: rideData.pickupAddressName || "",
             dropoffAddressName: rideData.dropoffAddressName || "",
             click_action: "FLUTTER_NOTIFICATION_CLICK", // Important for Flutter

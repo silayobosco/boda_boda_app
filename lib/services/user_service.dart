@@ -14,6 +14,20 @@ class UserService {
     });
   }
 
+  // Add the missing getUser method
+  Future<UserModel?> getUser(String uid) async {
+    try {
+      DocumentSnapshot userDoc = await _firestore.collection('users').doc(uid).get();
+      if (userDoc.exists && userDoc.data() != null) {
+        return UserModel.fromJson(userDoc.data() as Map<String, dynamic>);
+      }
+      return null; // User not found
+    } catch (e) {
+      print("Error getting user in UserService: $e");
+      rethrow;
+    }
+  }
+  
   // One-time fetch for a user model
   Future<UserModel?> getUserModel(String userId) async {
     try {
