@@ -607,24 +607,22 @@ setState(() {
         if (driverProfile != null && driverProfile['currentLocation'] is GeoPoint) {
           final GeoPoint driverGeoPoint = driverProfile['currentLocation'] as GeoPoint;
           final LatLng driverLatLng = LatLng(driverGeoPoint.latitude, driverGeoPoint.longitude);
-          final double driverHeading = (driverProfile['currentHeading'] as num?)?.toDouble() ?? 0.0;
+          final double driverHeading = (driverProfile['currentHeading'] as num?)?.toDouble() ?? 0.0;          
 
           if (mounted) {
             setState(() {
               _markers.removeWhere((m) => m.markerId.value == 'driver_active_location');
-              if (_isDriverIconLoaded) {
-                _markers.add(
-                  Marker(
-                    markerId: const MarkerId('driver_active_location'),
-                    position: driverLatLng,
-                    icon: _driverIcon!,
-                    rotation: driverHeading,
-                    anchor: const Offset(0.5, 0.5),
-                    flat: true,
-                    zIndex: 10, // Ensure driver marker is prominent
-                  ),
-                );
-              }
+              _markers.add(
+                Marker(
+                  markerId: const MarkerId('driver_active_location'),
+                  position: driverLatLng,
+                  icon: _isDriverIconLoaded && _driverIcon != null ? _driverIcon! : BitmapDescriptor.defaultMarker, // Use default if custom not loaded
+                  rotation: driverHeading,
+                  anchor: const Offset(0.5, 0.5),
+                  flat: true,
+                  zIndex: 10, // Ensure driver marker is prominent
+                ),
+              );
                _mapController?.animateCamera(CameraUpdate.newLatLng(driverLatLng));
             });
           }
@@ -1284,7 +1282,9 @@ void _updateDisplayedRoute() {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Ride scheduled successfully!')),
-        );        _showPostSchedulingDialog(); // Show the new dialog
+        );
+        debugPrint("CustomerHome: Attempting to show post-scheduling dialog."); // <--- ADD THIS
+        _showPostSchedulingDialog(); // Show the new dialog
       }
     } catch (e) {
       if (mounted) {
@@ -1392,30 +1392,37 @@ void _updateDisplayedRoute() {
                   final driverId = _activeRideRequestDetails!.driverId;
 
                   if (driverId != null) {
-                    if (rideStatus == 'pending_driver_acceptance') {
-                      if (mounted && !_isFindingDriver) { // Update if not already in this state
-                        setState(() => _isFindingDriver = true); // Keep showing "finding/waiting"
-                      }
-                    } else if (rideStatus == 'accepted' || rideStatus == 'goingToPickup' || rideStatus == 'arrivedAtPickup' || rideStatus == 'onRide') {
-                      if (mounted) {
-                        if (_isFindingDriver) setState(() => _isFindingDriver = false); // Driver accepted, stop "finding"
-                        // Start listening to driver location if not already, or if driverId changed
-                        if (_driverLocationSubscription == null || _assignedDriverModel?.uid != driverId) {
-                           _assignedDriverModel = UserModel(uid: driverId); // Minimal model for UID tracking
-                           _startListeningToDriverLocation(driverId);
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted) { // Check mounted inside the callback
+                        if (rideStatus == 'pending_driver_acceptance') {
+                          if (!_isFindingDriver) {
+                            setState(() => _isFindingDriver = true);
+                          }
+                        } else if (rideStatus == 'accepted' || rideStatus == 'goingToPickup' || rideStatus == 'arrivedAtPickup' || rideStatus == 'onRide') {
+                          if (_isFindingDriver) {
+                            setState(() => _isFindingDriver = false);
+                          }
+                          if (_driverLocationSubscription == null || _assignedDriverModel?.uid != driverId) {
+                            _assignedDriverModel = UserModel(uid: driverId);
+                            _startListeningToDriverLocation(driverId);
+                          }
                         }
                       }
-                    }
-                  } else if (driverId == null && _assignedDriverModel != null) {
-                    // Driver was unassigned or ride cancelled by driver before pickup
-                    if (mounted) {
-                      setState(() {
-                        _isFindingDriver = false; // Stop finding if driver is unassigned
-                        _assignedDriverModel = null;
-                        _stopListeningToDriverLocation();
-                        // Potentially clear _activeRideRequestId if ride is fully cancelled
-                      });
-                    }
+                    });
+                  } else if (driverId == null && _assignedDriverModel != null) { // Driver was unassigned
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted) {
+                        setState(() {
+                          _isFindingDriver = false;
+                          _assignedDriverModel = null;
+                          _stopListeningToDriverLocation();
+                          // If the ride was cancelled by driver before pickup,
+                          // and you want to fully reset, you might clear _activeRideRequestId here too.
+                          // For now, assuming the stream for the ride itself will eventually
+                          // lead to the 'completed' or 'cancelled' block below.
+                        });
+                      }                   
+                    });
                   }
                   // Handle other status updates like 'arrived', 'onRide', 'completed'
                   // For example, if status is 'completed', reset _activeRideRequestId
@@ -1933,202 +1940,169 @@ void _updateDisplayedRoute() {
   }
 
   Widget _buildDriverAssignedSheet() {
-    final theme = Theme.of(context);
-    final rideDetails = _activeRideRequestDetails; // Use a local variable for null safety
+    return DraggableScrollableSheet(
+      initialChildSize: 0.4, // Adjust initial size as needed
+      minChildSize: 0.25,
+      maxChildSize: 0.6, // Adjust max size
+      builder: (BuildContext context, ScrollController scrollController) {
+        final theme = Theme.of(context);
+        final rideDetails = _activeRideRequestDetails;
 
-    if (rideDetails == null) return Container(child: Center(child: Text("Waiting for ride details...")));
-    debugPrint("CustomerHome: _buildDriverAssignedSheet - Status: ${rideDetails.status}");
+        if (rideDetails == null) {
+          return Container(
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surface,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+              boxShadow: [BoxShadow(blurRadius: 10, color: Colors.black12, offset: Offset(0, -2))],
+            ),
+            child: const Center(child: Text("Waiting for ride details..."))
+          );
+        }
 
-    // Add this debug print to inspect the data
-    debugPrint("CustomerHome - _buildDriverAssignedSheet - _activeRideRequestDetails: ${_activeRideRequestDetails?.toJson()}");
-    debugPrint("CustomerHome - _buildDriverAssignedSheet - Driver Gender: ${_activeRideRequestDetails?.driverGender}");
-    debugPrint("CustomerHome - _buildDriverAssignedSheet - Driver Age Group: ${_activeRideRequestDetails?.driverAgeGroup}");
-    debugPrint("CustomerHome - _buildDriverAssignedSheet - Driver License: ${_activeRideRequestDetails?.driverLicenseNumber}");
-    debugPrint("CustomerHome - _buildDriverAssignedSheet - Driver Avg Rating (denorm): ${_activeRideRequestDetails?.driverAverageRating}");
-    debugPrint("CustomerHome - _buildDriverAssignedSheet - Driver Rides Count (denorm): ${_activeRideRequestDetails?.driverCompletedRidesCount}");
+        final rideStatus = rideDetails.status;
 
-    final rideStatus = rideDetails.status;
+        // Loading/waiting state
+        if (rideStatus == 'pending_driver_acceptance' || (rideDetails.driverId != null && rideDetails.driverName == null)) {
+          return Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surface,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+              boxShadow: [BoxShadow(blurRadius: 10, color: Colors.black12, offset: Offset(0, -2))],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min, // Make column take minimum space
+              mainAxisAlignment: MainAxisAlignment.center, // Center content
+              children: [
+                CircularProgressIndicator(color: theme.colorScheme.primary),
+                verticalSpaceMedium,
+                Text(
+                  rideStatus == 'pending_driver_acceptance' ? 'Waiting for driver to accept...' : 'Driver assigned. Loading details...',
+                  style: theme.textTheme.titleMedium,
+                  textAlign: TextAlign.center,
+                ),
+                verticalSpaceSmall,
+                if (rideStatus == 'pending_driver_acceptance')
+                  OutlinedButton(
+                    style: OutlinedButton.styleFrom(foregroundColor: theme.colorScheme.error, side: BorderSide(color: theme.colorScheme.error)),
+                    onPressed: () async {
+                      if (_activeRideRequestId != null) {
+                        final rideProvider = Provider.of<RideRequestProvider>(context, listen: false);
+                        try { await rideProvider.cancelRideByCustomer(_activeRideRequestId!); } catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to cancel: $e'))); }
+                      }
+                    },
+                    child: const Text('Cancel Ride'),
+                  ),
+              ],
+            ),
+          );
+        }
 
-    // Show loading/waiting state if status is 'pending_driver_acceptance' or if driver details are not yet on rideDetails
-    if (rideStatus == 'pending_driver_acceptance' || (rideDetails.driverId != null && rideDetails.driverName == null)) {
-       return Positioned(
-        bottom: 0, left: 0, right: 0,
-        child: Container(
-          padding: const EdgeInsets.all(20),
+        // Main content for assigned driver
+        return Container(
           decoration: BoxDecoration(
             color: theme.colorScheme.surface,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
             boxShadow: [BoxShadow(blurRadius: 10, color: Colors.black12, offset: Offset(0, -2))],
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+          child: ListView( // Changed to ListView for scrolling
+            controller: scrollController,
+            padding: const EdgeInsets.all(20),
             children: [
-              CircularProgressIndicator(color: theme.colorScheme.primary),
+              Center( // Drag handle
+                child: Container(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  width: 40, height: 4,
+                  decoration: BoxDecoration(color: theme.colorScheme.outline.withOpacity(0.5), borderRadius: BorderRadius.circular(2)),
+                ),
+              ),
+              if (rideDetails.driverProfileImageUrl != null && rideDetails.driverProfileImageUrl!.isNotEmpty)
+                Center(child: CircleAvatar(radius: 30, backgroundImage: NetworkImage(rideDetails.driverProfileImageUrl!)))
+              else
+                Center(child: CircleAvatar(radius: 30, backgroundColor: theme.colorScheme.primaryContainer, child: Icon(Icons.drive_eta, size: 30, color: theme.colorScheme.onPrimaryContainer))),
+              verticalSpaceSmall,
+              Center(child: Text(rideDetails.driverName ?? 'Driver', style: theme.textTheme.titleLarge)),
+              if (rideDetails.driverVehicleType != null && rideDetails.driverVehicleType != "N/A")
+                Center(child: Text('Vehicle: ${rideDetails.driverVehicleType}', style: theme.textTheme.bodySmall)),
+              
+              Builder(builder: (context) {
+                final gender = rideDetails.driverGender;
+                final ageGroup = rideDetails.driverAgeGroup;
+                List<String> details = [];
+                if (gender != null && gender.isNotEmpty && gender != "Unknown") details.add(gender); 
+                if (ageGroup != null && ageGroup.isNotEmpty && ageGroup != "Unknown") details.add(ageGroup);
+                if (details.isNotEmpty) {
+                  return Center(child: Text(details.join(', '), style: theme.textTheme.bodySmall));
+                }
+                return const SizedBox.shrink();
+              }),
+              verticalSpaceSmall,
+              if (rideDetails.driverAverageRating != null && rideDetails.driverAverageRating! > 0)
+                Center(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.star, color: accentColor, size: 16),
+                      horizontalSpaceSmall,
+                      Text(rideDetails.driverAverageRating!.toStringAsFixed(1), style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold)),
+                      if (rideDetails.driverCompletedRidesCount != null && rideDetails.driverCompletedRidesCount! > 0)
+                        Padding(padding: const EdgeInsets.only(left: 8.0), child: Text("(${rideDetails.driverCompletedRidesCount} rides)", style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor))),
+                    ],
+                  ),
+                ),
+              // License number - now visible if content scrolls
+              if (rideDetails.driverLicenseNumber != null && rideDetails.driverLicenseNumber!.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4.0),
+                  child: Center(child: Text('License: ${rideDetails.driverLicenseNumber}', style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor))),
+                ),
+              verticalSpaceSmall,
+              Center(
+                child: Chip(
+                  label: Text('Status: $rideStatus', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSecondaryContainer)),
+                  backgroundColor: theme.colorScheme.secondaryContainer,
+                ),
+              ),
               verticalSpaceMedium,
-              Text(
-                rideStatus == 'pending_driver_acceptance' ? 'Waiting for driver to accept...' : 'Driver assigned. Loading details...',
-                style: theme.textTheme.titleMedium,
-                textAlign: TextAlign.center,
-              ),
-              verticalSpaceSmall,
-              // Cancel button if waiting for driver to accept - Ensure rideStatus is correctly 'pending_driver_acceptance'
-              if (rideStatus == 'pending_driver_acceptance')
-                OutlinedButton(
-                  style: OutlinedButton.styleFrom(foregroundColor: theme.colorScheme.error, side: BorderSide(color: theme.colorScheme.error)),
-                  onPressed: () async {
-                    // Similar safe cancel logic as in _buildFindingDriverSheet
-                    if (_activeRideRequestId != null) {
-                      final rideProvider = Provider.of<RideRequestProvider>(context, listen: false);
-                      try { await rideProvider.cancelRideByCustomer(_activeRideRequestId!); } catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to cancel: $e'))); }
-                    }
-                  },
-                  child: const Text('Cancel Ride'),
-                ),
-            // Chat with Driver Button
-            if (rideDetails.driverId != null && (rideStatus == 'accepted' || rideStatus == 'goingToPickup' || rideStatus == 'arrivedAtPickup' || rideStatus == 'onRide')) ...[
-              verticalSpaceSmall,
-              TextButton.icon(
-                icon: Icon(Icons.chat_bubble_outline, color: theme.colorScheme.primary),
-                label: Text('Chat with Driver', style: TextStyle(color: theme.colorScheme.primary)),
-                onPressed: () {
-                  debugPrint("CustomerHome: Chat button pressed for ride ID: ${rideDetails.id} with driver ID: ${rideDetails.driverId}");
-                  Navigator.push(context, MaterialPageRoute(builder: (context) => ChatScreen(
-                    rideRequestId: rideDetails.id!,
-                    recipientId: rideDetails.driverId!, // This is the driver's UID
-                    recipientName: rideDetails.driverName ?? "Driver",
-                    // We'll need to determine the current user's role to pass to ChatScreen later
-                  )));
-                },
-              ),
-            ],
-
-            // Add/Edit Note Button - Ensure rideStatus is correctly 'accepted' or 'goingToPickup'
-            // and rideDetails is not null.
-            if (rideStatus == 'accepted' || rideStatus == 'goingToPickup') ...[
-              verticalSpaceSmall,
-              TextButton.icon(
-                icon: Icon(Icons.edit_note_outlined, color: theme.colorScheme.secondary),
-                label: Text(
-                  rideDetails.customerNoteToDriver != null && rideDetails.customerNoteToDriver!.isNotEmpty
-                      ? 'Edit Note'
-                      : 'Add Note for Driver',
-                  style: TextStyle(color: theme.colorScheme.secondary),
-                ),
-                onPressed: () => _showAddNoteDialog(rideDetails.id!, rideDetails.customerNoteToDriver),
-              ),
-            ],
-              verticalSpaceSmall,
-              Chip(
-                label: Text('Status: $rideStatus', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSecondaryContainer)),
-                backgroundColor: theme.colorScheme.secondaryContainer,
-              ),
-            ],
-          )
-        ));
-    }
-
-    return Positioned(
-      bottom: 0, left: 0, right: 0,
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: theme.colorScheme.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-          boxShadow: [BoxShadow(blurRadius: 10, color: Colors.black12, offset: Offset(0, -2))],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (rideDetails.driverProfileImageUrl != null && rideDetails.driverProfileImageUrl!.isNotEmpty)
-              CircleAvatar(
-                radius: 30,
-                backgroundImage: NetworkImage(rideDetails.driverProfileImageUrl!),
-              )
-            else
-              CircleAvatar(
-                radius: 30,
-                backgroundColor: theme.colorScheme.primaryContainer,
-                child: Icon(Icons.drive_eta, size: 30, color: theme.colorScheme.onPrimaryContainer), // Changed icon
-              ),
-            verticalSpaceSmall,
-            Text(rideDetails.driverName ?? 'Driver', style: theme.textTheme.titleLarge),
-            if (rideDetails.driverVehicleType != null && rideDetails.driverVehicleType != "N/A")
-              Text('Vehicle: ${rideDetails.driverVehicleType}', style: theme.textTheme.bodySmall),
-            
-            // Display Gender and Age Group if available
-            Builder(builder: (context) {
-              final gender = rideDetails.driverGender;
-              final ageGroup = rideDetails.driverAgeGroup;
-              List<String> details = [];
-              if (gender != null && gender.isNotEmpty && gender != "Unknown") details.add(gender); 
-              if (ageGroup != null && ageGroup.isNotEmpty && ageGroup != "Unknown") details.add(ageGroup);
-              if (details.isNotEmpty) {
-                return Text(details.join(', '), style: theme.textTheme.bodySmall);
-              }
-              return SizedBox.shrink();
-            }),
-
-            verticalSpaceSmall,
-            // Display Driver's Average Rating
-            if (rideDetails.driverAverageRating != null && rideDetails.driverAverageRating! > 0)
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.star, color: accentColor, size: 16),
-                  horizontalSpaceSmall,
-                  Text(
-                    rideDetails.driverAverageRating!.toStringAsFixed(1),
-                    style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold),
-                  ),
-                  if (rideDetails.driverCompletedRidesCount != null && rideDetails.driverCompletedRidesCount! > 0)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 8.0),
-                    child: Text(
-                      "(${rideDetails.driverCompletedRidesCount} rides)",
-                      style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
+              // Chat with Driver Button
+              if (rideDetails.driverId != null && (rideStatus == 'accepted' || rideStatus == 'goingToPickup' || rideStatus == 'arrivedAtPickup' || rideStatus == 'onRide'))
+                TextButton.icon(
+                  icon: Icon(Icons.chat_bubble_outline, color: theme.colorScheme.primary),
+                  label: Text('Chat with Driver', style: TextStyle(color: theme.colorScheme.primary)),
+                  onPressed: () {
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => ChatScreen(
+                      rideRequestId: rideDetails.id!,
+                      recipientId: rideDetails.driverId!,
+                      recipientName: rideDetails.driverName ?? "Driver",
                     ),
-                  ),
-                ],
-              ),
-            // Display License Number from denormalized data
-            if (rideDetails.driverLicenseNumber != null && rideStatus == 'onRide') // Example: Show only during active ride
-              Padding(
-                padding: const EdgeInsets.only(top: 4.0),
-                child: Text('License: ${_activeRideRequestDetails!.driverLicenseNumber}', style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor)),
-              ),
-            verticalSpaceSmall,
-            Chip(
-              label: Text('Status: $rideStatus', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSecondaryContainer)),
-              backgroundColor: theme.colorScheme.secondaryContainer,
-            ),
-            verticalSpaceMedium,
-            // Add Cancel Ride button if the ride is not yet 'onRide', 'completed', or 'cancelled'
-            if (rideStatus != 'onRide' && rideStatus != 'completed' && !rideStatus.contains('cancelled'))
-              OutlinedButton(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: theme.colorScheme.error,
-                  side: BorderSide(color: theme.colorScheme.error),
+                    ));
+                  },
                 ),
-                onPressed: () async {
-                  if (_activeRideRequestId != null) {
-                    try {
-                      await Provider.of<RideRequestProvider>(context, listen: false)
-                          .cancelRideByCustomer(_activeRideRequestId!);
-                      // StreamBuilder will handle UI reset
-                    } catch (e) {
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Failed to cancel ride: $e')),
-                        );
+              // Add/Edit Note Button
+              if (rideStatus == 'accepted' || rideStatus == 'goingToPickup')
+                TextButton.icon(
+                  icon: Icon(Icons.edit_note_outlined, color: theme.colorScheme.secondary),
+                  label: Text(rideDetails.customerNoteToDriver != null && rideDetails.customerNoteToDriver!.isNotEmpty ? 'Edit Note' : 'Add Note for Driver', style: TextStyle(color: theme.colorScheme.secondary)),
+                  onPressed: () => _showAddNoteDialog(rideDetails.id!, rideDetails.customerNoteToDriver),
+                ),
+              // Cancel Ride Button
+              if (rideStatus != 'onRide' && rideStatus != 'completed' && !rideStatus.contains('cancelled'))
+                Padding(
+                  padding: const EdgeInsets.only(top: 8.0), // Add some space above
+                  child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(foregroundColor: theme.colorScheme.error, side: BorderSide(color: theme.colorScheme.error)),
+                    onPressed: () async {
+                      if (_activeRideRequestId != null) {
+                        try { await Provider.of<RideRequestProvider>(context, listen: false).cancelRideByCustomer(_activeRideRequestId!); } catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to cancel ride: $e'))); }
                       }
-                    }
-                  }
-                },
-                child: const Text('Cancel Ride'),
-              ),
-          ],
-        ),
-      ),
+                    },
+                    child: const Text('Cancel Ride'),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -2392,24 +2366,39 @@ void _updateDisplayedRoute() {
                 ElevatedButton(
                   child: const Text('Submit Rating'),
                   onPressed: () async {
+                    // Capture context-dependent objects BEFORE the await
+                    final rideProvider = Provider.of<RideRequestProvider>(context, listen: false);
+                    // Capture navigator for the dialog. Use rootNavigator: true if popping the dialog itself.
+                    final navigator = Navigator.of(dialogContext); 
+                    final scaffoldMessenger = ScaffoldMessenger.of(context); // Capture scaffold messenger for the main screen
+                    final bool isMounted = mounted; // Capture mounted state of CustomerHome
+
                     if (ratingValue > 0) {
                       try {
-                        await Provider.of<RideRequestProvider>(context, listen: false).rateUser(
+                        await rideProvider.rateUser(
                           rideId: rideId, // rideId passed to _showRateDriverDialog
                           ratedUserId: driverId, // driverId passed to _showRateDriverDialog
                           ratedUserRole: 'driver', // Customer is rating a driver
                           rating: ratingValue,
                           comment: commentController.text.trim().isNotEmpty ? commentController.text.trim() : null,
                         );
-                        Navigator.of(dialogContext).pop(); // Close the dialog
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Rating submitted! Thank you.')));
+                        
+                        // Use captured navigator to pop the dialog
+                        if (navigator.canPop()) {
+                           navigator.pop();
                         }
-                        _showPostRideCompletionDialog(); // Show the new dialog
+
+                        if (isMounted) { // Use captured mounted state
+                          scaffoldMessenger.showSnackBar(const SnackBar(content: Text('Rating submitted! Thank you.')));
+                          debugPrint("CustomerHome: Attempting to show post-ride completion dialog."); 
+                          _showPostRideCompletionDialog(); // Show the new dialog
+                        }
                       } catch (e) {
-                        Navigator.of(dialogContext).pop(); // Close the dialog
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to submit rating: $e')));
+                        if (navigator.canPop()) { // Also pop dialog on error
+                           navigator.pop();
+                        }
+                        if (isMounted) {
+                          scaffoldMessenger.showSnackBar(SnackBar(content: Text('Failed to submit rating: $e')));
                         }
                       }
                     } else {

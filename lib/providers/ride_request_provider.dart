@@ -288,9 +288,8 @@ class RideRequestProvider extends ChangeNotifier {
     final raterUserId = authService.currentUser?.uid;
     if (raterUserId == null) throw Exception("Rater not authenticated");
 
-    WriteBatch batch = FirebaseFirestore.instance.batch();
     final rideRequestRef = FirebaseFirestore.instance.collection('rideRequests').doc(rideId);
-    final ratedUserRef = FirebaseFirestore.instance.collection('users').doc(ratedUserId);
+    // final ratedUserRef = FirebaseFirestore.instance.collection('users').doc(ratedUserId); // REMOVE: Customer cannot update driver's profile directly
 
     Map<String, dynamic> rideUpdateData = {};
     Map<String, dynamic> userProfileUpdate = {};
@@ -300,17 +299,13 @@ class RideRequestProvider extends ChangeNotifier {
       if (comment != null && comment.isNotEmpty) {
         rideUpdateData['customerCommentToDriver'] = comment;
       }
-      // Update driver's aggregate rating stats
-      userProfileUpdate['driverProfile.sumOfRatingsReceived'] = FieldValue.increment(rating);
-      userProfileUpdate['driverProfile.totalRatingsReceivedCount'] = FieldValue.increment(1);
-      // Average rating calculation should be handled by a Cloud Function (trigger on user document update)
+      // REMOVE: Driver's aggregate rating stats update. This should be handled by a Cloud Function.
     } else {
       throw Exception("Invalid ratedUserRole for this rating method.");
     }
 
-    batch.update(rideRequestRef, rideUpdateData);
-    batch.update(ratedUserRef, userProfileUpdate);
-    await batch.commit();
+    // Update only the ride request document
+    await rideRequestRef.update(rideUpdateData);
 
     debugPrint("Rating of $rating for $ratedUserRole ($ratedUserId) on ride $rideId submitted by $raterUserId. Comment: $comment");
     notifyListeners();

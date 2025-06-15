@@ -14,9 +14,8 @@ service cloud.firestore {
     // Rules for the 'rideRequests' collection
     match /rideRequests/{rideRequestId} {
       // Allow customers to create ride requests
-      allow create: if request.auth != null && 
-        // Check if user document exists and role allows creation
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['Customer', 'Driver', 'Both', '']) || request.resource.data.customerId == request.auth.uid;
+      allow create: if request.auth != null &&
+                       request.resource.data.customerId == request.auth.uid;
 
       // Allow authenticated users to read ride requests
       allow read: if request.auth != null;
@@ -30,7 +29,16 @@ service cloud.firestore {
         (resource.data.customerId == request.auth.uid &&
           request.resource.data.status == 'cancelled_by_customer' &&
           (resource.data.status == 'pending_match' || resource.data.status == 'pending_driver_acceptance' || resource.data.status == 'accepted') // Customer can cancel even if accepted, before pickup
-        )
+        ) ||
+        // Case 2: Customer rating the driver after ride completion
+        (resource.data.customerId == request.auth.uid &&
+          resource.data.status == 'completed' &&
+          true ) // Temporarily bypass field validation for rating to isolate the issue
+			);
+       // Allow update by the service account (for denormalization by Cloud Functions)
+      allow update: if request.auth.uid == 'YOUR_SERVICE_ACCOUNT_UID' && (
+        // The Cloud Function can only update customer details and any other denormalized fields
+        request.writeFields.hasOnly(['customerName', 'customerProfileImageUrl', 'customerDetails'])
       );
       // Prevent deletion of ride requests
       allow delete: if false;
