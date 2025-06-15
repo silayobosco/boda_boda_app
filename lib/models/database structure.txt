@@ -13,6 +13,7 @@
     - unionId: String
     - position: Map  // For GeoFlutterFirePlus
         - geohash: String
+        // - geoPoint: GeoPoint // This is part of the geohash data structure from GeoFlutterFire
         - geoPoint: GeoPoint
     //TODO- Rules
     - queue: Array of Strings // driverIds
@@ -20,7 +21,7 @@
 /Users/{userId}  //  Unified User Collection
     - createdAt: Timestamp
     - customerId: String (userId from Users collection)
-    - dob: String
+    - dob: Timestamp // Or String, ensure consistency with UserModel
     - emailVerified: Boolean
     - fcmToken: String
     - gender: String
@@ -48,6 +49,7 @@
         - isOnline: Boolean  // Whether they are currently available for rides and should be in the Kijiwe queue
         - status: String ("offline", "waitingForRide", "goingToPickup", "arrivedAtPickup", "onRide", "pending_ride_acceptance")
         - currentLocation: GeoPoint (Driver's active location, if different from user's general location)
+        - currentHeading: Number (Driver's current heading/direction)
         - completedRidesCount: Number
         - cancelledByDriverCount: Number // Rides cancelled BY THE DRIVER after acceptance
         - declinedByDriverCount: Number // Rides offered to driver that they declined before acceptance
@@ -58,22 +60,75 @@
 /RideRequests/{rideRequestId}
     - acceptedTime: Timestamp // Time driver accepted
     - completedTime: Timestamp
-    - customerId: String (userId from Users collection)
-    - customerName: String
-    - customerProfileImageUrl
-    - driverName: String
-    - driverProfileImageUrl
+    - customerId: String (userId from Users collection) // Non-nullable
+    - customerName: String // Denormalized
+    - customerProfileImageUrl: String // Denormalized
+    - customerDetails: String // Denormalized (e.g., "Female, 20s, Rating: 4.5")
+    - customerNoteToDriver: String // Note from customer to driver
+    - driverId: String (userId from Users collection, formerly assignedDriverId)
+    - driverName: String // Denormalized
+    - driverProfileImageUrl: String // Denormalized
+    - driverGender: String // Denormalized
+    - driverAgeGroup: String // Denormalized
+    - driverLicenseNumber: String // Denormalized
+    - driverVehicleType: String // Denormalized
+    - driverAverageRating: Number // Denormalized
+    - driverCompletedRidesCount: Number // Denormalized
     - dropOff: GeoPoint
     - dropoffAddressName: String
     - fare: Number
+    - commissionAmount: Number // Commission taken from the fare
+    - driverEarnings: Number // Fare - commission
     - kijiweId: String
     - pickup: GeoPoint
     - pickupAddressName: String
     - requestTime: Timestamp
     - status: String // e.g. "pending_match", "pending_driver_acceptance", "accepted", "goingToPickup", "arrivedAtPickup", "onRide", "completed", "cancelled_by_customer", "cancelled_by_driver", "declined_by_driver", "no_drivers_available", "matching_error"
     - stops: Array of Maps // [{'name': String, 'location': GeoPoint, 'addressName': String}]
-    - driverId: String (userId from Users collection, formerly assignedDriverId)
     - customerRatingToDriver: Number // Rating customer gave to driver for this ride
     - customerCommentToDriver: String
     - driverRatingToCustomer: Number // Rating driver gave to customer for this ride
     - driverCommentToCustomer: String
+    - actualDistanceKm: Number // Actual distance tracked for the ride
+    - actualDrivingDurationMinutes: Number // Actual driving time tracked
+    - actualTotalWaitingTimeMinutes: Number // Actual waiting time tracked (future use)
+    - scheduledDateTime: Timestamp // If this is a scheduled ride that became active
+
+/scheduledRides/{scheduledRideId} // Similar structure to RideRequests but with scheduling-specific fields
+    - customerId: String
+    - title: String
+    - scheduledDateTime: Timestamp
+    - createdAt: Timestamp
+    - pickup: GeoPoint
+    - dropoff: GeoPoint
+    - pickupAddressName: String
+    - dropoffAddressName: String
+    - stops: Array of Maps // [{'name': String, 'location': GeoPoint, 'addressName': String}]
+    - status: String // e.g., "scheduled", "processing", "completed_from_schedule", "cancelled_schedule"
+    - isRecurring: Boolean
+    - recurrenceType: String // "Daily", "Weekly"
+    - recurrenceDaysOfWeek: Array of Strings // e.g., ["Mon", "Wed", "Fri"]
+    - recurrenceEndDate: Timestamp
+    - customerNoteToDriver: String // Note from customer to driver for the scheduled ride
+    - rideRequestId: String // ID of the active RideRequest document if this scheduled ride has been processed and created one
+
+/rideChats/{rideRequestId}/messages/{messageId}
+    - senderId: String
+    - senderRole: String // "Customer" or "Driver"
+    - text: String
+    - timestamp: Timestamp
+    - isRead: Boolean
+
+/appConfiguration/{configDocId} // e.g., configDocId can be "fareSettings", "schedulingSettings"
+    // For fareSettings:
+    - startingFare: Number
+    - farePerKilometer: Number
+    - farePerMinuteDriving: Number
+    - farePerMinuteWaiting: Number
+    - minimumFare: Number
+    - commissionRate: Number (e.g., 0.20 for 20%)
+    - roundingIncrement: Number (e.g., 500 for rounding to nearest 500)
+    - currency: String (e.g., "TZS")
+    // For schedulingSettings:
+    - maxSchedulingDaysAhead: Number
+    - minSchedulingMinutesAhead: Number
