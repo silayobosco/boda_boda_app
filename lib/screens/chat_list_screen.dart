@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../models/Ride_Request_Model.dart'; // Assuming you have this model
 import '../services/auth_service.dart'; // To get current user
 import '../widgets/chat_list_item.dart'; // Import the new ChatListItem
+import 'chat_screen.dart'; // Import ChatScreen for admin chat
 //import 'package:intl/intl.dart'; // For date formatting
 
 class ChatListScreen extends StatefulWidget {
@@ -55,14 +56,46 @@ class _ChatListScreenState extends State<ChatListScreen> {
 
                 final rideDocs = snapshot.data!.docs;
 
-                return ListView.builder(
-                  itemCount: rideDocs.length,
+                return ListView.separated(
+                  itemCount: rideDocs.length + 1, // +1 for the Admin Chat ListTile
+                  separatorBuilder: (context, index) => const Divider(height: 1),
                   itemBuilder: (context, index) {
-                    final rideDoc = rideDocs[index];
-                    // Assuming RideRequestModel.fromJson can handle this data
+                    if (index == 0) {
+                      // Admin Chat ListTile
+                      const adminUid = "YOUR_ADMIN_UID_HERE"; // Replace with actual Admin UID
+                      if (adminUid == "YOUR_ADMIN_UID_HERE") {
+                        // Placeholder if admin UID is not set, to avoid errors.
+                        // In a real app, you might fetch this from a config or hide the option.
+                        return const ListTile(
+                          leading: Icon(Icons.support_agent),
+                          title: Text('Chat with Admin'),
+                          subtitle: Text('Admin support not configured.'),
+                          enabled: false,
+                        );
+                      }
+                      return ListTile(
+                        leading: Icon(Icons.support_agent, color: theme.colorScheme.primary),
+                        title: const Text('Chat with Admin Support'),
+                        trailing: Icon(Icons.chevron_right, color: theme.hintColor),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => ChatScreen(
+                                // Use a conventional ID for admin chats
+                                rideRequestId: 'admin_chat_${_currentUser!.uid}',
+                                recipientId: adminUid,
+                                recipientName: 'Admin Support',
+                              ),
+                            ),
+                          );
+                        },
+                      );
+                    }
+                    // Ride Chat ListItems
+                    final rideDoc = rideDocs[index - 1]; // Adjust index for rideDocs
                     final ride = RideRequestModel.fromJson(rideDoc.data() as Map<String, dynamic>, rideDoc.id);
 
-                    // Only show chat option if there's a driver assigned
                     if (ride.driverId == null || ride.driverId!.isEmpty) {
                       return ListTile(
                         title: Text(ride.dropoffAddressName ?? 'Ride to Destination'),
@@ -70,7 +103,6 @@ class _ChatListScreenState extends State<ChatListScreen> {
                         leading: Icon(Icons.directions_car, color: theme.colorScheme.secondary),
                       );
                     }
-                    // Use the new ChatListItem widget
                     return ChatListItem(
                       ride: ride,
                       currentUserId: _currentUser!.uid,

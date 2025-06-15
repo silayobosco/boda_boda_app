@@ -15,8 +15,10 @@ import '../models/stop.dart';
 import '../models/user_model.dart'; // For Driver's UserModel
 import '../utils/ui_utils.dart'; // Import ui_utils
 import '../utils/map_utils.dart'; // Import the new map utility
-import 'package:boda_boda/services/firestore_service.dart';
+import '../services/firestore_service.dart';
 import 'chat_screen.dart'; // Import the ChatScreen
+import 'scheduled_rides_list_widget.dart'; // Import ScheduledRidesListWidget
+import 'rides_screen.dart'; // Import RidesScreen for ride history
 
 class CustomerHome extends StatefulWidget {
   const CustomerHome({super.key});
@@ -937,7 +939,7 @@ void _updateDisplayedRoute() {
       if (mounted) { // Set finding driver true just before the async call
         setState(() => _isFindingDriver = true);
       }
-      // final BuildContext currentContext = context; // Unused variable
+ // Unused variable
 
       String rideId = await rideRequestProvider.createRideRequest(
         pickup: _pickupLocation!, // _pickupLocation is already ll.LatLng (latlong2.LatLng)
@@ -1282,7 +1284,7 @@ void _updateDisplayedRoute() {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Ride scheduled successfully!')),
-        );
+        );        _showPostSchedulingDialog(); // Show the new dialog
       }
     } catch (e) {
       if (mounted) {
@@ -1293,6 +1295,56 @@ void _updateDisplayedRoute() {
     }
   }});
 }
+  void _showPostSchedulingDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false, // User must choose an option
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: const Text('Ride Scheduled!'),
+          content: const Text('What would you like to do next?'),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('Plan Another Ride'),
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                _clearAndResetForm();
+              },
+            ),
+            TextButton(
+              child: const Text('View Scheduled Rides'),
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const ScheduledRidesListWidget()),
+                );
+                _clearAndResetForm(); // Also clear form after navigating
+              },
+            ),
+            TextButton(
+              child: const Text('Continue Editing'),
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                // Do nothing, user stays on the current screen with the route
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _clearAndResetForm() {
+    setState(() {
+      _pickupController.clear(); _destinationController.clear();
+      _stops.forEach((stop) => stop.controller.clear()); _stops.clear();
+      _pickupLocation = null; _dropOffLocation = null;
+      _markers.clear(); _polylines.clear();
+      _selectedRouteDistance = null; _selectedRouteDuration = null; _estimatedFare = null;
+      _routeReady = false; _initializePickupLocation();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1771,17 +1823,6 @@ void _updateDisplayedRoute() {
                   child: Row(
                     children: [
                       Expanded(
-                        flex: 3, // Confirm Route button larger
-                        child: ElevatedButton(
-                          onPressed: _confirmRideRequest,
-                          style: Theme.of(context).elevatedButtonTheme.style?.copyWith(
-                                minimumSize: MaterialStateProperty.all(const Size(double.infinity, 50)),
-                              ),
-                          child: const Text('Confirm Route', style: TextStyle(color: Colors.white)),
-                        ),
-                      ),
-                      horizontalSpaceMedium,
-                      Expanded(
                         flex: 2,
                         child: OutlinedButton(
                           onPressed: () => _scheduleRide(
@@ -1803,6 +1844,17 @@ void _updateDisplayedRoute() {
                                 minimumSize: MaterialStateProperty.all(const Size(double.infinity, 50)),
                               ),
                           child: const Text('Schedule'),
+                        ),
+                      ),
+                      horizontalSpaceMedium,
+                      Expanded(
+                        flex: 3, // Confirm Route button larger
+                        child: ElevatedButton(
+                          onPressed: _confirmRideRequest,
+                          style: Theme.of(context).elevatedButtonTheme.style?.copyWith(
+                                minimumSize: MaterialStateProperty.all(const Size(double.infinity, 50)),
+                              ),
+                          child: const Text('Confirm Route', style: TextStyle(color: Colors.white)),
                         ),
                       ),
                     ],
@@ -2353,6 +2405,7 @@ void _updateDisplayedRoute() {
                         if (mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Rating submitted! Thank you.')));
                         }
+                        _showPostRideCompletionDialog(); // Show the new dialog
                       } catch (e) {
                         Navigator.of(dialogContext).pop(); // Close the dialog
                         if (mounted) {
@@ -2380,5 +2433,63 @@ void _updateDisplayedRoute() {
     _stopFocusNode.dispose();
     _driverLocationSubscription?.cancel();
     super.dispose();
+  }
+
+  void _showPostRideCompletionDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: const Text('Ride Completed!'),
+          content: const Text('Thank you for riding with us.'),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('Return Trip'),
+              onPressed: () async { // Make onPressed async
+                Navigator.of(dialogContext).pop();
+                if (_stops.isNotEmpty) {
+                  // Show another dialog to ask about stops
+                  bool? clearStops = await showDialog<bool>(
+                    context: context, // Use the main screen's context
+                    builder: (BuildContext stopsDialogContext) {
+                      return AlertDialog(
+                        title: const Text('Keep Stops?'),
+                        content: const Text('Do you want to keep the current stops for your return trip?'),
+                        actions: <Widget>[
+                          TextButton(
+                            child: const Text('Clear Stops'),
+                            onPressed: () => Navigator.of(stopsDialogContext).pop(true),
+                          ),
+                          TextButton(
+                            child: const Text('Keep Stops'),
+                            onPressed: () => Navigator.of(stopsDialogContext).pop(false),
+                          ),
+                        ],
+                      );
+                    },
+                  );
+                  if (clearStops == true) {
+                    setState(() {
+                      _stops.clear();
+                      _markers.removeWhere((m) => m.markerId.value.startsWith('stop_'));
+                    });
+                  }
+                }
+                _swapLocations(); // Swaps pickup and destination
+                _drawRoute(); // Redraw route after potential changes
+              },
+            ),
+            TextButton(
+              child: const Text('View Ride History'),
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                Navigator.push(context, MaterialPageRoute(builder: (context) => const RidesScreen(role: 'Customer')));
+              },
+            ),
+          ],
+        );
+      },
+    );
   }
 }

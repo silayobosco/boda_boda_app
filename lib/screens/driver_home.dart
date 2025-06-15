@@ -1207,17 +1207,21 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
           primaryRouteDetails['points'] as List<gmf.LatLng>?,
         );
         // No need to check mounted again here as onRouteFetched should handle it
-        if (mounted) if (mounted) setState(() => _isLoadingRoute = false);
       } else {
-        if (mounted) if (mounted) setState(() => _isLoadingRoute = false);
-        if (!mounted) return; // Check before calling callback
+        // No route details found
+        // isLoadingRoute will be set to false in the finally block.
+        if (!mounted) return;
         onRouteFetched(null, null, null);
       }
     } catch (e) {
       debugPrint('Error in _fetchAndDisplayRoute: $e'); // This is correct
-      if (mounted) setState(() { _isLoadingRoute = false;});
       if (!mounted) return; // Check before calling callback
-      onRouteFetched(null, null, null);    }
+      onRouteFetched(null, null, null);
+    } finally {
+      if (mounted) {
+        setState(() { _isLoadingRoute = false; });
+      }
+    }
   }
 
   void _zoomToDriverToPickupSegment(gmf.LatLng driverLocation, gmf.LatLng customerPickup) {
