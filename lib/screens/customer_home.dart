@@ -91,19 +91,58 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
   void initState() {
     super.initState();
     _loadDriverMarkerIcon();
-    _initializePickupLocation();
+    // _initializePickupLocation(); // We will call a new setup method later
     _setupFocusListeners();
     _sheetController.addListener(_onSheetChanged);
     _loadSearchHistory(); 
     _fetchSchedulingLimits();
     _fetchFareConfig(); // Ensure this is called
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_destinationController.text.isEmpty) {
-        setState(() {
-          _editingDestination = true;
-        });
+      _setupInitialLocationAndMap(); // Call the new setup method here
+      if (_destinationController.text.isEmpty && mounted) { // Check mounted
+        if (mounted) { // Redundant check, but safe
+          setState(() {
+            _editingDestination = true;
+          });
+        }
       }
     });
+  }
+
+  Future<void> _setupInitialLocationAndMap() async {
+    if (!mounted) return;
+    final locationProvider = Provider.of<LocationProvider>(context, listen: false);
+
+    // Ensure location provider attempts to get a location
+    await locationProvider.updateLocation();
+
+    if (!mounted) return; // Re-check mounted state after await
+
+    final currentLocation = locationProvider.currentLocation;
+    if (currentLocation != null) {
+      _pickupLocation = currentLocation; // ll.LatLng
+      _updateGooglePickupMarker(LatLng(currentLocation.latitude, currentLocation.longitude)); // gmf.LatLng
+      await _reverseGeocode(_pickupLocation!, _pickupController);
+
+      // Center map if controller is ready
+      if (_mapController != null) {
+        _mapController!.animateCamera(
+          CameraUpdate.newLatLngZoom(
+            LatLng(currentLocation.latitude, currentLocation.longitude),
+            15, // Default zoom
+          ),
+        );
+      }
+      _adjustMapForExpandedSheet(); // This will use the new _pickupLocation
+      _checkRouteReady(); // In case pickup was the last piece for route readiness
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not get current location. Please check permissions and try again.')),
+        );
+      }
+    }
   }
 
   Future<void> _fetchFareConfig() async {
@@ -340,7 +379,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
   }
 
   void _collapseSheet() {
-    _sheetController.animateTo(0.35,
+    _sheetController.animateTo(0.20,
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeOut,
     );
@@ -882,6 +921,7 @@ void _updateDisplayedRoute() {
   void _removeStop(int index) {
   setState(() {
     _markers.removeWhere((m) => m.markerId == MarkerId('stop_$index'));
+    _stops[index].dispose(); // Dispose the stop's controller and focus node
     _stops.removeAt(index);
 
     // After removing, update the markers of other stops
@@ -1346,6 +1386,51 @@ void _updateDisplayedRoute() {
     });
   }
 
+  Widget _buildLocationField({
+    required Key key, // Add key
+    required TextEditingController controller,
+    required String labelText,
+    required String hintText,
+    required IconData iconData,
+    required Color iconColor,
+    required bool isEditing,
+    required FocusNode focusNode,
+    required VoidCallback onTapWhenNotEditing, // For InkWell
+    required ValueChanged<String> onChanged,
+    required VoidCallback onClear,
+    required VoidCallback onMapIconTap,
+  }) {
+    final theme = Theme.of(context);
+    return Column(
+      key: key,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(labelText, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.primary.withOpacity(0.8))),
+        verticalSpaceSmall,
+        if (isEditing)
+          TextField(
+            controller: controller,
+            focusNode: focusNode,
+            decoration: appInputDecoration( // Using appInputDecoration
+                hintText: hintText,
+                prefixIcon: Icon(iconData, color: iconColor),
+                suffixIcon: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (controller.text.isNotEmpty) IconButton(icon: const Icon(Icons.clear, size: 20), onPressed: onClear),
+                    IconButton(icon: const Icon(Icons.map_outlined, size: 20), onPressed: onMapIconTap),
+                  ],
+                )),
+            onChanged: onChanged,
+            onTap: _expandSheet, // Expand sheet when text field is tapped
+            onSubmitted: (_) => _collapseSheet(), // Collapse sheet on submit
+          )
+        else
+          InkWell(onTap: onTapWhenNotEditing, child: _buildFieldContainer(Row(children: [Icon(iconData, color: iconColor), horizontalSpaceMedium, Expanded(child: controller.text.isEmpty ? Text(hintText, style: appTextStyle(color: theme.hintColor)) : Text(controller.text, style: theme.textTheme.bodyLarge))]))),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -1524,13 +1609,19 @@ void _updateDisplayedRoute() {
     }
     // Default: Show route planning sheet
     debugPrint("CustomerHome: _buildRouteSheet -> Showing default route planning sheet. Estimated Fare: $_estimatedFare");
+    final bool showActionButtons = _pickupLocation != null && _dropOffLocation != null && !_isFindingDriver && _activeRideRequestId == null;
+     // Revert to static sheet sizes
+    const double initialSheetSize = 0.55;
+    const List<double> snapSizes = [0.35, 0.45, 0.55, 0.7, 0.9];
+    const double minSheetSize = 0.2;
+ 
     return DraggableScrollableSheet(
       controller: _sheetController,
-      initialChildSize: 0.35,
-      minChildSize: 0.25,
-      maxChildSize: 0.9,
+      initialChildSize: initialSheetSize, // Use the static initial size
+      minChildSize: minSheetSize,
+      maxChildSize: 1.0,
       snap: true,
-      snapSizes: const [0.35, 0.7, 0.9],
+      snapSizes: snapSizes, // Use the dynamic snapSizes variable
       builder: (context, scrollController) {
         return Container(
           decoration: BoxDecoration(
@@ -1600,156 +1691,77 @@ void _updateDisplayedRoute() {
                             ),
                           ),
 
-                          // Pickup Field
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), // Use spacing constants?
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: InkWell(
-                                    onTap: () => _startEditing('pickup'),
-                                    child: _buildFieldContainer(
-                                      Row(
-                                        children: [
-                                          // Use theme icon color or specific color
-                                          Icon(Icons.location_on, color: successColor, size: Theme.of(context).iconTheme.size),
-                                          horizontalSpaceMedium, // Use spacing constant
-                                          Expanded(
-                                            child: _pickupController.text.isEmpty
-                                                ? Text(
-                                                    'Pickup location',
-                                                    style: appTextStyle(color: Theme.of(context).hintColor), // Use theme hint color
-                                                  )
-                                                : Text(
-                                                    _pickupController.text,
-                                                    style: Theme.of(context).textTheme.bodyLarge, // Use theme text style
-                                                  ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.add, size: 24),
-                                  onPressed: _addStop,
-                                ),
-                              ],
-                            ),
-                          ),
-                          
-                          if (_editingPickup)
+                          // Pickup Field (conditionally shown)
+                          // Show if pickup is not set (needs input) OR if action buttons are visible (for review/edit)
+                          if (_pickupLocation == null || showActionButtons)
                             Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 16), // Use spacing constants?
-                              child: Column(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), 
+                              child: Row( // Wrap _buildLocationField and Add Stop button in a Row
                                 children: [
-                                  TextField(
-                                    controller: _pickupController,
-                                    focusNode: _pickupFocusNode,
-                                     // Use theme input decoration
-                                    decoration: InputDecoration(
+                                  Expanded(
+                                    child: _buildLocationField(
+                                      key: const ValueKey('pickup_field'),
+                                      controller: _pickupController,
+                                      labelText: 'Pickup Location',
                                       hintText: 'Enter pickup location',
-                                      // border: const UnderlineInputBorder(), // Remove, use theme
-                                      suffixIcon: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          if (_pickupController.text.isNotEmpty)
-                                            IconButton(
-                                              icon: const Icon(Icons.clear, size: 20),
-                                              onPressed: _clearPickup,
-                                            ),
-                                          IconButton(
-                                            icon: const Icon(Icons.map), // Uses theme icon color
-                                            onPressed: () {
-                                              setState(() {
-                                                _selectingPickup = true;
-                                                _editingPickup = true;
-                                              });
-                                              _collapseSheet();
-                                              ScaffoldMessenger.of(context).showSnackBar(
-                                                const SnackBar(content: Text('Tap on map to select pickup location')),
-                                              );
-                                            },
-                                          ),
-                                        ],
-                                      ),
+                                      iconData: Icons.my_location,
+                                      iconColor: successColor,
+                                      isEditing: _editingPickup,
+                                      focusNode: _pickupFocusNode,
+                                      onTapWhenNotEditing: () => _startEditing('pickup'),
+                                      onChanged: (value) async { if (value.isNotEmpty) { final suggestions = await _getGooglePlacesSuggestions(value); setState(() => _pickupSuggestions = suggestions); } else { setState(() => _pickupSuggestions = []); } },
+                                      onClear: _clearPickup,
+                                      onMapIconTap: () { setState(() { _selectingPickup = true; _editingPickup = true; }); _collapseSheet(); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tap on map to select pickup location'))); },
                                     ),
-                                    onChanged: (value) async {
-                                      if (value.isNotEmpty) {
-                                        final suggestions = await _getGooglePlacesSuggestions(value);
-                                        setState(() => _pickupSuggestions = suggestions);
-                                      } else {
-                                        setState(() => _pickupSuggestions = []); // Show search history if empty
-                                      }
-                                    },
-                                    onSubmitted: (_) {
-                                      setState(() => _editingPickup = false);
-                                      _collapseSheet();
-                                    },
                                   ),
-                                  ..._buildSuggestionList(_pickupSuggestions, true, null),
+                                  IconButton(icon: const Icon(Icons.add_location_alt_outlined), onPressed: _addStop, tooltip: 'Add Stop'),
                                 ],
+                              ),
+                            ),
+                          
+                          if (_editingPickup) // Suggestions list for pickup
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16), 
+                              child: Column(
+                                children: _buildSuggestionList(_pickupSuggestions, true, null),
                               ),
                             ),
                           
                           // Stops Section with + button for each stop
                           if (_stops.isNotEmpty)
                             Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8), // Use spacing constants?
+                              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8), 
                               child: Column(
                                 children: _stops.asMap().entries.map((entry) {
                                   final index = entry.key;
                                   final stop = entry.value;
-                                  return Padding(
-                                    padding: const EdgeInsets.only(bottom: 8),
-                                    child: Row(
-                                      children: [
-                                        Expanded(
-                                          child: _buildStopItem(index, stop),
-                                        ),
-                                        horizontalSpaceSmall,
-                                        IconButton(
-                                          icon: const Icon(Icons.add, size: 24),
-                                          onPressed: () => _addStopAfter(index),
-                                        ),
-                                      ],
-                                    ),
-                                  );
+                                  return _buildStopItem(index, stop); // _buildStopItem will now use _buildLocationField
                                 }).toList(),
                               ),
                             ),
                           
                           // Destination Field
                           Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), // Use spacing constants?
-                            child: Row(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            child: Row( // Wrap in a Row to add the swap button
                               children: [
                                 Expanded(
-                                  child: InkWell(
-                                    onTap: () => _startEditing('destination'),
-                                    child: _buildFieldContainer(
-                                      Row(
-                                        children: [
-                                          // Use theme error color
-                                          Icon(Icons.flag, color: Theme.of(context).colorScheme.error, size: Theme.of(context).iconTheme.size),
-                                          horizontalSpaceMedium, // Use spacing constant
-                                          Expanded(
-                                            child: _destinationController.text.isEmpty
-                                                ? Text(
-                                                    'Where to?',
-                                                    style: appTextStyle(color: Theme.of(context).hintColor), // Use theme hint color
-                                                  )
-                                                : Text(
-                                                    _destinationController.text,
-                                                    style: Theme.of(context).textTheme.bodyLarge, // Use theme text style
-                                                  ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
+                                  child: _buildLocationField(
+                                    key: const ValueKey('destination_field'),
+                                    controller: _destinationController,
+                                    labelText: 'Destination',
+                                    hintText: 'Where to?',
+                                    iconData: Icons.flag_outlined,
+                                    iconColor: Theme.of(context).colorScheme.error,
+                                    isEditing: _editingDestination,
+                                    focusNode: _destinationFocusNode,
+                                    onTapWhenNotEditing: () => _startEditing('destination'),
+                                    onChanged: (value) async { if (value.isNotEmpty) { final suggestions = await _getGooglePlacesSuggestions(value); setState(() => _destinationSuggestions = suggestions); } else { setState(() => _destinationSuggestions = []); } },
+                                    onClear: _clearDestination,
+                                    onMapIconTap: () { setState(() => _editingDestination = true); _collapseSheet(); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tap on map to select destination'))); },
                                   ),
                                 ),
-                                if (_pickupLocation != null && _dropOffLocation != null)
+                                if (_pickupLocation != null && _dropOffLocation != null) // Show swap button if both are set
                                   IconButton(
                                     icon: const Icon(Icons.swap_vert, size: 24),
                                     onPressed: _swapLocations,
@@ -1759,54 +1771,32 @@ void _updateDisplayedRoute() {
                             ),
                           ),
                           
-                          if (_editingDestination)
+                          if (_editingDestination) // Suggestions list for destination
                             Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 16), // Use spacing constants?
+                              padding: const EdgeInsets.symmetric(horizontal: 16),
                               child: Column(
-                                children: [
-                                  TextField(
-                                    controller: _destinationController,
-                                    focusNode: _destinationFocusNode,
-                                     // Use theme input decoration
-                                    decoration: InputDecoration(
-                                      hintText: 'Enter destination',
-                                      // border: const UnderlineInputBorder(), // Remove, use theme
-                                      suffixIcon: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          if (_destinationController.text.isNotEmpty)
-                                            IconButton(
-                                              icon: const Icon(Icons.clear, size: 20),
-                                              onPressed: _clearDestination,
-                                            ),
-                                          IconButton(
-                                            icon: const Icon(Icons.map), // Uses theme icon color
-                                            onPressed: () {
-                                              setState(() => _editingDestination = true);
-                                              _collapseSheet();
-                                              ScaffoldMessenger.of(context).showSnackBar(
-                                                const SnackBar(content: Text('Tap on map to select destination')),
-                                              );
-                                            },
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    onChanged: (value) async {
-                                      if (value.isNotEmpty) {
-                                        final suggestions = await _getGooglePlacesSuggestions(value);
-                                        setState(() => _destinationSuggestions = suggestions);
-                                      } else {
-                                        setState(() => _pickupSuggestions = []); // Show search history when empty
-                                      }
-                                    },
-                                    onSubmitted: (_) {
-                                      setState(() => _editingDestination = false);
-                                      _collapseSheet();
-                                    },
-                                  ),
-                                  ..._buildSuggestionList(_destinationSuggestions, false, null),
-                                ],
+                                children: _buildSuggestionList(_destinationSuggestions, false, null),
+                              ),
+                            ),
+                          
+                          // "Add Note to Driver" field - moved here
+                          if (showActionButtons)
+                            Padding(
+                              key: const ValueKey('customer_note_field_padding'), // Add key
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              child: TextField(
+                                key: const ValueKey('customer_note_textfield'), // Add key
+                                controller: _customerNoteController,
+                                decoration: appInputDecoration( // Use appInputDecoration
+                                  labelText: 'Note to Driver (Optional)', // Added labelText
+                                  hintText: 'e.g., I am at the main gate',
+                                  prefixIcon: Icon(Icons.note_add_outlined, color: Theme.of(context).hintColor),
+                                ),
+                                maxLines: 2,
+                                onTap: () { // Ensure sheet expands when note field is tapped
+                                  _expandSheet();
+                                  _startEditing('note'); // A generic field name, or handle focus differently
+                                },
                               ),
                             ),
                         ],
@@ -1815,14 +1805,14 @@ void _updateDisplayedRoute() {
                     
                     SliverToBoxAdapter(
                       // Adjust spacing based on sheet expansion
-                      child: SizedBox(height: _isSheetExpanded ? 120 : 80), // Use verticalSpaceLarge?
+                      child: SizedBox(height: _isSheetExpanded ? 120 : 80), 
                     ),
                   ],
                 ),
               ),
               
               // Action Buttons (only shown when both pickup and destination are set)
-              if (_pickupLocation != null && _dropOffLocation != null && !_isFindingDriver && _activeRideRequestId == null) // Ensure no active ride request
+              if (showActionButtons) // Use the boolean flag
                 Container(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                   // Use theme surface color to blend with sheet
@@ -2110,114 +2100,59 @@ void _updateDisplayedRoute() {
     final isEditing = _editingStopIndex == index;
     final theme = Theme.of(context); // Get theme
     
-    return Column(
-      children: [
-        Dismissible(
-          key: Key('stop_${index}_${_stops[index].controller.text}'),
-          direction: DismissDirection.endToStart,
-          background: Container(
-            decoration: BoxDecoration(
-              // Use theme error container color
-              color: theme.colorScheme.errorContainer,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            alignment: Alignment.centerRight,
-            padding: const EdgeInsets.only(right: 20),
-            child: Icon(
-              Icons.delete,
-              color: theme.colorScheme.onErrorContainer, // Use theme color for icon on error container
-            ),
+    return Padding( // Added Padding around the stop item
+      key: ObjectKey(_stops[index]), // Key for the Padding, helps with list updates
+      padding: const EdgeInsets.only(bottom: 8.0),
+      child: Column(
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start, // Align items to the top
+            children: [
+              Expanded(
+                child: Dismissible(
+                  key: ValueKey('stop_dismissible_$index'), // Unique key for Dismissible
+                  direction: DismissDirection.endToStart,
+                  background: Container(
+                    decoration: BoxDecoration(color: theme.colorScheme.errorContainer, borderRadius: BorderRadius.circular(8)),
+                    alignment: Alignment.centerRight,
+                    padding: const EdgeInsets.only(right: 20),
+                    child: Icon(Icons.delete, color: theme.colorScheme.onErrorContainer),
+                  ),
+                  onDismissed: (direction) => _removeStop(index),
+                  child: _buildLocationField( // Use the new _buildLocationField
+                    key: ValueKey('stop_field_$index'), // Key for the location field itself
+                    controller: stop.controller,
+                    labelText: 'Stop ${index + 1}',
+                    hintText: 'Add stop location',
+                    iconData: Icons.location_on_outlined, // Or a numbered icon
+                    iconColor: theme.primaryColor.withOpacity(0.7),
+                    isEditing: isEditing,
+                    focusNode: stop.focusNode, // Use stop's own focus node
+                    onTapWhenNotEditing: () => _startEditing('stop_$index'),
+                    onChanged: (value) async { if (value.isNotEmpty) { final suggestions = await _getGooglePlacesSuggestions(value); setState(() => _stopSuggestions = suggestions); } else { setState(() => _stopSuggestions = []); } },
+                    onClear: () => _clearStop(index),
+                    onMapIconTap: () { setState(() { _editingStopIndex = index; _selectingPickup = false; _editingPickup = false; _editingDestination = false; }); _collapseSheet(); ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Tap on map to select location for Stop ${index + 1}'))); },
+                  ),
+                ),
+              ),
+              horizontalSpaceSmall,
+              IconButton(
+                icon: const Icon(Icons.add_circle_outline, size: 24),
+                color: theme.colorScheme.secondary,
+                onPressed: () => _addStopAfter(index),
+                tooltip: 'Add stop after this one',
+              ),
+            ],
           ),
-          onDismissed: (direction) => _removeStop(index),
-          child: InkWell(
-            onTap: () => _startEditing('stop_$index'),
-            child: _buildFieldContainer(
-              Row(
-                children: [
-                  Container(
-                    width: 24,
-                    height: 24,
-                    decoration: BoxDecoration(
-                      // Use theme primary color with opacity
-                      color: theme.primaryColor.withOpacity(0.2),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Center(
-                      child: Text(
-                        '${index + 1}',
-                        style: TextStyle(
-                          // Use theme primary color
-                          color: theme.primaryColor,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-                  horizontalSpaceMedium, // Use spacing constant
-                  Expanded(
-                    child: stop.controller.text.isEmpty
-                        // Use theme hint color
-                        ? Text('Add stop', style: appTextStyle(color: theme.hintColor))
-                        : Text(stop.controller.text, style: theme.textTheme.bodyLarge), // Use theme text style
-                  ),
-                ],
+          if (isEditing) // Suggestions list for the stop
+            Padding(
+              padding: const EdgeInsets.only(top: 0, left: 0, right: 40), // Adjust padding to align under text field
+              child: Column(
+                children: _buildSuggestionList(_stopSuggestions, false, index),
               ),
             ),
-          ),
-        ),
-        
-        if (isEditing)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Column(
-              children: [
-                TextField(
-                  controller: stop.controller,
-                  focusNode: _stopFocusNode,
-                  // Use theme input decoration
-                  decoration: InputDecoration(
-                    hintText: 'Enter stop location',
-                    // border: const UnderlineInputBorder(), // Remove, use theme
-                    suffixIcon: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (stop.controller.text.isNotEmpty)
-                          IconButton(
-                            icon: const Icon(Icons.clear, size: 20),
-                            onPressed: () => _clearStop(index),
-                          ),
-                        IconButton(
-                          icon: const Icon(Icons.map, size: 20), // Uses theme icon color
-                          onPressed: () {
-                            setState(() => _editingStopIndex = index);
-                            _collapseSheet();
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Tap on map to select location for Stop ${index + 1}')),
-                            );
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                  onChanged: (value) async {
-                    if (value.isNotEmpty) {
-                      final suggestions = await _getGooglePlacesSuggestions(value);
-                      setState(() => _stopSuggestions = suggestions);
-                    } else {
-                      setState(() => _stopSuggestions = []);
-                    }
-                  },
-                  onSubmitted: (_) {
-                    setState(() => _editingStopIndex = null);
-                    _collapseSheet();
-                  },
-                ),
-                if (_stopSuggestions.isNotEmpty || stop.controller.text.isEmpty)
-                  ..._buildSuggestionList(_stopSuggestions, false, index),
-              ],
-            ),
-          ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -2421,6 +2356,9 @@ void _updateDisplayedRoute() {
     _customerNoteController.dispose(); // Dispose the new controller
     _stopFocusNode.dispose();
     _driverLocationSubscription?.cancel();
+    for (var stop in _stops) { // Dispose resources for each stop
+      stop.dispose();
+    }
     super.dispose();
   }
 
