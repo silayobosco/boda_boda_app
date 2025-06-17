@@ -1586,6 +1586,10 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
                 ),
               ),
               actions: <Widget>[
+                TextButton(
+                  child: Text('Skip', style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.7))),
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                ),
                 ElevatedButton( // Changed to ElevatedButton for primary action
                   child: Text('Submit Rating'),
                   onPressed: () async {
@@ -1611,10 +1615,6 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
                       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Please select a star rating.')));
                     }
                   },
-                ),
-                TextButton(
-                  child: Text('Skip', style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.7))),
-                  onPressed: () => Navigator.of(dialogContext).pop(),
                 ),
               ],
             );

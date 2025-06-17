@@ -1377,13 +1377,38 @@ void _updateDisplayedRoute() {
 
   void _clearAndResetForm() {
     setState(() {
-      _pickupController.clear(); _destinationController.clear();
-      _stops.forEach((stop) => stop.controller.clear()); _stops.clear();
-      _pickupLocation = null; _dropOffLocation = null;
-      _markers.clear(); _polylines.clear();
-      _selectedRouteDistance = null; _selectedRouteDuration = null; _estimatedFare = null;
-      _routeReady = false; _initializePickupLocation();
+      _pickupController.clear();
+      _destinationController.clear();
+      _stops.forEach((stop) => stop.controller.clear());
+      _stops.clear();
+
+      _pickupLocation = null;
+      _dropOffLocation = null;
+
+      _markers.clear();
+      _polylines.clear();
+
+      _selectedRouteDistance = null;
+      _selectedRouteDuration = null;
+      _estimatedFare = null;
+      _routeReady = false;
+
+      // Clear suggestion lists so history can be shown
+      _pickupSuggestions = [];
+      _destinationSuggestions = [];
+      _stopSuggestions = [];
+
+      // Reset editing states
+      _editingPickup = false;
+      _editingDestination = true; // Set to false, user will tap to edit
+      _editingStopIndex = null;
+
+      _pickupFocusNode.unfocus();
+      _destinationFocusNode.unfocus();
+      _stopFocusNode.unfocus();
     });
+    // Re-initialize pickup location and collapse sheet to default
+    _setupInitialLocationAndMap();
   }
 
   Widget _buildLocationField({
@@ -2301,40 +2326,37 @@ void _updateDisplayedRoute() {
                 ElevatedButton(
                   child: const Text('Submit Rating'),
                   onPressed: () async {
-                    // Capture context-dependent objects BEFORE the await
                     final rideProvider = Provider.of<RideRequestProvider>(context, listen: false);
-                    // Capture navigator for the dialog. Use rootNavigator: true if popping the dialog itself.
-                    final navigator = Navigator.of(dialogContext); 
-                    final scaffoldMessenger = ScaffoldMessenger.of(context); // Capture scaffold messenger for the main screen
-                    final bool isMounted = mounted; // Capture mounted state of CustomerHome
+                    final navigator = Navigator.of(dialogContext); // Navigator for the dialog
 
                     if (ratingValue > 0) {
                       try {
                         await rideProvider.rateUser(
-                          rideId: rideId, // rideId passed to _showRateDriverDialog
-                          ratedUserId: driverId, // driverId passed to _showRateDriverDialog
-                          ratedUserRole: 'driver', // Customer is rating a driver
+                          rideId: rideId,
+                          ratedUserId: driverId,
+                          ratedUserRole: 'driver',
                           rating: ratingValue,
                           comment: commentController.text.trim().isNotEmpty ? commentController.text.trim() : null,
                         );
                         
-                        // Use captured navigator to pop the dialog
-                        if (navigator.canPop()) {
+                        // After await, check if CustomerHome is still mounted
+                        if (!mounted) return;
+
+                        if (navigator.canPop()) { // Pop the dialog
                            navigator.pop();
                         }
 
-                        if (isMounted) { // Use captured mounted state
-                          scaffoldMessenger.showSnackBar(const SnackBar(content: Text('Rating submitted! Thank you.')));
-                          debugPrint("CustomerHome: Attempting to show post-ride completion dialog."); 
-                          _showPostRideCompletionDialog(); // Show the new dialog
-                        }
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Rating submitted! Thank you.')));
+                        debugPrint("CustomerHome: Attempting to show post-ride completion dialog."); 
+                        _showPostRideCompletionDialog();
                       } catch (e) {
-                        if (navigator.canPop()) { // Also pop dialog on error
+                        // After await, check if CustomerHome is still mounted
+                        if (!mounted) return;
+
+                        if (navigator.canPop()) { 
                            navigator.pop();
                         }
-                        if (isMounted) {
-                          scaffoldMessenger.showSnackBar(SnackBar(content: Text('Failed to submit rating: $e')));
-                        }
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to submit rating: $e')));
                       }
                     } else {
                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select a star rating.')));
@@ -2412,6 +2434,13 @@ void _updateDisplayedRoute() {
               onPressed: () {
                 Navigator.of(dialogContext).pop();
                 Navigator.push(context, MaterialPageRoute(builder: (context) => const RidesScreen(role: 'Customer')));
+              },
+            ),
+            TextButton(
+              child: const Text('Thanks'),
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                _clearAndResetForm(); // Reset the form
               },
             ),
           ],
