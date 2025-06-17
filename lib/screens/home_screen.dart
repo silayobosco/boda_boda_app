@@ -246,7 +246,12 @@ class _HomeScreenState extends State<HomeScreen> {
   void _updateDriverProviderFromFCM(Map<String, dynamic> data) {
     // Add this debug print
     debugPrint("HomeScreen: _updateDriverProviderFromFCM called with data: $data");
-    if (mounted && _currentUserModel?.role == 'Driver' &&
+
+    // Check if the notification is a new ride offer for a driver
+    bool isNewRideOfferForDriver = data['status'] == 'pending_driver_acceptance' && data.containsKey('rideRequestId');
+
+    if (mounted &&
+        (isNewRideOfferForDriver || (_currentUserModel?.role == 'Driver')) && // Allow if new ride offer OR current role is Driver
         data.isNotEmpty &&
         data.containsKey('rideRequestId')) {
       try {
@@ -260,7 +265,7 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     } else {
       // Add this debug print
-      debugPrint("HomeScreen: _updateDriverProviderFromFCM - Conditions not met. Mounted: $mounted, Role: ${_currentUserModel?.role}, Data empty: ${data.isEmpty}, Has rideRequestId: ${data.containsKey('rideRequestId')}");
+      debugPrint("HomeScreen: _updateDriverProviderFromFCM - Conditions not met. Mounted: $mounted, Role: ${_currentUserModel?.role}, isNewRideOffer: $isNewRideOfferForDriver, Data empty: ${data.isEmpty}, Has rideRequestId: ${data.containsKey('rideRequestId')}");
     }
   }
 
