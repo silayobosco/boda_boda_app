@@ -85,18 +85,21 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
   Map<String, dynamic>? _fareConfig; // Declare _fareConfig
   final TextEditingController _customerNoteController = TextEditingController(); // For the initial note
 
+  @override
   bool get wantKeepAlive => true;
 
   @override
   void initState() {
     super.initState();
+    debugPrint("CustomerHome: initState - ENTERED"); // New log
     _loadDriverMarkerIcon();
     // _initializePickupLocation(); // We will call a new setup method later
     _setupFocusListeners();
     _sheetController.addListener(_onSheetChanged);
     _loadSearchHistory(); 
     _fetchSchedulingLimits();
-    _fetchFareConfig(); // Ensure this is called
+    debugPrint("CustomerHome: initState - Calling _fetchFareConfig()..."); // New log
+    _fetchFareConfig(); 
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _setupInitialLocationAndMap(); // Call the new setup method here
@@ -146,22 +149,42 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
   }
 
   Future<void> _fetchFareConfig() async {
-    debugPrint("CustomerHome: _fetchFareConfig called");
+    debugPrint("CustomerHome: _fetchFareConfig - ENTERED function.");
     try {
+      debugPrint("CustomerHome: _fetchFareConfig - Attempting to fetch 'appConfiguration/fareSettings' document...");
       final doc = await FirebaseFirestore.instance
           .collection('appConfiguration')
           .doc('fareSettings')
           .get();
-      if (doc.exists && doc.data() != null) {
-        if (mounted) setState(() => _fareConfig = doc.data());
-        debugPrint("CustomerHome: Fare config loaded: $_fareConfig");
-        _calculateEstimatedFare(); // Calculate fare once config is loaded
-      } else {
-        debugPrint("CustomerHome: Fare config document does not exist.");
+
+      if (!mounted) {
+        debugPrint("CustomerHome: _fetchFareConfig - Widget unmounted after fetch. Aborting setState.");
+        return;
       }
-    } catch (e) {
-      debugPrint("Error fetching fare config: $e. Using defaults for now.");
+
+      if (doc.exists && doc.data() != null) {
+        final newFareConfig = doc.data();
+        debugPrint("CustomerHome: _fetchFareConfig - Fare config loaded successfully: $newFareConfig");
+        setState(() => _fareConfig = newFareConfig);
+        // After loading config, check if route data is already available and calculate fare
+        if (_selectedRouteDistance != null && _selectedRouteDuration != null) {
+           debugPrint("CustomerHome: _fetchFareConfig - Route data already available after config load. Recalculating fare.");
+           _calculateEstimatedFare();
+        }
+      } else {
+        debugPrint("CustomerHome: _fetchFareConfig - 'fareSettings' document does not exist.");
+        setState(() => _fareConfig = null); 
+        _calculateEstimatedFare(); 
+      }
+    } catch (e, s) { // Added stack trace to the catch block
+      debugPrint("CustomerHome: _fetchFareConfig - ERROR fetching fare config: $e");
+      debugPrint("CustomerHome: _fetchFareConfig - StackTrace: $s");
+      if (mounted) {
+        setState(() => _fareConfig = null); 
+        // _calculateEstimatedFare(); // Not strictly needed here as _fareConfig is null
+      }
     }
+    debugPrint("CustomerHome: _fetchFareConfig - EXITED function.");
   }
 
   Future<void> _fetchSchedulingLimits() async {
@@ -185,15 +208,33 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
   }
   
   void _calculateEstimatedFare() {
-    debugPrint("CustomerHome: _calculateEstimatedFare called. FareConfig: $_fareConfig, Distance: $_selectedRouteDistance, Duration: $_selectedRouteDuration");
+    // debugPrint("CustomerHome: _calculateEstimatedFare called. FareConfig: $_fareConfig, Distance: $_selectedRouteDistance, Duration: $_selectedRouteDuration");
     if (!mounted || _fareConfig == null || _selectedRouteDistance == null || _selectedRouteDuration == null) {
-      if (mounted) setState(() => _estimatedFare = null);
-      debugPrint("CustomerHome: Conditions for fare calculation not met. Estimated fare set to null.");
+      final bool wasFareNull = _estimatedFare == null;
+      _estimatedFare = null;
+      debugPrint("CustomerHome: Conditions for fare calculation not met. "
+                 "Mounted: $mounted, FareConfig Null: ${_fareConfig == null} (Current Config: $_fareConfig), "
+                 "Distance Null: ${_selectedRouteDistance == null} (Value: $_selectedRouteDistance), "
+                 "Duration Null: ${_selectedRouteDuration == null} (Value: $_selectedRouteDuration). "
+                 "Estimated fare set to null.");
+      if (mounted && !wasFareNull) setState(() {}); // Update UI only if fare changed to null
       return;
     }
-
-    final distanceMatch = RegExp(r'([\d\.]+)').firstMatch(_selectedRouteDistance!);
-    final double distanceKm = double.tryParse(distanceMatch?.group(1) ?? '0') ?? 0;
+    
+    double distanceKm = 0;
+    if (_selectedRouteDistance != null) {
+      final valueMatch = RegExp(r'([\d\.]+)').firstMatch(_selectedRouteDistance!);
+      if (valueMatch != null) {
+        double numericValue = double.tryParse(valueMatch.group(1) ?? '0') ?? 0;
+        if (_selectedRouteDistance!.toLowerCase().contains("km")) {
+          distanceKm = numericValue;
+        } else if (_selectedRouteDistance!.toLowerCase().contains("m")) {
+          distanceKm = numericValue / 1000.0; // Convert meters to kilometers
+        } else {
+          distanceKm = numericValue; // Assume km if no unit, or handle error appropriately
+        }
+      }
+    }
     double durationMinutes = 0;
     final hourMatch = RegExp(r'(\d+)\s*hr').firstMatch(_selectedRouteDuration!);
     if (hourMatch != null) durationMinutes += (double.tryParse(hourMatch.group(1) ?? '0') ?? 0) * 60;
@@ -201,16 +242,22 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
     if (minMatch != null) durationMinutes += double.tryParse(minMatch.group(1) ?? '0') ?? 0;
     if (durationMinutes == 0 && _selectedRouteDuration!.contains("min")) {
         final simpleMinMatch = RegExp(r'([\d\.]+)').firstMatch(_selectedRouteDuration!);
-        durationMinutes = double.tryParse(simpleMinMatch?.group(1) ?? '0') ?? 0;
+        if (simpleMinMatch != null) {
+          durationMinutes = double.tryParse(simpleMinMatch.group(1) ?? '0') ?? 0;
+        }
     }
     final double baseFare = (_fareConfig!['startingFare'] as num?)?.toDouble() ?? 0.0;
     final double perKmRate = (_fareConfig!['farePerKilometer'] as num?)?.toDouble() ?? 0.0;
+    // Assuming farePerMinuteDriving is the correct key for per minute rate
     final double perMinRate = (_fareConfig!['farePerMinuteDriving'] as num?)?.toDouble() ?? 0.0;
     final double minFare = (_fareConfig!['minimumFare'] as num?)?.toDouble() ?? 0.0;    double calculatedFare = baseFare + (distanceKm * perKmRate) + (durationMinutes * perMinRate);
     calculatedFare = calculatedFare > minFare ? calculatedFare : minFare;    final double roundingInc = (_fareConfig!['roundingIncrement'] as num?)?.toDouble() ?? 0.0;
     if (roundingInc > 0) calculatedFare = (calculatedFare / roundingInc).ceil() * roundingInc;
-    if (mounted) setState(() => _estimatedFare = calculatedFare);
-    debugPrint("CustomerHome: Calculated estimated fare: $_estimatedFare");
+    if (_estimatedFare != calculatedFare) { // Only update state if fare actually changed
+      _estimatedFare = calculatedFare;
+      if (mounted) setState(() {});
+    }
+    debugPrint("CustomerHome: Parsed Distance for fare: ${distanceKm}km, Parsed Duration: ${durationMinutes}min. Calculated Fare: $_estimatedFare");
   }
 
   Future<void> _loadDriverMarkerIcon() async {
@@ -604,8 +651,8 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
       setState(() {
         _allFetchedRoutes = routes;
         _selectedRouteIndex = 0; // Default to the first route
-        _calculateEstimatedFare(); // Recalculate fare when routes change
         _updateDisplayedRoute();
+        // _calculateEstimatedFare(); // Moved to _updateDisplayedRoute
       });
 
       // Adjust camera to fit all points of the first (primary) route initially
@@ -616,19 +663,30 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
         );
       }
     } else {
-      // Handle no routes found or API error (MapUtils prints errors)
-setState(() {
-      _polylines.clear();
-      _selectedRouteDistance = _allFetchedRoutes[_selectedRouteIndex]['distance'] as String?;
-      _calculateEstimatedFare(); // Recalculate fare when route selection changes
-      _selectedRouteDuration = _allFetchedRoutes[_selectedRouteIndex]['duration'] as String?;      });
+      // Handle no routes found or API error
+      if (mounted) {
+        setState(() {
+          _polylines.clear();
+          _selectedRouteDistance = null;
+          _selectedRouteDuration = null;
+          _estimatedFare = null; // Explicitly set fare to null
+        });
+      }
     }
   } catch (e) {
     debugPrint('Error in _drawRoute (CustomerHome): $e');
-  } finally {
     if (mounted) {
       setState(() {
-        // _isLoadingRoute = false;
+        _polylines.clear(); // Also clear polylines on error
+        _selectedRouteDistance = null;
+        _selectedRouteDuration = null;
+        _estimatedFare = null;
+        // Inform the user about the failure
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to get route details: $e. Please check your internet connection.')),
+          );
+        }
       });
     }
     _checkRouteReady();
@@ -701,7 +759,9 @@ void _updateDisplayedRoute() {
     }
     _selectedRouteDistance = _allFetchedRoutes[_selectedRouteIndex]['distance'] as String?;
     _selectedRouteDuration = _allFetchedRoutes[_selectedRouteIndex]['duration'] as String?;
+    debugPrint("CustomerHome: _updateDisplayedRoute - Selected Distance: $_selectedRouteDistance, Duration: $_selectedRouteDuration. Calling _calculateEstimatedFare.");
   });
+  _calculateEstimatedFare(); // Calculate fare after distance/duration are updated
 }
 
   Future<List<Map<String, dynamic>>> _getGooglePlacesSuggestions(String query) async {
@@ -1414,6 +1474,8 @@ void _updateDisplayedRoute() {
   Widget _buildLocationField({
     required Key key, // Add key
     required TextEditingController controller,
+    String? legDistance, // New parameter for leg-specific distance
+    String? legDuration, // New parameter for leg-specific duration
     required String labelText,
     required String hintText,
     required IconData iconData,
@@ -1426,11 +1488,17 @@ void _updateDisplayedRoute() {
     required VoidCallback onMapIconTap,
   }) {
     final theme = Theme.of(context);
+    List<String> labelParts = [labelText];
+    if (legDuration != null && legDistance != null && legDuration.isNotEmpty && legDistance.isNotEmpty) {
+      labelParts.add('($legDuration · $legDistance)');
+    }
+    final String displayLabel = labelParts.join(' ');
+
     return Column(
       key: key,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(labelText, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.primary.withOpacity(0.8))),
+        Text(displayLabel, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.primary.withOpacity(0.8))),
         verticalSpaceSmall,
         if (isEditing)
           TextField(
@@ -1637,7 +1705,7 @@ void _updateDisplayedRoute() {
     final bool showActionButtons = _pickupLocation != null && _dropOffLocation != null && !_isFindingDriver && _activeRideRequestId == null;
      // Revert to static sheet sizes
     const double initialSheetSize = 0.55;
-    const List<double> snapSizes = [0.35, 0.45, 0.55, 0.7, 0.9];
+    const List<double> snapSizes = [0.35, 0.45, 0.55, 0.7, 0.8, 0.9];
     const double minSheetSize = 0.2;
  
     return DraggableScrollableSheet(
@@ -1702,20 +1770,44 @@ void _updateDisplayedRoute() {
                           ),
                           
                           // Route Info (Distance and Duration)
-                          if (_selectedRouteDistance != null && _selectedRouteDuration != null)
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4), // Use spacing constants?
                             child: Row(
                               children: [
                                 Icon(Icons.access_time, size: 20, color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.7)),
                                 horizontalSpaceSmall,
-                                Text('$_selectedRouteDuration · $_selectedRouteDistance',
-                                  style: Theme.of(context).textTheme.bodyMedium, // Use theme text style
+                                Expanded( // Allow text to take available space
+                                  child: Text(
+                                    _selectedRouteDistance != null && _selectedRouteDuration != null
+                                        ? '$_selectedRouteDuration · $_selectedRouteDistance'
+                                        : 'Calculating route...', // Placeholder if distance/duration not ready
+                                    style: Theme.of(context).textTheme.bodyMedium,
+                                    overflow: TextOverflow.ellipsis, // Handle long text
+                                  ),
                                 ),
-                              ],
+                                horizontalSpaceSmall, // Space before fare
+                                // Fare display part
+                                Builder(builder: (context) {
+                                  final currentFare = _estimatedFare;
+                                  // This log will now always execute when this part of the sheet is built
+                                  debugPrint("CustomerHome: DraggableSheet Builder - RENDERING FARE. CurrentFare: $currentFare, Distance: $_selectedRouteDistance, Duration: $_selectedRouteDuration");
+                                  if (currentFare != null && _selectedRouteDistance != null && _selectedRouteDuration != null) {
+                                    return Text(
+                                      'Fare: TZS ${currentFare == currentFare.roundToDouble() ? currentFare.toStringAsFixed(0) : currentFare.toStringAsFixed(2)}',
+                                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold),
+                                    );
+                                  } else if (_selectedRouteDistance != null && _selectedRouteDuration != null) {
+                                      return Text(
+                                        'Fare: Calculating...',
+                                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontStyle: FontStyle.italic, color: Theme.of(context).hintColor),
+                                      );
+                                  }
+                                  return const SizedBox.shrink(); // If no distance/duration, don't show fare text yet
+                                }),
+                                ],
+                              ),
                             ),
-                          ),
-
+                          
                           // Pickup Field (conditionally shown)
                           // Show if pickup is not set (needs input) OR if action buttons are visible (for review/edit)
                           if (_pickupLocation == null || showActionButtons)
@@ -1743,7 +1835,6 @@ void _updateDisplayedRoute() {
                                 ],
                               ),
                             ),
-                          
                           if (_editingPickup) // Suggestions list for pickup
                             Padding(
                               padding: const EdgeInsets.symmetric(horizontal: 16), 
@@ -1768,13 +1859,43 @@ void _updateDisplayedRoute() {
                           // Destination Field
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                            child: Row( // Wrap in a Row to add the swap button
+                            child: Row(
                               children: [
                                 Expanded(
                                   child: _buildLocationField(
                                     key: const ValueKey('destination_field'),
                                     controller: _destinationController,
                                     labelText: 'Destination',
+                                    legDistance: () { // Calculate leg distance for destination
+                                      if (_allFetchedRoutes.isNotEmpty &&
+                                          _selectedRouteIndex < _allFetchedRoutes.length &&
+                                          _allFetchedRoutes[_selectedRouteIndex]['legs'] is List) {
+                                        final legs = _allFetchedRoutes[_selectedRouteIndex]['legs'] as List<dynamic>;
+                                        final destLegIndex = _stops.length; // The leg leading to destination
+                                        if (destLegIndex < legs.length && legs[destLegIndex] is Map<String, dynamic>) {
+                                          final legData = legs[destLegIndex] as Map<String, dynamic>;
+                                          if (legData['distance'] is Map<String, dynamic>) {
+                                            return (legData['distance'] as Map<String, dynamic>)['text'] as String?;
+                                          } // Removed the direct cast fallback as it was causing the error
+                                        }
+                                      }
+                                      return null;
+                                    }(),
+                                    legDuration: () { // Calculate leg duration for destination
+                                       if (_allFetchedRoutes.isNotEmpty &&
+                                          _selectedRouteIndex < _allFetchedRoutes.length &&
+                                          _allFetchedRoutes[_selectedRouteIndex]['legs'] is List) {
+                                        final legs = _allFetchedRoutes[_selectedRouteIndex]['legs'] as List<dynamic>;
+                                        final destLegIndex = _stops.length; // The leg leading to destination
+                                        if (destLegIndex < legs.length && legs[destLegIndex] is Map<String, dynamic>) {
+                                          final legData = legs[destLegIndex] as Map<String, dynamic>;
+                                          if (legData['duration'] is Map<String, dynamic>) {
+                                            return (legData['duration'] as Map<String, dynamic>)['text'] as String?;
+                                          }
+                                        }
+                                      }
+                                      return null;
+                                    }(),
                                     hintText: 'Where to?',
                                     iconData: Icons.flag_outlined,
                                     iconColor: Theme.of(context).colorScheme.error,
@@ -2124,6 +2245,25 @@ void _updateDisplayedRoute() {
   Widget _buildStopItem(int index, Stop stop) {
     final isEditing = _editingStopIndex == index;
     final theme = Theme.of(context); // Get theme
+    String? legDistanceText;
+    String? legDurationText;
+
+    // Safely access and parse leg data for this stop
+    if (_allFetchedRoutes.isNotEmpty &&
+        _selectedRouteIndex < _allFetchedRoutes.length &&
+        _allFetchedRoutes[_selectedRouteIndex]['legs'] is List) {
+      final legs = _allFetchedRoutes[_selectedRouteIndex]['legs'] as List<dynamic>;
+      // The leg at 'index' leads TO this stop 'index'.
+      if (index < legs.length && legs[index] is Map<String, dynamic>) {
+        final legData = legs[index] as Map<String, dynamic>;
+        if (legData['distance'] is Map<String, dynamic>) {
+          legDistanceText = (legData['distance'] as Map<String, dynamic>)['text'] as String?;
+        }
+        if (legData['duration'] is Map<String, dynamic>) {
+          legDurationText = (legData['duration'] as Map<String, dynamic>)['text'] as String?;
+        }
+      }
+    }
     
     return Padding( // Added Padding around the stop item
       key: ObjectKey(_stops[index]), // Key for the Padding, helps with list updates
@@ -2148,6 +2288,8 @@ void _updateDisplayedRoute() {
                     key: ValueKey('stop_field_$index'), // Key for the location field itself
                     controller: stop.controller,
                     labelText: 'Stop ${index + 1}',
+                    legDistance: legDistanceText, // Pass calculated leg distance
+                    legDuration: legDurationText, // Pass calculated leg duration
                     hintText: 'Add stop location',
                     iconData: Icons.location_on_outlined, // Or a numbered icon
                     iconColor: theme.primaryColor.withOpacity(0.7),

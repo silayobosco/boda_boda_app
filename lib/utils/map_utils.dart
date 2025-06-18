@@ -84,9 +84,28 @@ class MapUtils {
             for (int i = 0; i < routesData.length; i++) {
               final route = routesData[i];
               final routePoints = decodePolyline(route['overview_polyline']['points'] as String);
-              // Assuming single leg for simplicity, common for direct origin-destination.
-              // If multiple legs (due to waypoints), this might need adjustment.
-              final leg = route['legs'][0]; 
+              
+              // Extract all legs for this route alternative
+              final List<dynamic> legsData = route['legs'] as List<dynamic>;
+              //final leg = legsData.isNotEmpty ? legsData[0] : null; // Still get the first leg for overall summary
+
+              num totalDistanceValue = 0; // in meters
+              num totalDurationValue = 0; // in seconds
+
+              for (var legItem in legsData) {
+                if (legItem is Map<String, dynamic>) {
+                  if (legItem['distance'] is Map<String, dynamic> && legItem['distance']['value'] is num) {
+                    totalDistanceValue += legItem['distance']['value'] as num;
+                  }
+                  if (legItem['duration'] is Map<String, dynamic> && legItem['duration']['value'] is num) {
+                    totalDurationValue += legItem['duration']['value'] as num;
+                  }
+                }
+              }
+
+              // Format total distance and duration
+              final String formattedTotalDistance = _formatDistance(totalDistanceValue.toDouble());
+              final String formattedTotalDuration = _formatDuration(totalDurationValue.toInt());
 
               // Create a unique Polyline for this specific route alternative
               final Polyline polyline = Polyline(
@@ -98,24 +117,45 @@ class MapUtils {
               allRouteDetails.add({
                 'polyline': polyline, // Store the Polyline object itself
                 'points': routePoints, // Also store points for bounds calculation
-                'distance': leg['distance']['text'] as String?,
-                'duration': leg['duration']['text'] as String?,
+                'distance': formattedTotalDistance, // Use formatted total distance
+                'duration': formattedTotalDuration, // Use formatted total duration
                 'summary': route['summary'] as String? ?? '', // e.g., "US-101 S"
+                'legs': legsData, // Include the full legs array
               });
             }
             return allRouteDetails;
           }
-
-        } else {
-          debugPrint('Directions API error: ${data['status']} - ${data['error_message']}');
         }
-      } else {
-        debugPrint('Failed to load route, status: ${response.statusCode}');
       }
+      return null; // Return null if no routes or error
     } catch (e) {
-      debugPrint('Error fetching route details: $e');
+      debugPrint('Error getting route details from Google: $e');
+      return null;
     }
-    return null;
+  }
+
+  // Helper function to format distance (meters to km or m string)
+  static String _formatDistance(double distanceInMeters) {
+    if (distanceInMeters >= 1000) {
+      double distanceInKm = distanceInMeters / 1000;
+      return '${distanceInKm.toStringAsFixed(1)} km'; // e.g., "2.3 km"
+    } else {
+      return '${distanceInMeters.toStringAsFixed(0)} m'; // e.g., "500 m"
+    }
+  }
+
+  // Helper function to format duration (seconds to hr/min string)
+  static String _formatDuration(int durationInSeconds) {
+    final Duration duration = Duration(seconds: durationInSeconds);
+    String twoDigits(int n) => n.toString().padLeft(2, "0");
+    String twoDigitMinutes = twoDigits(duration.inMinutes.remainder(60));
+    // String twoDigitSeconds = twoDigits(duration.inSeconds.remainder(60)); // Usually not needed for display
+
+    if (duration.inHours > 0) {
+      return "${duration.inHours} hr $twoDigitMinutes min";
+    } else {
+      return "$twoDigitMinutes min";
+    } 
   }
 
   // Helper to find the index of the closest point in a list of LatLngs to a given point
