@@ -35,6 +35,7 @@ class _DriverHomeState extends State<DriverHome> with AutomaticKeepAliveClientMi
   gmf.BitmapDescriptor? _bodaIcon; // Define _carIcon
   ll.LatLng? _lastPosition; // Define _lastPosition using latlong2
   bool _isIconLoaded = false; // New 
+  double _dailyEarnings = 0.0; // New field for daily earnings
   
     // Route drawing state
   final Set<gmf.Polyline> _activeRoutePolylines = {};
@@ -49,6 +50,7 @@ class _DriverHomeState extends State<DriverHome> with AutomaticKeepAliveClientMi
   String? _proposedRideDistance;
   String? _proposedRideDuration;
   String? _driverToPickupDistance;
+  List<Map<String, dynamic>>? _proposedRouteLegsData; // To store legs of the proposed route
   String? _driverToPickupDuration;
   String? _mainRideDistance;
   String? _mainRideDuration;
@@ -60,7 +62,22 @@ class _DriverHomeState extends State<DriverHome> with AutomaticKeepAliveClientMi
   DateTime? _rideTrackingStartTime;
   ll.LatLng? _rideTrackingLastLocation;
   double _trackedDistanceKm = 0.0;
-  int _trackedDrivingDurationSeconds = 0;
+  int _trackedDrivingDurationSeconds = 0; 
+  // Helper to get leg details
+  String? getLegInfo(int legIndex) {
+    // debugPrint("getLegInfo called for index: $legIndex. _proposedRouteLegsData has ${_proposedRouteLegsData?.length ?? 0} items.");
+    if (_proposedRouteLegsData != null && legIndex >= 0 && legIndex < _proposedRouteLegsData!.length) {
+      final leg = _proposedRouteLegsData![legIndex];
+      final distance = leg['distance']?['text'] as String?;
+      final duration = leg['duration']?['text'] as String?;
+      // debugPrint("getLegInfo($legIndex): distance=$distance, duration=$duration");
+      if (distance != null && duration != null) {
+        return '$duration · $distance';
+      }
+    }
+    // debugPrint("getLegInfo($legIndex): No data found.");
+    return null;
+  }
 
     // Define the listener method
   void _locationProviderListener() {
@@ -83,6 +100,7 @@ void initState() {
     _initializeDriverStateAndLocation();
   });
   // Add listener for LocationProvider
+  debugPrint("DriverHome: initState - Adding LocationProvider listener.");
   final locationProvider = Provider.of<LocationProvider>(context, listen: false);
   locationProvider.addListener(_locationProviderListener);
 
@@ -119,7 +137,7 @@ void _onDriverProviderChange() {
      // Add this debug print
     debugPrint("DriverHome: Condition met for new pending ride. NewRideID: $newRideId, isLoadingRoute: $_isLoadingRoute, currentProposedID: $_currentlyDisplayedProposedRideId, polylinesEmpty: ${_activeRoutePolylines.isEmpty}");
 
-    // Only initiate if not already loading a route AND the new ride ID is different from the one currently being proposed (or if no route is proposed)
+    // Only initiate if not already loading a route AND the new ride ID is different from the one currently being proposed (or if no route is proposed) AND the sheet is not already showing an active ride
     if (!_isLoadingRoute && (newRideId != _currentlyDisplayedProposedRideId || _activeRoutePolylines.isEmpty)) {
       debugPrint("DriverHome: Initiating full proposed route for sheet for ride ID: $newRideId.");
       _initiateFullProposedRideRouteForSheet(driverProvider.pendingRideRequestDetails!);
@@ -142,6 +160,7 @@ void _onDriverProviderChange() {
         // Also clear distance/duration for proposed route
         _proposedRideDistance = null;
         _proposedRideDuration = null;
+        _proposedRouteLegsData = null; // Clear legs data
       });
     }
   } else {
@@ -180,8 +199,11 @@ void _onDriverProviderChange() {
     if (closestPointIndex == -1 || closestPointIndex >= basePathPoints.length) return;
 
     List<gmf.LatLng> remainingPath = [driverCurrentLocation, ...basePathPoints.sublist(closestPointIndex)];
+    // You might want to log the closest point index and segment length here for debugging.
+    //debugPrint("Dynamic Polyline Update - Closest Point Index: $closestPointIndex, Segment Length: ${remainingPath.length}");
 
-    if (mounted) setState(() {
+    if (mounted) {
+      setState(() {
       _activeRoutePolylines.clear(); // Clear previous dynamic polyline
       _activeRoutePolylines.add(gmf.Polyline(
         polylineId: gmf.PolylineId('dynamic_route_$polylineIdSuffix'),
@@ -190,6 +212,7 @@ void _onDriverProviderChange() {
         width: 6,
       ));
     });
+    }
   }
 
   Future<void> _loadCustomMarker() async {
@@ -216,6 +239,7 @@ void _onDriverProviderChange() {
     if (locationProvider.currentLocation != null && _mapController != null) {
       _centerMapOnDriver();
     }
+    _fetchDriverStats(); // Fetch stats after loading driver data
   }
 
   @override
@@ -297,6 +321,7 @@ void _onDriverProviderChange() {
   final driverProvider = Provider.of<DriverProvider>(context);
   
   return AnimatedSwitcher(
+    key: ValueKey('online-status-switcher'), // Add a key for AnimatedSwitcher
     duration: Duration(milliseconds: 300),
     transitionBuilder: (child, animation) {
       return ScaleTransition(scale: animation, child: child);
@@ -307,11 +332,17 @@ void _onDriverProviderChange() {
   );
 }
 
-  Widget _buildOnlineCardWithToggle(DriverProvider driverProvider) {
+  Future<void> _fetchDriverStats() async {
+    final firestoreService = FirestoreService();
+    final userId = AuthService().currentUser?.uid; // Use AuthService to get current user ID
+    if (userId != null) {
+      _dailyEarnings = await firestoreService.getDriverDailyEarnings(userId);
+    }
+  }  Widget _buildOnlineCardWithToggle(DriverProvider driverProvider) {
   final theme = Theme.of(context); // Define theme here
   return SizedBox(
     width: 117, // Square width
-    height: 124, // Square height
+    height: 128, // Square height
     child: Card(
     key: ValueKey('online-card'),
     shape: RoundedRectangleBorder(
@@ -341,14 +372,14 @@ void _onDriverProviderChange() {
               Padding( // Add padding to ensure it doesn't overlap with the button
                 padding: const EdgeInsets.only(bottom: 4.0), // Adjust as needed
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.center, // Center text in column
                   children: [
-                    Text('⭐ 4.9', 
+                    Text('⭐ ${(driverProvider.driverProfileData?['averageRating'] as num?)?.toStringAsFixed(1) ?? 'N/A'}', // Display actual rating
                       style: theme.textTheme.bodyMedium?.copyWith(
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    SizedBox(height: 4),
+                    verticalSpaceSmall, // Use spacing constant
                     Text('\$125.50 today', 
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.hintColor,
@@ -445,6 +476,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
                 ),
               // Drag handle
               Container(
+                key: ValueKey('active-ride-handle'), // Add key
                 width: 40,
                 height: 4,
                 margin: EdgeInsets.symmetric(vertical: 8),
@@ -454,6 +486,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
               // Ride info
               ListTile(
                 leading: CircleAvatar(
+                  key: ValueKey('active-ride-customer-avatar'), // Add key
                   // TODO: Use customer profile image if available in _currentRide
                   backgroundColor: theme.colorScheme.primaryContainer, // Fallback color
                   child: Icon(Icons.person, color: theme.colorScheme.onPrimaryContainer), // Fallback icon
@@ -466,6 +499,13 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
                 ),
                 // subtitle: Text('Status: ${_currentRide?['status'] ?? 'Unknown'}', style: theme.textTheme.bodySmall), // Status is shown in Chip below
               ),
+              // Display Estimated Fare (if available and status is before start)
+              if (_activeRideDetails?.fare == null && (_activeRideDetails?.status == 'accepted' || _activeRideDetails?.status == 'goingToPickup' || _activeRideDetails?.status == 'arrivedAtPickup'))
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
+                  child: Text('Estimated Fare: TZS ${_activeRideDetails?.estimatedFare?.toStringAsFixed(0) ?? 'N/A'}', // Display estimated fare from model
+                      style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold, color: theme.colorScheme.primary)),
+                ),
 
               // Chat with Customer Button
               if (_activeRideDetails?.customerId != null && (_activeRideDetails?.status == 'accepted' || _activeRideDetails?.status == 'goingToPickup' || _activeRideDetails?.status == 'arrivedAtPickup' || _activeRideDetails?.status == 'onRide')) ...[
@@ -486,7 +526,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
               // Display Customer Note if available
               if (_activeRideDetails?.customerNoteToDriver != null && _activeRideDetails!.customerNoteToDriver!.isNotEmpty)
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0), // Use spacing constants?
                 child: Text("Note: ${_activeRideDetails!.customerNoteToDriver}", style: theme.textTheme.bodyMedium?.copyWith(fontStyle: FontStyle.italic, color: theme.colorScheme.secondary)),
               ),
 
@@ -497,7 +537,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
                   padding: const EdgeInsets.symmetric(vertical: 8.0),
                   child: Text(
                     _activeRideDetails?.status == 'accepted'
-                        ? 'To Pickup: $_driverToPickupDuration · $_driverToPickupDistance'
+                        ? 'To Pickup: ${_driverToPickupDuration ?? '...'} · ${_driverToPickupDistance ?? '...'}' // Add null checks
                         : 'Ride: $_mainRideDuration · $_mainRideDistance',
                     style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.secondary),
                   ),
@@ -511,24 +551,28 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
               // Ride progress
               Padding(
                 padding: EdgeInsets.symmetric(horizontal: 16),
-                child: Column(
+                child: Column( // Use Column
                   children: [
                     _buildRideStep(
-                        Icons.pin_drop,
-                        'Pickup: $pickupAddress ${(_driverToPickupDuration != null && isGoingToPickup) ? "($_driverToPickupDuration)" : ""}',
+                        Icons.pin_drop, // Using getLegInfo(0) for consistency
+                        'Pickup: $pickupAddress ${(isGoingToPickup && getLegInfo(0) != null) ? "(${getLegInfo(0)})" : ""}',
                         pickupStepCompleted
                     ),
-                                        // Stops Steps
+                    // Stops Steps
                     if (stops.isNotEmpty)
                       ...stops.asMap().entries.map((entry) {
                         final index = entry.key;
                         final stop = entry.value;
                         final stopAddress = stop['addressName'] as String? ?? 'Stop ${index + 1}'; // Cast for 'addressName' might still be needed depending on how 'stops' is populated upstream
-                        // TODO: Calculate distance/duration to this stop if needed
-                        return _buildRideStep(Icons.location_on, 'Stop ${index + 1}: $stopAddress', mainRideStarted); // Stops are "completed" when main ride starts
+                        // Leg 0 is Driver -> Pickup
+                        // Leg 1 is Pickup -> Stop 1 (index 0 of stops list)
+                        // So, leg for stops[index] is _proposedRouteLegsData[index + 1]
+                        final String? legInfoToStop = getLegInfo(index + 1);
+                        final String stopText = 'Stop ${index + 1}: $stopAddress ${(legInfoToStop != null) ? "($legInfoToStop)" : ""}';
+                        return _buildRideStep(Icons.location_on, stopText, mainRideStarted);
                       }).toList(),
                     // Destination Step
-                    _buildRideStep(Icons.flag, 'Destination: $dropoffAddress', false), // Destination is "completed" when sheet is gone
+                    _buildRideStep(Icons.flag, 'Destination: $dropoffAddress ${(getLegInfo((_proposedRouteLegsData?.length ?? 0) - 1) != null) ? "(${getLegInfo((_proposedRouteLegsData?.length ?? 0) - 1)})" : ""}', false),
                   ],
                 ),
               ),
@@ -536,7 +580,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
               // Action buttons
               Padding(
                 padding: EdgeInsets.all(16),
-                child: Row(
+                child: Row( // Use Row
                   children: [
                     if (isGoingToPickup)
                       Expanded(
@@ -603,8 +647,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
              ),
             ],
           ),
-        ),
-        // Removed the closing parenthesis for the SingleChildScrollView here
+        ), // Removed the closing parenthesis for the SingleChildScrollView here
         );
       },
     );
@@ -623,11 +666,9 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
   }
 
   Widget _buildRideRequestSheet(Map<String, dynamic> rideData) {
-    final theme = Theme.of(context);
     final String rideRequestId = rideData['rideRequestId'] as String? ?? 'N/A'; // Corrected key
-    final String customerId = rideData['customerId'] as String? ?? 'N/A';
-    final dynamic pickupLatRaw = rideData['pickupLat']; // Extract before acceptRide clears it from provider
-    final dynamic pickupLngRaw = rideData['pickupLng']; // Extract before acceptRide clears it from provider
+    final String customerId = rideData['customerId'] as String? ?? 'N/A'; // Corrected key
+    final String? displayEstimatedFareText = rideData['estimatedFare'] as String?;
 
     List<Map<String, dynamic>> stopsToDisplay = [];
     final dynamic stopsDataFromFCM = rideData['stops'];
@@ -645,6 +686,10 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
       }
     }
 
+    final theme = Theme.of(context); // Moved theme here as it's used throughout
+
+    final String toPickupLegInfo = getLegInfo(0) ?? 'Calculating...'; // Leg 0: Driver to Customer Pickup
+
      return Positioned(
       bottom: 0, // Align to bottom
       left: 0,
@@ -657,13 +702,15 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
         ),
         color: theme.colorScheme.surface,
         child: Padding(
+          key: ValueKey('ride-request-sheet-padding'), // Add key
           padding: EdgeInsets.all(16),
           child: Column(
             children: [
               ListTile(
                 leading: CircleAvatar(
                   backgroundColor: theme.colorScheme.primaryContainer,
-                  child: Icon(Icons.person, color: theme.colorScheme.onPrimaryContainer),
+                  key: ValueKey('ride-request-customer-avatar'),
+                  child: Icon(Icons.person, color: theme.colorScheme.onPrimaryContainer), // Add key
                 ),
                 title: Text(
                     rideData['customerName'] != null && rideData['customerName'].isNotEmpty
@@ -679,49 +726,81 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
                   child: Text("Note: ${rideData['customerNoteToDriver']}",
-                      style: theme.textTheme.bodyMedium?.copyWith(fontStyle: FontStyle.italic, color: theme.colorScheme.secondary)),
+                      style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: theme.colorScheme.primary)),
                 ),
 
-              // Display Pickup Address Name
+              // Estimated Fare
+              if (displayEstimatedFareText != null && displayEstimatedFareText.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                  child: Text('Estimated Fare: TZS ${double.tryParse(displayEstimatedFareText)?.toStringAsFixed(0) ?? displayEstimatedFareText}',
+                      style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: theme.colorScheme.primary)),
+                ),
+
+              // To Pickup Leg Info - Displaying the toPickupLegInfo
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
+                child: Text('To Pickup: $toPickupLegInfo', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.secondary)),
+              ),
+              const Divider(indent: 16, endIndent: 16, height: 20),
+              
+              // Pickup Location
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
                 child: Row(
-                  children: [
-                    Icon(Icons.location_on, color: successColor, size: 20),
+                  children: [ // Use Row
+                    Icon(Icons.my_location, color: successColor, size: 20),
                     horizontalSpaceSmall,
                     Expanded(
-                      child: Text('Pickup: ${rideData['pickupAddressName'] ?? 'Pickup Location'}', style: theme.textTheme.bodyMedium),
+                      child: Text('Pickup: ${rideData['pickupAddressName'] ?? 'Customer Pickup'}', style: theme.textTheme.bodyMedium),
                     ),
                   ],
                 ),
               ),
+
               // Display Stops (if any)
               if (stopsToDisplay.isNotEmpty)
-                ...stopsToDisplay.map((stopMap) {
+                ...stopsToDisplay.asMap().entries.map((entry) {
+                  final index = entry.key;
+                  final stopMap = entry.value;
                   final stopAddress = stopMap['addressName'] as String? ?? (stopMap['name'] as String? ?? 'Stop');
+                  // Leg to this stop:
+                  // Leg 0 is Driver -> Pickup
+                  // Leg 1 is Pickup -> Stop 1 (index 0 of stopsToDisplay)
+                  // So, leg for stopsToDisplay[index] is _proposedRouteLegsData[index + 1]
+                  final String? legInfoToStop = getLegInfo(index + 1);
+
                   return Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
                     child: Row(
                       children: [
-                        Icon(Icons.location_on, color: successColor, size: 20),
+                        Icon(Icons.location_on, color: theme.colorScheme.secondary, size: 20),
                         horizontalSpaceSmall,
                         Expanded(
-                          child: Text(stopAddress, style: theme.textTheme.bodyMedium),
+                          child: Text('Stop ${index + 1}: $stopAddress', style: theme.textTheme.bodyMedium),
                         ),
+                        if (legInfoToStop != null)
+                          Text('($legInfoToStop)', style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor)),
                       ],
                     ),
                   );
                 }).toList(),
 
-              // Display route to pickup information if available
-              if (_proposedRideDistance != null && _proposedRideDuration != null)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8.0), // Use verticalSpaceSmall
-                  child: Text(
-                    'Proposed Route: $_proposedRideDuration · $_proposedRideDistance',
-                    style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.secondary),
-                  ),
+              // Destination
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
+                child: Row(
+                  children: [
+                    Icon(Icons.flag, color: theme.colorScheme.error, size: 20),
+                    horizontalSpaceSmall,
+                    Expanded(
+                      child: Text('Destination: ${rideData['dropoffAddressName'] ?? 'Final Destination'}', style: theme.textTheme.bodyMedium),
+                    ),
+                    if (_proposedRouteLegsData != null && _proposedRouteLegsData!.isNotEmpty)
+                      Text('(${getLegInfo(_proposedRouteLegsData!.length - 1) ?? ""})', style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor)),
+                  ],
                 ),
+              ),
               // Show loading indicator if the proposed route is being fetched for the sheet
               if (_isLoadingRoute && _activeRoutePolylines.isEmpty) // Show loading if route is being fetched for the sheet
                 Padding(padding: const EdgeInsets.all(8.0), child: Center(child: CircularProgressIndicator())),
@@ -729,7 +808,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
               Row(
                 children: [
                   Expanded(
-                    child: OutlinedButton(
+                    child: OutlinedButton( // Use OutlinedButton
                       child: Text('Decline', style: TextStyle(color: theme.colorScheme.error)),
                       onPressed: () => _declineRide(rideRequestId, customerId),
                     ),
@@ -737,8 +816,9 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
                   SizedBox(width: 16),
                   Expanded(
                     child: ElevatedButton(
-                      child: Text('Accept', style: TextStyle(color: theme.colorScheme.onPrimary)),
-                      onPressed: () => _acceptRide(rideRequestId, customerId, pickupLatRaw, pickupLngRaw, _pendingRideCustomerName),
+                      // Extract pickupLat and pickupLng from rideData for the accept action
+                      onPressed: () => _acceptRide(rideRequestId, customerId, rideData['pickupLat'], rideData['pickupLng'], _pendingRideCustomerName),
+                      child: Text('Accept', style: TextStyle(color: theme.colorScheme.onPrimary)), // Use ElevatedButton
                     ),
                   ),
                 ],
@@ -790,21 +870,25 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
   }
 
   void _toggleOnlineStatus() async {
-    final driverProvider = Provider.of<DriverProvider>(context, listen: false);
+    final driverProvider = Provider.of<DriverProvider>(context, listen: false); // This is fine, it's at the start
+    final currentContext = context; // Capture context
+    final scaffoldMessenger = ScaffoldMessenger.of(currentContext); // Capture ScaffoldMessengerState
+    final bool isMounted = mounted; // Capture mounted state
+
 
     // Store the current online status before toggling to determine success message
     final bool wasOnline = driverProvider.isOnline;
     final String? errorMessage = await driverProvider.toggleOnlineStatus();
 
     if (errorMessage != null) {
-      if (!mounted) return; // Check if widget is still in the tree BEFORE showing SnackBar
-      ScaffoldMessenger.of(context).showSnackBar(
+      if (!isMounted) return; // Use captured mounted state
+      scaffoldMessenger.showSnackBar(
         SnackBar(content: Text(errorMessage)),
       );
     } else {
       // Success, UI already updated by provider's notifyListeners
-      if (!mounted) return; // Check if widget is still in the tree BEFORE showing SnackBar
-      ScaffoldMessenger.of(context).showSnackBar(
+      if (!isMounted) return; // Use captured mounted state
+      scaffoldMessenger.showSnackBar(
         SnackBar(content: Text(wasOnline ? 'You are now offline.' : 'You are now online.')),
       );
     }
@@ -883,7 +967,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
   Future<void> _initiateFullProposedRideRouteForSheet(Map<String, dynamic> rideData) async {
     final String? newRideRequestId = rideData['rideRequestId'] as String?; // Corrected key
 
-    if (newRideRequestId == null) {
+    if (newRideRequestId == null || !mounted) { // Added !mounted check
       debugPrint("DriverHome: Proposed ride has no ID. Cannot fetch/display route.");
       return;
     }
@@ -897,7 +981,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
     // Check if the same proposed ride's route and markers are already displayed
     if (newRideRequestId == _currentlyDisplayedProposedRideId && _activeRoutePolylines.isNotEmpty && _rideSpecificMarkers.any((m) => m.markerId.value.startsWith('proposed_'))) {
       // debugPrint("DriverHome: Proposed route already displayed for $newRideRequestId. Skipping fetch.");
-      // If already displayed, ensure map is zoomed correctly to the full view
+      // If already displayed, ensure map is zoomed correctly to the full view // No longer needed, handled by initial fetch
       debugPrint("DriverHome: _initiateFullProposedRideRouteForSheet - Proposed route already displayed for ID: $newRideRequestId. Skipping fetch.");
       return;
     }
@@ -966,21 +1050,13 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
     }
     final gmf.LatLng driverCurrentLocation = gmf.LatLng(locationProvider.currentLocation!.latitude, locationProvider.currentLocation!.longitude); // This is correct
 
-    // Fetch customer name
-    final customerId = rideData['customerId'] as String?;
-    if (customerId != null) {
-      // ... (customer name fetching logic remains the same as in your current _initiateRouteToPickupForSheet)
-      // Ensure customer name is fetched if not already available or if ride ID changed
-      if (_pendingRideCustomerName == null || newRideRequestId != _currentlyDisplayedProposedRideId) {
-        try {
-          DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('users').doc(customerId).get();
-          if (mounted && userDoc.exists) {
-            final userData = userDoc.data() as Map<String, dynamic>?; // Explicit cast
-            setState(() {
-              _pendingRideCustomerName = userData?['name'] as String? ?? 'Customer';
-            });
-          }
-        } catch (e) { debugPrint("Error fetching customer name for sheet: $e"); }
+    // Use customerName directly from rideData if available
+    final String? customerNameFromRideData = rideData['customerName'] as String?;
+    if (customerNameFromRideData != null && customerNameFromRideData.isNotEmpty) {
+      if (mounted && (_pendingRideCustomerName != customerNameFromRideData || newRideRequestId != _currentlyDisplayedProposedRideId)) {
+        setState(() {
+          _pendingRideCustomerName = customerNameFromRideData;
+        });
       }
     }
 
@@ -988,11 +1064,29 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
     await _fetchAndDisplayRoute(
         origin: driverCurrentLocation, // Origin is now driver's current location
         destination: rideDropoffLocation, // Destination is customer's final drop-off
-        waypoints: waypointsForApi.length > 1 ? waypointsForApi.sublist(1) : null, // Waypoints are stops, pickup is origin
-        polylineColor: Colors.deepPurpleAccent,
-        onRouteFetched: (distance, duration, points) {
+        waypoints: waypointsForApi.isNotEmpty ? waypointsForApi : null, // Corrected: All intermediate points are waypoints
+        onRouteFetched: (distance, duration, points, legs) { // Added legs parameter
           if (!mounted) return; // Guard setState in callback
           if (mounted && points != null && points.isNotEmpty) {
+            _proposedRouteLegsData = legs; // Store the legs data
+            if (legs != null) {
+              if (legs.isNotEmpty) {
+                final leg0 = legs[0]; // Driver to Pickup
+                _driverToPickupDistance = leg0['distance']?['text'] as String?;
+                _driverToPickupDuration = leg0['duration']?['text'] as String?;
+              }
+              // Calculate main ride distance/duration by summing legs from index 1 onwards
+              if (legs.length > 1) {
+                double mainRideTotalDistanceMeters = 0;
+                double mainRideTotalDurationSeconds = 0;
+                for (int i = 1; i < legs.length; i++) {
+                  mainRideTotalDistanceMeters += (legs[i]['distance']?['value'] as num?) ?? 0;
+                  mainRideTotalDurationSeconds += (legs[i]['duration']?['value'] as num?) ?? 0;
+                }
+                _mainRideDistance = "${(mainRideTotalDistanceMeters / 1000).toStringAsFixed(1)} km";
+                _mainRideDuration = "${(mainRideTotalDurationSeconds / 60).round()} min";
+              }
+            }
             if (mounted) {
               setState(() {
               // These now represent the ENTIRE journey from driver to customer's final destination
@@ -1111,23 +1205,26 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
   Future<void> _fetchAndDisplayMainRideRoute(gmf.LatLng ridePickup, gmf.LatLng rideDropoff, List<gmf.LatLng> stops) async {
     if (!mounted) return;
 
-    // Use the pre-calculated segment points
-    if (mounted && _fullProposedRoutePoints.isNotEmpty) {
-      if (mounted) {
+    // Fetch the route specifically from customer pickup to destination to get the correct legs.
+    await _fetchAndDisplayRoute(
+      origin: ridePickup,
+      destination: rideDropoff,
+      waypoints: stops.isNotEmpty ? stops : null,
+      onRouteFetched: (distance, duration, points, legs) {
+        if (!mounted) return;
         setState(() {
-        _activeRoutePolylines.clear();
-        _activeRoutePolylines.add(gmf.Polyline(polylineId: const gmf.PolylineId('main_ride_active'), points: _fullProposedRoutePoints, color: Colors.greenAccent, width: 6));
-        // Distance and duration for this segment are not re-fetched here.
-        // They could be calculated manually or parsed from the initial full route response if available.
-      });
-      }
-      _zoomToMainRideSegment(ridePickup, rideDropoff, stops);
-      _updateDynamicPolylineForProgress(ridePickup); // Start dynamic polyline from pickup
-    } else {
-      debugPrint("DriverHome: _fullProposedRoutePoints is empty. Cannot display main ride route.");
-      // Fallback: Maybe zoom to pickup, destination, and stops without polyline?
-      _zoomToMainRideSegment(ridePickup, rideDropoff, stops);
-    }
+          _proposedRouteLegsData = legs; // Update legs data for the customer's journey
+          _mainRideDistance = distance;
+          _mainRideDuration = duration;
+          _activeRoutePolylines.clear();
+          if (points != null && points.isNotEmpty) {
+            _activeRoutePolylines.add(gmf.Polyline(polylineId: const gmf.PolylineId('main_ride_active'), points: points, color: Colors.greenAccent, width: 6));
+          }
+        });
+        _zoomToMainRideSegment(ridePickup, rideDropoff, stops);
+        _updateDynamicPolylineForProgress(ridePickup); // Start dynamic polyline from pickup
+      },
+    );
 
     // Add markers for main ride (pickup, destination, stops)
     if (mounted) {
@@ -1164,14 +1261,13 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
     required gmf.LatLng origin,
     required gmf.LatLng destination,
     List<gmf.LatLng>? waypoints,
-    required Color polylineColor,
-    required Function(String? distance, String? duration, List<gmf.LatLng>? points) onRouteFetched,
+    required Function(String? distance, String? duration, List<gmf.LatLng>? points, List<Map<String, dynamic>>? legs) onRouteFetched,
   }) async {
     if (origin.latitude == destination.latitude && origin.longitude == destination.longitude && (waypoints == null || waypoints.isEmpty)) {
       debugPrint("DriverHome: Origin and Destination are the same, and no waypoints. Skipping route draw.");
       if (mounted) setState(() => _isLoadingRoute = false);
       if (!mounted) return; // Check before calling callback
-      onRouteFetched(null, null, null); // Call with nulls as no route is drawn
+      onRouteFetched(null, null, null, null); // Call with nulls as no route is drawn
       return;
     }
 
@@ -1182,6 +1278,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
       // _activeRoutePolylines.clear(); // Let the caller manage clearing polylines
       // _rideSpecificMarkers are managed by the calling functions like _initiateFullProposedRideRouteForSheet, _fetchAndDisplayRouteToPickup, etc.
       // Clear all specific route details before fetching a new one
+      _proposedRouteLegsData = null; // Clear previous legs data
       _proposedRideDistance = null; _proposedRideDuration = null;
       _driverToPickupDistance = null; _driverToPickupDuration = null;
       _mainRideDistance = null; _mainRideDuration = null;
@@ -1191,10 +1288,18 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
     try {
       final List<Map<String, dynamic>>? routeDetailsList = await MapUtils.getRouteDetails(
         origin: origin,
-        destination: destination,
+        destination: destination, // This is correct
         waypoints: waypoints,
         apiKey: _googlePlacesApiKey,
       );
+
+      // Add this debug log to inspect the structure of routeDetailsList
+      // debugPrint("DriverHome: _fetchAndDisplayRoute - Raw routeDetailsList from MapUtils: ${jsonEncode(routeDetailsList)}");
+      // if (routeDetailsList != null && routeDetailsList.isNotEmpty) {
+      //   debugPrint("DriverHome: _fetchAndDisplayRoute - First route's legs type: ${routeDetailsList.first['legs'].runtimeType}");
+      //   debugPrint("DriverHome: _fetchAndDisplayRoute - First route's legs content: ${jsonEncode(routeDetailsList.first['legs'])}");
+      // }
+
 
       if (!mounted) return;
       if (routeDetailsList != null && routeDetailsList.isNotEmpty) {
@@ -1204,19 +1309,22 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
         onRouteFetched(
           primaryRouteDetails['distance'] as String?,
           primaryRouteDetails['duration'] as String?,
-          primaryRouteDetails['points'] as List<gmf.LatLng>?,
+          primaryRouteDetails['points'] as List<gmf.LatLng>?, // Assuming 'points' is List<gmf.LatLng>
+          (primaryRouteDetails['legs'] as List<dynamic>?)
+              ?.map((leg) => leg as Map<String, dynamic>)
+              .toList() // Safely cast each leg
         );
         // No need to check mounted again here as onRouteFetched should handle it
       } else {
         // No route details found
         // isLoadingRoute will be set to false in the finally block.
         if (!mounted) return;
-        onRouteFetched(null, null, null);
+        onRouteFetched(null, null, null, null); // Call with nulls as no route is drawn
       }
     } catch (e) {
       debugPrint('Error in _fetchAndDisplayRoute: $e'); // This is correct
       if (!mounted) return; // Check before calling callback
-      onRouteFetched(null, null, null);
+      onRouteFetched(null, null, null, null); // Call with nulls as no route is drawn
     } finally {
       if (mounted) {
         setState(() { _isLoadingRoute = false; });
@@ -1251,6 +1359,9 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
    void _acceptRide(String rideId, String customerId, dynamic pickupLatRaw, dynamic pickupLngRaw, String? customerName) async {
     final driverProvider = Provider.of<DriverProvider>(context, listen: false);
     debugPrint("DriverHome: _acceptRide called for ride ID: $rideId");
+    final currentContext = context; // Capture context
+    final scaffoldMessenger = ScaffoldMessenger.of(currentContext); // Capture ScaffoldMessengerState
+    final bool isMounted = mounted; // Capture mounted state
     try {
       final pendingDetails = driverProvider.pendingRideRequestDetails;
       final String? pickupAddressName = pendingDetails?['pickupAddressName'] as String?;
@@ -1258,11 +1369,11 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
       final dynamic dropoffLatRaw = pendingDetails?['dropoffLat'];
       final dynamic dropoffLngRaw = pendingDetails?['dropoffLng'];
 
-      await driverProvider.acceptRideRequest(context, rideId, customerId);
+      await driverProvider.acceptRideRequest(currentContext, rideId, customerId);
 
-      if (!mounted) return;
+      if (!isMounted) return;
       debugPrint("DriverHome: _acceptRide - Ride accepted in provider. Updating local state.");
-      if (mounted) {
+      if (isMounted) {
         setState(() {
         // Create a basic RideRequestModel instance.
         // The full details will come from the Firestore stream.
@@ -1289,21 +1400,20 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
       // After setting state, call _fetchAndDisplayRouteToPickup which will handle zoom and initial dynamic polyline
       if (pickupLatRaw != null && pickupLngRaw != null) {
         final gmf.LatLng customerPickupLoc = gmf.LatLng(double.parse(pickupLatRaw.toString()), double.parse(pickupLngRaw.toString()));
-        await _fetchAndDisplayRouteToPickup(context, customerPickupLoc);
-        if (!mounted) return; // Check after await
+        await _fetchAndDisplayRouteToPickup(currentContext, customerPickupLoc);
+        if (!isMounted) return; // Check after await
       }
       debugPrint("DriverHome: _acceptRide - UI state updated, snackbar shown.");
       // Ensure context is still valid before showing SnackBar
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Ride accepted successfully')),
+      if (isMounted) {
+        scaffoldMessenger.showSnackBar(
+        const SnackBar(content: Text('Ride accepted successfully')), // Use captured scaffoldMessenger
       );
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-
-          SnackBar(content: Text('Failed to accept ride: ${e.toString()}')),
+      if (isMounted) {
+        scaffoldMessenger.showSnackBar(
+          SnackBar(content: Text('Failed to accept ride: ${e.toString()}')), // Use captured variables
         );
       }
     }
@@ -1361,16 +1471,21 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
   void _declineRide(String rideId, String customerId) async {
     final driverProvider = Provider.of<DriverProvider>(context, listen: false);
     debugPrint("DriverHome: _declineRide called for ride ID: $rideId");
+    final currentContext = context; // Capture context
+    final scaffoldMessenger = ScaffoldMessenger.of(currentContext); // Capture ScaffoldMessengerState
+    final bool isMounted = mounted; // Capture mounted state
     try {
-      await driverProvider.declineRideRequest(context, rideId, customerId);
-      if (!mounted) return;
+      await driverProvider.declineRideRequest(currentContext, rideId, customerId);
+      if (!isMounted) return;
       debugPrint("DriverHome: _declineRide - Ride declined in provider. Clearing local proposed ride state."); // This is correct
-      setState(() {
+      if (isMounted) {
+        setState(() {
         _proposedRideDistance = null; _proposedRideDuration = null; // This is correct
         _pendingRideCustomerName = null; // Clear customer name for sheet
       });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+      }
+      if (isMounted) {
+        scaffoldMessenger.showSnackBar(
         SnackBar(content: Text('Ride declined')),
       );
       }
@@ -1430,39 +1545,44 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
     final details = _getCurrentRideDetails();
     final rideId = details['rideId'];
     final customerId = details['customerId'];
+    final currentContext = context; // Capture context
+    final scaffoldMessenger = ScaffoldMessenger.of(currentContext); // Capture ScaffoldMessengerState
+    final bool isMounted = mounted; // Capture mounted state
 
     if (rideId == null || customerId == null) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error: Ride details missing for arrival confirmation.')));
+      if (isMounted) scaffoldMessenger.showSnackBar(const SnackBar(content: Text('Error: Ride details missing for arrival confirmation.')));
       return;
     }
     debugPrint("DriverHome: _confirmArrival called for ride ID: $rideId");
 
-    final driverProvider = Provider.of<DriverProvider>(context, listen: false);
-    try { // This is correct
-      if (!mounted) return;
-      await driverProvider.confirmArrival(context, rideId, customerId);
+    final driverProvider = Provider.of<DriverProvider>(currentContext, listen: false);
+    try {
+      if (!isMounted) return;
+      await driverProvider.confirmArrival(currentContext, rideId, customerId);
+      if (isMounted) {
       setState(() {
-        // _activeRideDetails will be updated by the stream listener
-        //_activeRoutePolylines.clear(); // Clear route to pickup
-        _rideSpecificMarkers.clear(); // Clear pickup marker for "to pickup" route
-        _driverToPickupDistance = null; _driverToPickupDuration = null; // Clear "to pickup" route info
+      // _activeRideDetails will be updated by the stream listener
+      //_activeRoutePolylines.clear(); // Clear route to pickup
+      _rideSpecificMarkers.clear(); // Clear pickup marker for "to pickup" route
+      _driverToPickupDistance = null; _driverToPickupDuration = null; // Clear "to pickup" route info
       });
 
       // The stream listener for _activeRideDetails will update its status.
       // We can then react to the 'arrivedAtPickup' status to draw the main ride route.
       // This logic might be better placed within the stream listener's setState block.
       if (_activeRideDetails?.status == 'arrivedAtPickup') {
-        final gmf.LatLng? pickup = _activeRideDetails?.pickup;
-        final gmf.LatLng? dropoff = _activeRideDetails?.dropoff;
-        final List<gmf.LatLng> stops = _activeRideDetails?.stops.map((s) => s['location'] as gmf.LatLng).toList() ?? [];
-        if (pickup != null && dropoff != null) {
-          await _fetchAndDisplayMainRideRoute(pickup, dropoff, stops);
-          _zoomToMainRideSegment(pickup, dropoff, stops);
-        }
+      final gmf.LatLng? pickup = _activeRideDetails?.pickup;
+      final gmf.LatLng? dropoff = _activeRideDetails?.dropoff;
+      final List<gmf.LatLng> stops = _activeRideDetails?.stops.map((s) => s['location'] as gmf.LatLng).toList() ?? [];
+      if (pickup != null && dropoff != null) {
+        await _fetchAndDisplayMainRideRoute(pickup, dropoff, stops);
+        _zoomToMainRideSegment(pickup, dropoff, stops);
       }
+      }
+    }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to confirm arrival: ${e.toString()}')));
+      if (isMounted) {
+      scaffoldMessenger.showSnackBar(SnackBar(content: Text('Failed to confirm arrival: ${e.toString()}')));
       }
     }
   }
@@ -1471,64 +1591,80 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
     final details = _getCurrentRideDetails();
     final rideId = details['rideId'];
     final customerId = details['customerId'];
+    final currentContext = context; // Capture context
+    final scaffoldMessenger = ScaffoldMessenger.of(currentContext); // Capture ScaffoldMessengerState
+    final bool isMounted = mounted; // Capture mounted state
 
     if (rideId == null || customerId == null) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error: Ride details missing for starting ride.')));
+      if (isMounted) scaffoldMessenger.showSnackBar(const SnackBar(content: Text('Error: Ride details missing for starting ride.')));
       return;
     }
     debugPrint("DriverHome: _startRide called for ride ID: $rideId");
-    final driverProvider = Provider.of<DriverProvider>(context, listen: false);
+    final driverProvider = Provider.of<DriverProvider>(currentContext, listen: false);
     try {
-      if (!mounted) return;
-      await driverProvider.startRide(context, rideId, customerId);
-      if (mounted) {
+      if (!isMounted) return;
+      await driverProvider.startRide(currentContext, rideId, customerId);
+      if (isMounted) {
         setState(() {
         // _activeRideDetails will be updated by the stream listener
       });
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to start ride: ${e.toString()}')));
-      }
+      if (isMounted) {
+        scaffoldMessenger.showSnackBar(SnackBar(content: Text('Failed to start ride: ${e.toString()}')));      }
     }
   }
 
   void _completeRide(BuildContext context, String rideId) async {
     final customerId = _activeRideDetails?.customerId;
     if (customerId == null) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error: Customer ID not found for this ride.')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error: Customer ID not found for this ride.'))); // This one is fine, it's a guard
       return;
     }
     debugPrint("DriverHome: _completeRide called for ride ID: $rideId");
-    final driverProvider = Provider.of<DriverProvider>(context, listen: false);
+    final currentContext = context; // Capture context
+    final scaffoldMessenger = ScaffoldMessenger.of(currentContext); // Capture ScaffoldMessengerState
+    final bool isMounted = mounted; // Capture mounted state
+
+    final driverProvider = Provider.of<DriverProvider>(currentContext, listen: false);
     try {
-      if (!mounted) {
+      if (!isMounted) {
         debugPrint("DriverHome: _completeRide - Widget not mounted, cannot proceed.");
         return;
       }
+      debugPrint("COMPLETING RIDE: Passing actuals - Distance: $_trackedDistanceKm km, Duration: ${_trackedDrivingDurationSeconds / 60.0} min");
       // Pass the tracked data to the provider
-      await driverProvider.completeRide(context, rideId, customerId);
+      await driverProvider.completeRide(
+        currentContext,
+        rideId, 
+        customerId,
+        actualDistanceKm: _trackedDistanceKm, // Pass tracked distance
+        actualDrivingDurationMinutes: _trackedDrivingDurationSeconds > 0 ? _trackedDrivingDurationSeconds / 60.0 : null, // Pass tracked duration in minutes, or null if not tracked
+        // actualTotalWaitingTimeMinutes: _your_waiting_time_variable_if_any, // If you track waiting time
+      );
       // UI update handled by stream listener or _resetActiveRideState.
       // We'll call _resetActiveRideState after attempting to show the dialog.
 
-      if (!mounted) return;
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ride completed successfully')));
+      if (!isMounted) return;
+      if (isMounted) scaffoldMessenger.showSnackBar(const SnackBar(content: Text('Ride completed successfully')));
 
+      // Capture details for the dialog BEFORE resetting state
       // Schedule the dialog and state reset to occur after the current frame
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
-          _showRateCustomerDialog(rideId, customerId);
+          _showRateCustomerDialog(rideId, customerId); // Don't pass the model, dialog will stream it
           _resetActiveRideState(); // Reset state after dialog is queued or shown
         }
       });
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to complete ride: ${e.toString()}')));
+      if (isMounted) {
+        scaffoldMessenger.showSnackBar(SnackBar(content: Text('Failed to complete ride: ${e.toString()}')));
       }
     }
   }
 
   void _resetActiveRideState() {
+    debugPrint("DriverHome: _resetActiveRideState - ENTERED.  Current _activeRideDetails = ${_activeRideDetails?.id}, Clear provider pending= ${Provider.of<DriverProvider>(context, listen: false).pendingRideRequestDetails}");
     if (mounted) {
       debugPrint("DriverHome: _resetActiveRideState called.");
       if (mounted) {
@@ -1538,6 +1674,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
       });
       // Explicitly clear pending ride from provider when resetting active state
       Provider.of<DriverProvider>(context, listen: false).clearPendingRide();
+      debugPrint("DriverHome: _resetActiveRideState - Resetting states and cleared provider pending.");
       }
     }
   }
@@ -1545,6 +1682,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
 
 
     Future<void> _showRateCustomerDialog(String rideId, String customerId) async {
+    // This method is fine as is
     double ratingValue = 0; // Renamed to avoid conflict with widget
     final theme = Theme.of(context);
     TextEditingController commentController = TextEditingController();
@@ -1561,6 +1699,23 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
                 child: ListBody(
                   children: <Widget>[
                     Text('How was your experience with the customer?', style: theme.textTheme.bodyMedium),
+                    // Display Final Fare here using a StreamBuilder
+                    StreamBuilder<DocumentSnapshot>(
+                      stream: FirebaseFirestore.instance.collection('rideRequests').doc(rideId).snapshots(),
+                      builder: (context, snapshot) {
+                        if (snapshot.hasData && snapshot.data!.exists) {
+                          final rideData = snapshot.data!.data() as Map<String, dynamic>?;
+                          final fare = rideData?['fare'] as num?;
+                          if (fare != null) {
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 8.0),
+                              child: Text('Final Fare: TZS ${fare.toStringAsFixed(0)}', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: theme.colorScheme.primary)),
+                            );
+                          }
+                        }
+                        return const SizedBox.shrink(); // Show nothing while loading or if no fare
+                      },
+                    ),
                     SizedBox(height: 20),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -1627,6 +1782,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
 
 
   Future<void> _showCancelRideConfirmationDialog() async {
+    // This method is fine as is
     final theme = Theme.of(context);
     return showDialog<void>(
       context: context,
@@ -1657,24 +1813,30 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
     final rideId = details['rideId'];
     final customerId = details['customerId'];
 
+    final currentContext = context; // Capture context
+    final scaffoldMessenger = ScaffoldMessenger.of(currentContext); // Capture ScaffoldMessengerState
+    final bool isMounted = mounted; // Capture mounted state
+
+
     if (rideId == null || customerId == null) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error: Ride details missing for cancellation.')));
+      if (isMounted) scaffoldMessenger.showSnackBar(const SnackBar(content: Text('Error: Ride details missing for cancellation.')));
       return;
     }
     debugPrint("DriverHome: _cancelRide called for ride ID: $rideId");
-    final driverProvider = Provider.of<DriverProvider>(context, listen: false);
+    final driverProvider = Provider.of<DriverProvider>(currentContext, listen: false);
     try {
-      if (!mounted) return;
-      await driverProvider.cancelRide(context, rideId, customerId);
+      if (!isMounted) return;
+      await driverProvider.cancelRide(currentContext, rideId, customerId);
       _resetActiveRideState(); // UI update handled by stream listener or this reset
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to cancel ride: ${e.toString()}')));
+      if (isMounted) {
+        scaffoldMessenger.showSnackBar(SnackBar(content: Text('Failed to cancel ride: ${e.toString()}')));
       }
     }
   }
 
   Widget _buildIdleOnlineDriverView(BuildContext context, DriverProvider driverProvider) {
+    // This method is fine as is
     final theme = Theme.of(context);
     final firestoreService = FirestoreService(); // Assuming you have a way to access this
     final authService = AuthService(); // To get current driver's ID
@@ -1752,6 +1914,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
   }
 
   Widget _buildStatItem(ThemeData theme, IconData icon, String label, String value) {
+    // This method is fine as is
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -1765,4 +1928,5 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
 
 
   }
+  
   
