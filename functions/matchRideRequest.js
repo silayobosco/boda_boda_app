@@ -181,13 +181,67 @@ exports.matchRideRequest = onDocumentCreated("/rideRequests/{rideRequestId}", as
   await snap.ref.update(denormalizedCustomerData);
   // --- End Denormalization ---
 
+  // --- Calculate Estimated Fare (for driver notification) ---
+  let estimatedFare = 0;
+  let fareConfig;
+  try {
+    const fareConfigDoc = await admin.firestore().collection("appConfiguration").doc("fareSettings").get();
+    if (!fareConfigDoc.exists) {
+      logger.error("Fare configuration not found in Firestore for estimated fare calculation!");
+      // Fallback to default values
+      fareConfig = { minimumFare: 1250, startingFare: 300, farePerKilometer: 350, farePerMinuteDriving: 60, farePerMinuteWaiting: 60, commissionRate: 0.20, roundingIncrement: 500, currency: "TZS" };
+    } else {
+      fareConfig = fareConfigDoc.data();
+    }
+  } catch (error) {
+    logger.error("Error fetching fare configuration for estimated fare:", error);
+    // Fallback to default values
+    fareConfig = { minimumFare: 1250, startingFare: 300, farePerKilometer: 350, farePerMinuteDriving: 60, farePerMinuteWaiting: 60, commissionRate: 0.20, roundingIncrement: 500, currency: "TZS" };
+  }
+
+  const estimatedDistanceKm = rideRequestData.estimatedDistanceKm || 0;
+  const estimatedDurationMinutes = rideRequestData.estimatedDurationMinutes || 0;
+
+  const baseFare = fareConfig.startingFare || 0;
+  const perKmRate = fareConfig.farePerKilometer || 0;
+  const perMinRate = fareConfig.farePerMinuteDriving || 0; // Use driving rate for estimation
+  const minFare = fareConfig.minimumFare || 0;
+  const roundingInc = fareConfig.roundingIncrement || 0;
+
+  let calculatedEstimatedFare = baseFare + (estimatedDistanceKm * perKmRate) + (estimatedDurationMinutes * perMinRate);
+  calculatedEstimatedFare = Math.max(calculatedEstimatedFare, minFare);
+
+  // Apply rounding (same logic as customer app)
+  if (roundingInc > 0) {
+    const base = Math.floor(calculatedEstimatedFare / roundingInc) * roundingInc;
+    const diff = calculatedEstimatedFare - base;
+    if (diff === 0) {
+      estimatedFare = calculatedEstimatedFare;
+    } else if (diff <= roundingInc / 2 && roundingInc / 2 > 0) {
+      estimatedFare = base + (roundingInc / 2);
+    } else {
+      estimatedFare = base + roundingInc;
+    }
+  } else {
+    estimatedFare = calculatedEstimatedFare;
+  }
+  // --- End of function's own estimated fare calculation ---
+
+  // Determine the fare to send in the notification
+  // Prioritize customer's calculation if available and valid, otherwise use the function's calculation.
+  let fareToSendToDriverInNotification;
+  if (rideRequestData.customerCalculatedEstimatedFare != null && typeof rideRequestData.customerCalculatedEstimatedFare === "number") {
+    fareToSendToDriverInNotification = rideRequestData.customerCalculatedEstimatedFare.toFixed(2);
+  } else {
+    fareToSendToDriverInNotification = estimatedFare.toFixed(2); // 'estimatedFare' is the functionCalculatedEstimatedFare
+  }
+  // --- End Estimated Fare Calculation ---
   // Ensure pickup location is present
   if (!rideRequestData.pickup || !rideRequestData.pickup.latitude || !rideRequestData.pickup.longitude) {
     logger.error("Ride request is missing pickup GeoPoint:", rideRequestId, rideRequestData);
     await snap.ref.update({ status: "matching_error_missing_pickup" });
     return;
   }
-
   const pickupGeoPoint = rideRequestData.pickup;
   const MAX_SEARCH_KIJIWES = 7;
   const kijiwesWithDistance = [];
@@ -283,7 +337,8 @@ exports.matchRideRequest = onDocumentCreated("/rideRequests/{rideRequestId}", as
               pickupLng: rideRequestData.pickup.longitude.toString(),
               dropoffLat: rideRequestData.dropoff.latitude.toString(),
               dropoffLng: rideRequestData.dropoff.longitude.toString(),
-              customerNoteToDriver: rideRequestData.customerNoteToDriver || "", // Include note
+              customerNoteToDriver: rideRequestData.customerNoteToDriver || "",
+              estimatedFare: fareToSendToDriverInNotification, // Send the determined estimated fare
             };
 
             // Handle stops: stringify the array of stops or critical parts of it
@@ -549,32 +604,58 @@ exports.handleDriverRideAction = onCall(async (request) => {
           actualTotalWaitingTimeMinutes: requestedActualTotalWaitingTimeMinutes,
         } = request.data;
 
+        logger.log(`[completeRide - ${rideRequestId}] Received actuals from client:`, {
+          requestedActualDistanceKm,
+          requestedActualDrivingDurationMinutes,
+          requestedActualTotalWaitingTimeMinutes,
+        });
+        logger.log(`[completeRide - ${rideRequestId}] Ride data from Firestore:`, rideData);
+
         // --- FARE CALCULATION ---
-        // These would ideally come from the driver's app or be calculated based on tracked data
-        // Use actual data from the request if available, otherwise fall back to estimated or defaults
-        const actualDistanceKm = requestedActualDistanceKm ?? rideData.estimatedDistanceKm ?? 1.0; // Default to 1.0 km if not provided
-        const actualDrivingDurationMinutes = requestedActualDrivingDurationMinutes ?? rideData.estimatedDurationMinutes ?? 1; // Default to 1 minute if not provided
-        const actualTotalWaitingTimeMinutes = requestedActualTotalWaitingTimeMinutes ?? rideData.estimatedWaitingMinutes ?? 1; // Default to 1 minute if not provided
+        let fareBeforeCommission;
+        let subtotal; // Declare subtotal here
 
-        const distanceFare = actualDistanceKm * fareConfig.farePerKilometer;
-        const drivingTimeFare = actualDrivingDurationMinutes * fareConfig.farePerMinuteDriving; // eslint-disable-line max-len
-        const waitingTimeFare = actualTotalWaitingTimeMinutes * fareConfig.farePerMinuteWaiting;
+        if (requestedActualDistanceKm != null && requestedActualDrivingDurationMinutes != null) {
+          // Case 1: Actuals provided by driver app - Calculate fare based on actuals
+          logger.log(`[completeRide - ${rideRequestId}] Using actuals from client:`, { requestedActualDistanceKm, requestedActualDrivingDurationMinutes });
+          const actualDistanceKm = requestedActualDistanceKm;
+          const actualDrivingDurationMinutes = requestedActualDrivingDurationMinutes;
+          const actualTotalWaitingTimeMinutes = requestedActualTotalWaitingTimeMinutes ?? 0;
+          const distanceFare = actualDistanceKm * fareConfig.farePerKilometer;
+          const drivingTimeFare = actualDrivingDurationMinutes * fareConfig.farePerMinuteDriving;
+          const waitingTimeFare = actualTotalWaitingTimeMinutes * fareConfig.farePerMinuteWaiting;
+          subtotal = fareConfig.startingFare + distanceFare + drivingTimeFare + waitingTimeFare; // Assign to outer scope subtotal
+          fareBeforeCommission = Math.max(subtotal, fareConfig.minimumFare);
+          logger.log(`[completeRide - ${rideRequestId}] Fare calculated from actuals. Subtotal: ${subtotal}, FareBeforeCommission: ${fareBeforeCommission}`);
+        } else if (rideData.customerCalculatedEstimatedFare != null && typeof rideData.customerCalculatedEstimatedFare === "number") {
+          // Case 2: No actuals, but customer's estimated fare is available - Use it directly
+          fareBeforeCommission = rideData.customerCalculatedEstimatedFare;
+          subtotal = fareBeforeCommission; // For logging consistency, assign fareBeforeCommission to subtotal
+          logger.log(`[completeRide - ${rideRequestId}] No actuals from client. Using customerCalculatedEstimatedFare: ${fareBeforeCommission}`);
+        } else {
+          // Case 3: No actuals, no customer estimate - Fallback to function's calculation based on stored estimates (which might be 0)
+          const estimatedDistanceKm = rideData.estimatedDistanceKm || 0; // Default to 0 if null/undefined
+          const estimatedDurationMinutes = rideData.estimatedDurationMinutes || 0; // Default to 0
+          logger.log(`[completeRide - ${rideRequestId}] No actuals or customer estimate. Using stored estimates:`, { estimatedDistanceKm, estimatedDurationMinutes });
 
-        const subtotal = fareConfig.startingFare + distanceFare + drivingTimeFare + waitingTimeFare;
-        const fareBeforeCommission = Math.max(subtotal, fareConfig.minimumFare);
+          const distanceFare = estimatedDistanceKm * fareConfig.farePerKilometer;
+          const drivingTimeFare = estimatedDurationMinutes * fareConfig.farePerMinuteDriving;
+          // Assuming no waiting time for this fallback estimate
+          subtotal = fareConfig.startingFare + distanceFare + drivingTimeFare; // Assign to outer scope subtotal
+          fareBeforeCommission = Math.max(subtotal, fareConfig.minimumFare);
+          logger.log(`[completeRide - ${rideRequestId}] Fare calculated from stored estimates. Subtotal: ${subtotal}, FareBeforeCommission: ${fareBeforeCommission}`);
+        }
 
+        logger.log(`[completeRide - ${rideRequestId}] Fare config used:`, fareConfig);
         const commissionAmount = fareBeforeCommission * fareConfig.commissionRate;
-        // const driverEarnings = fareBeforeCommission - commissionAmount; // Marked as unused, consider storing or removing
-        logger.log(`Calculated driverEarnings: ${fareBeforeCommission - commissionAmount}`); // Log if not storing
-
         const driverEarnings = fareBeforeCommission - commissionAmount; // Declare driverEarnings
+
         // Rounding logic for final customer fare
         let finalCustomerFare;
         const roundingInc = fareConfig.roundingIncrement; // e.g., 500
         if (roundingInc > 0) {
           const base = Math.floor(fareBeforeCommission / roundingInc) * roundingInc;
           const diff = fareBeforeCommission - base;
-
           if (diff === 0) {
             finalCustomerFare = fareBeforeCommission;
           } else if (diff <= roundingInc / 2 && roundingInc / 2 > 0) { // e.g., if diff <= 250 for roundingIncrement 500
@@ -582,20 +663,29 @@ exports.handleDriverRideAction = onCall(async (request) => {
           } else {
             finalCustomerFare = base + roundingInc;
           }
-        } else { // No rounding if increment is 0 or less
+        } else {
           finalCustomerFare = fareBeforeCommission;
         }
+        logger.log(
+            `[completeRide - ${rideRequestId}] Subtotal: ${subtotal}, ` +
+            `FareBeforeCommission: ${fareBeforeCommission}, ` +
+            `FinalCustomerFare: ${finalCustomerFare}, ` +
+            `Commission: ${commissionAmount}, ` +
+            `DriverEarnings: ${driverEarnings}`,
+        );
+
         // --- END FARE CALCULATION ---
 
         batch.update(rideRequestRef, {
+          fareConfigUsed: fareConfig, // Save the fare config used for this ride
           status: "completed",
           completedTime: admin.firestore.FieldValue.serverTimestamp(),
           fare: finalCustomerFare,
           commissionAmount: commissionAmount, // Storing commission amount
-          // Store the actual tracked data for record-keeping
-          actualDistanceKm: actualDistanceKm,
-          actualDrivingDurationMinutes: actualDrivingDurationMinutes,
-          actualTotalWaitingTimeMinutes: actualTotalWaitingTimeMinutes,
+          // Store the actual tracked data (or the estimates used if actuals were missing)
+          actualDistanceKm: requestedActualDistanceKm ?? rideData.estimatedDistanceKm ?? 0,
+          actualDrivingDurationMinutes: requestedActualDrivingDurationMinutes ?? rideData.estimatedDurationMinutes ?? 0,
+          actualTotalWaitingTimeMinutes: requestedActualTotalWaitingTimeMinutes ?? rideData.estimatedWaitingMinutes ?? 0,
           driverEarnings: driverEarnings, // storing driverEarnings if needed
         });
         batch.update(driverUserRef, {
@@ -623,7 +713,8 @@ exports.handleDriverRideAction = onCall(async (request) => {
         break;
       } // Closed block scope
 
-      case "cancelRideByDriver": { // Added block scope
+      case "cancelRideByDriver": {
+        // Added block scope
         if (rideData.driverId !== driverUid || ["accepted", "arrivedAtPickup"].indexOf(rideData.status) === -1) {
           throw new HttpsError("failed-precondition", "Ride cannot be cancelled by driver at this stage.");
         }
@@ -641,13 +732,19 @@ exports.handleDriverRideAction = onCall(async (request) => {
         }
         await batch.commit();
         logger.log(`[handleDriverRideAction - cancelRideByDriver] Firestore batch committed for ride ${rideRequestId}.`);
+
         if (customerId) {
           const driverNameForCancel = driverDoc.data().name || "The driver";
-          await sendFCMNotification(customerId, "Ride Cancelled", `Your ride has been cancelled by ${driverNameForCancel}.`, {
-            rideRequestId: rideRequestId,
-            status: "cancelled_by_driver",
-            click_action: "FLUTTER_NOTIFICATION_CLICK",
-          });
+          await sendFCMNotification(
+              customerId,
+              "Ride Cancelled",
+              `Your ride has been cancelled by ${driverNameForCancel}.`,
+              {
+                rideRequestId: rideRequestId,
+                status: "cancelled_by_driver",
+                click_action: "FLUTTER_NOTIFICATION_CLICK",
+              },
+          );
           logger.log(`[handleDriverRideAction - cancelRideByDriver] Sent FCM to customer ${customerId} for ride ${rideRequestId}.`);
         }
         break;
@@ -663,12 +760,12 @@ exports.handleDriverRideAction = onCall(async (request) => {
         batch.update(rideRequestRef, {
           driverRatingToCustomer: rating,
           driverCommentToCustomer: comment || null,
-        });
+        } );
         if (customerUserRef) {
           batch.update(customerUserRef, {
             "customerProfile.sumOfRatingsReceived": admin.firestore.FieldValue.increment(rating),
             "customerProfile.totalRatingsReceivedCount": admin.firestore.FieldValue.increment(1),
-          });
+          } );
         }
         // No direct FCM to customer needed for this action, but batch commit is important.
         await batch.commit();
