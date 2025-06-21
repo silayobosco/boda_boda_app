@@ -248,10 +248,15 @@ class _HomeScreenState extends State<HomeScreen> {
     debugPrint("HomeScreen: _updateDriverProviderFromFCM called with data: $data");
 
     // Check if the notification is a new ride offer for a driver
-    bool isNewRideOfferForDriver = data['status'] == 'pending_driver_acceptance' && data.containsKey('rideRequestId');
+    final String? status = data['status'] as String?;
+    final String? action = data['action'] as String?;
+    final String? rideRequestId = data['rideRequestId'] as String?;
+
+    bool isNewRideOfferForDriver = status == 'pending_driver_acceptance' && rideRequestId != null;
+    bool isClearPendingRideAction = action == 'clear_pending_ride' && rideRequestId != null;
 
     if (mounted &&
-        (isNewRideOfferForDriver || (_currentUserModel?.role == 'Driver')) && // Allow if new ride offer OR current role is Driver
+        (isNewRideOfferForDriver || isClearPendingRideAction || (_currentUserModel?.role == 'Driver')) && // Allow if new ride offer OR clear action OR current role is Driver
         data.isNotEmpty &&
         data.containsKey('rideRequestId')) {
       try {
@@ -259,7 +264,12 @@ class _HomeScreenState extends State<HomeScreen> {
         // Add this debug print
         debugPrint("HomeScreen: Calling driverProvider.setNewPendingRide with data: $data");
         driverProvider.setNewPendingRide(data);
-        debugPrint("HomeScreen: Passed ride data to DriverProvider from FCM.");
+        if (isClearPendingRideAction) {
+          driverProvider.clearPendingRide(); // Explicitly clear if the action is to clear
+          debugPrint("HomeScreen: Received clear_pending_ride action. DriverProvider pending ride cleared.");
+        } else {
+          debugPrint("HomeScreen: Passed ride data to DriverProvider from FCM.");
+        }
       } catch (e) {
         debugPrint("HomeScreen: Could not access DriverProvider or set pending ride from FCM: $e");
       }
