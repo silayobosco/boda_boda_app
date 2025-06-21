@@ -47,6 +47,9 @@ class RideRequestProvider extends ChangeNotifier {
     required LatLng dropoff,
     required String dropoffAddressName,
     String? customerNote, // Add customerNote parameter
+    String? estimatedDistanceText, // New parameter for estimated distance string
+    double? estimatedFare, // New parameter for estimated fare value
+    String? estimatedDurationText, // New parameter for estimated duration string
     required List<Map<String, dynamic>> stops, // Expecting {'name': String, 'location': latlong2.LatLng, 'addressName': String}
   }) async {
     final currentUser = authService.currentUser; // Use local authService instance
@@ -103,6 +106,33 @@ class RideRequestProvider extends ChangeNotifier {
       formattedCustomerDetails = detailsParts.join(', ');
     }
 
+    // Parse estimated distance and duration
+    double? estimatedDistanceKm;
+    if (estimatedDistanceText != null) {
+      final valueMatch = RegExp(r'([\d\.]+)').firstMatch(estimatedDistanceText);
+      if (valueMatch != null) {
+        double numericValue = double.tryParse(valueMatch.group(1) ?? '0') ?? 0;
+        if (estimatedDistanceText.toLowerCase().contains("km")) {
+          estimatedDistanceKm = numericValue;
+        } else if (estimatedDistanceText.toLowerCase().contains("m")) {
+          estimatedDistanceKm = numericValue / 1000.0;
+        } else {
+          estimatedDistanceKm = numericValue; // Assume km if no unit
+        }
+      }
+    }
+    double? estimatedDurationMinutes;
+    if (estimatedDurationText != null) {
+      final hourMatch = RegExp(r'(\d+)\s*hr').firstMatch(estimatedDurationText);
+      if (hourMatch != null) estimatedDurationMinutes = (double.tryParse(hourMatch.group(1) ?? '0') ?? 0) * 60;
+      final minMatch = RegExp(r'(\d+)\s*min').firstMatch(estimatedDurationText);
+      if (minMatch != null) estimatedDurationMinutes = (estimatedDurationMinutes ?? 0) + (double.tryParse(minMatch.group(1) ?? '0') ?? 0);
+      if (estimatedDurationMinutes == 0 && estimatedDurationText.contains("min")) { // Handle "X min" case
+        final simpleMinMatch = RegExp(r'([\d\.]+)').firstMatch(estimatedDurationText);
+        if (simpleMinMatch != null) estimatedDurationMinutes = double.tryParse(simpleMinMatch.group(1) ?? '0') ?? 0;
+      }
+    }
+
     // Construct the RideRequestModel with all necessary data.
     // The model's toJson() method will handle converting LatLng to GeoPoint for stops
     // and requestTime: null to FieldValue.serverTimestamp().
@@ -125,6 +155,10 @@ class RideRequestProvider extends ChangeNotifier {
       dropoffAddressName: dropoffAddressName,
       customerDetails: formattedCustomerDetails, // Include formatted details
       customerNoteToDriver: customerNote, // Store the note in the ride request document
+      estimatedDistanceKm: estimatedDistanceKm,
+      // estimatedFare: estimatedFare, // This field in model is for FCM estimate to driver
+      customerCalculatedEstimatedFare: estimatedFare, // Save customer's app calculated estimate
+      estimatedDurationMinutes: estimatedDurationMinutes,
     );
 
     // Create the request in Firestore
@@ -292,7 +326,7 @@ class RideRequestProvider extends ChangeNotifier {
     // final ratedUserRef = FirebaseFirestore.instance.collection('users').doc(ratedUserId); // REMOVE: Customer cannot update driver's profile directly
 
     Map<String, dynamic> rideUpdateData = {};
-    Map<String, dynamic> userProfileUpdate = {};
+    //Map<String, dynamic> userProfileUpdate = {};
 
     if (ratedUserRole == 'driver') { // Customer is rating the driver
       rideUpdateData['customerRatingToDriver'] = rating;
