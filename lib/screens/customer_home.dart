@@ -426,7 +426,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
   }
 
   void _collapseSheet() {
-    _sheetController.animateTo(0.20,
+    _sheetController.animateTo(0.23,
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeOut,
     );
@@ -467,17 +467,6 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
   Future<void> _saveSearchHistory() async {
   final prefs = await SharedPreferences.getInstance();
   await prefs.setStringList('search_history', _searchHistory);
-  }
-
-
-  Future<void> _initializePickupLocation() async {
-    final currentLocation = Provider.of<LocationProvider>(context, listen: false).currentLocation;
-    if (currentLocation != null) {
-      if (!mounted) return;
-      _pickupLocation = currentLocation;
-      _updateGooglePickupMarker(LatLng(currentLocation.latitude, currentLocation.longitude));
-      await _reverseGeocode(_pickupLocation!, _pickupController);
-    }
   }
 
   Future<void> _reverseGeocode(ll.LatLng location, TextEditingController controller) async {
@@ -1043,6 +1032,9 @@ void _updateDisplayedRoute() {
         pickup: _pickupLocation!, // _pickupLocation is already ll.LatLng (latlong2.LatLng)
         pickupAddressName: _pickupController.text,
         dropoff: _dropOffLocation!, // _dropOffLocation is already ll.LatLng (latlong2.LatLng)
+        estimatedDistanceText: _selectedRouteDistance, // Pass the selected route distance string
+        estimatedFare: _estimatedFare, // Pass the calculated estimated fare
+        estimatedDurationText: _selectedRouteDuration, // Pass the selected route duration string
         dropoffAddressName: _destinationController.text,
         customerNote: _customerNoteController.text.trim(), // Pass the note
         stops: _stops.map((s) => {
@@ -1993,11 +1985,11 @@ void _updateDisplayedRoute() {
                       Expanded(
                         flex: 3, // Confirm Route button larger
                         child: ElevatedButton(
-                          onPressed: _confirmRideRequest,
+                          onPressed: _estimatedFare != null ? _confirmRideRequest : null, // Disable if no fare
                           style: Theme.of(context).elevatedButtonTheme.style?.copyWith(
                                 minimumSize: MaterialStateProperty.all(const Size(double.infinity, 50)),
                               ),
-                          child: const Text('Confirm Route', style: TextStyle(color: Colors.white)),
+                          child: Text(_estimatedFare != null ? 'Confirm Route' : 'Calculating Fare...', style: const TextStyle(color: Colors.white)),
                         ),
                       ),
                     ],
