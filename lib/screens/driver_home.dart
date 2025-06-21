@@ -64,6 +64,9 @@ class _DriverHomeState extends State<DriverHome> with AutomaticKeepAliveClientMi
   final GlobalKey _rideRequestSheetKey = GlobalKey();
   double _rideRequestSheetHeight = 0.0;
 
+  Timer? _declineTimer;
+  int _countdownSeconds = 30; // Countdown duration in seconds
+
   // Ride Tracking Variables
   DateTime? _rideTrackingStartTime;
   ll.LatLng? _rideTrackingLastLocation;
@@ -128,6 +131,7 @@ void dispose() {
   final driverProvider = Provider.of<DriverProvider>(context, listen: false);
   driverProvider.removeListener(_onDriverProviderChange);
   _activeRideSubscription?.cancel();
+  _declineTimer?.cancel(); // Cancel timer on dispose
   super.dispose();
   debugPrint("DriverHome: dispose() completed.");
 }
@@ -159,6 +163,7 @@ void _onDriverProviderChange() {
     // Only initiate if not already loading a route AND the new ride ID is different from the one currently being proposed (or if no route is proposed) AND the sheet is not already showing an active ride
     if (!_isLoadingRoute && (newRideId != _currentlyDisplayedProposedRideId || _activeRoutePolylines.isEmpty)) {
       debugPrint("DriverHome: Initiating full proposed route for sheet for ride ID: $newRideId.");
+      _startDeclineTimer(); // Start the countdown timer
       _measureRideRequestSheet(); // Measure the sheet when it's about to be displayed
       _initiateFullProposedRideRouteForSheet(driverProvider.pendingRideRequestDetails!);
     } else {
@@ -170,6 +175,7 @@ void _onDriverProviderChange() {
     // Add this debug print
     debugPrint("DriverHome: No pending ride and no active ride. CurrentProposedID: $_currentlyDisplayedProposedRideId, polylinesEmpty: ${_activeRoutePolylines.isEmpty}");
     if (_currentlyDisplayedProposedRideId != null || _activeRoutePolylines.isNotEmpty || _rideSpecificMarkers.isNotEmpty) {
+      _cancelDeclineTimer(); // Cancel timer if request is cleared
       debugPrint("DriverHome: Clearing proposed route visuals.");
     }
     _rideRequestSheetHeight = 0.0; // Reset sheet height when no pending ride
@@ -191,6 +197,33 @@ void _onDriverProviderChange() {
   }
   // If pendingRideRequestDetails is null but _activeRideDetails is NOT null, we do nothing here,
   // as the active ride sheet (_buildActiveRideSheet) will be shown.
+}
+
+void _startDeclineTimer() {
+  _cancelDeclineTimer(); // Ensure no other timer is running
+  if (mounted) {
+    setState(() => _countdownSeconds = 30); // Reset countdown
+  }
+  _declineTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+    if (!mounted) {
+      timer.cancel();
+      return;
+    }
+    if (_countdownSeconds > 0) {
+      setState(() => _countdownSeconds--);
+    } else {
+      timer.cancel();
+      final rideData = Provider.of<DriverProvider>(context, listen: false).pendingRideRequestDetails;
+      if (rideData != null) {
+        debugPrint("Auto-declining ride due to timeout: ${rideData['rideRequestId']}");
+        _declineRide(rideData['rideRequestId'], rideData['customerId']);
+      }
+    }
+  });
+}
+
+void _cancelDeclineTimer() {
+  _declineTimer?.cancel();
 }
 
 void _measureRideRequestSheet() {
@@ -334,14 +367,20 @@ void _measureRideRequestSheet() {
           // Add this debug print inside the build method, right before the sheet conditions
           // Text("DEBUG: isOnline: ${driverProvider.isOnline}, activeRideDetails: ${_activeRideDetails?.id}, pendingRideDetails: ${driverProvider.pendingRideRequestDetails?['rideRequestId']}, currentKijiweId: ${driverProvider.currentKijiweId}", style: TextStyle(backgroundColor: Colors.white)),
           if (driverProvider.isOnline && _activeRideDetails == null && driverProvider.pendingRideRequestDetails == null && driverProvider.currentKijiweId != null)
-            _buildIdleOnlineDriverView(context, driverProvider),
+            Positioned(
+              bottom: 0, left: 0, right: 0,
+              child: _buildIdleOnlineDriverView(context, driverProvider),
+            ),
           if (_activeRideDetails != null) 
             _buildActiveRideSheet(), // Show if there's an active ride
           // This is the crucial condition for the accept/decline sheet
           if (driverProvider.isOnline &&
               driverProvider.pendingRideRequestDetails != null && // Data for the sheet exists
               _activeRideDetails == null) // And no other ride is active
-            _buildRideRequestSheet(driverProvider.pendingRideRequestDetails!),
+            Positioned(
+              bottom: 0, left: 0, right: 0,
+              child: _buildRideRequestSheet(driverProvider.pendingRideRequestDetails!),
+            ),
 
           // Custom Map Controls (Relocation and Zoom) - Placed last to be drawn on top
           Positioned(
@@ -763,11 +802,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
 
     final String toPickupLegInfo = getLegInfo(0) ?? 'Calculating...'; // Leg 0: Driver to Customer Pickup
 
-     return Positioned(
-      bottom: 0, // Align to bottom
-      left: 0,
-      right: 0,
-      child: Card(
+     return Card(
         key: _rideRequestSheetKey, // Assign the key to the Card
         elevation: 8,
         margin: EdgeInsets.zero, // Remove default card margin
@@ -803,6 +838,15 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
                       style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: theme.colorScheme.primary)),
                 ),
 
+              // Countdown Timer
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8.0),
+                child: Chip(
+                  avatar: Icon(Icons.timer, color: theme.colorScheme.onSecondaryContainer),
+                  label: Text('Auto-decline in $_countdownSeconds s', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSecondaryContainer)),
+                  backgroundColor: theme.colorScheme.secondaryContainer,
+                ),
+              ),
               // Main Ride Distance and Duration
               if (_mainRideDistance != null && _mainRideDuration != null)
                 Padding(
@@ -916,8 +960,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
             ],
           ),
         ),
-      ),
-    );
+      );
   }
   // Helper method to get current ride details safely
   Map<String, String?> _getCurrentRideDetails() {
@@ -1449,6 +1492,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
   }
    void _acceptRide(String rideId, String customerId, dynamic pickupLatRaw, dynamic pickupLngRaw, String? customerName) async {
     final driverProvider = Provider.of<DriverProvider>(context, listen: false);
+    _cancelDeclineTimer(); // Stop the auto-decline timer
     debugPrint("DriverHome: _acceptRide called for ride ID: $rideId");
     final currentContext = context; // Capture context
     final scaffoldMessenger = ScaffoldMessenger.of(currentContext); // Capture ScaffoldMessengerState
@@ -1566,6 +1610,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
 
   void _declineRide(String rideId, String customerId) async {
     final driverProvider = Provider.of<DriverProvider>(context, listen: false);
+    _cancelDeclineTimer(); // Stop the auto-decline timer
     debugPrint("DriverHome: _declineRide called for ride ID: $rideId");
     final currentContext = context; // Capture context
     final scaffoldMessenger = ScaffoldMessenger.of(currentContext); // Capture ScaffoldMessengerState
@@ -1761,6 +1806,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
   }
 
   void _resetActiveRideState() {
+    _cancelDeclineTimer(); // Ensure timer is cancelled when a ride ends
     debugPrint("DriverHome: _resetActiveRideState - ENTERED.  Current _activeRideDetails = ${_activeRideDetails?.id}, Clear provider pending= ${Provider.of<DriverProvider>(context, listen: false).pendingRideRequestDetails}");
     if (mounted) {
       _rideRequestSheetHeight = 0.0; // Reset sheet height
@@ -1946,11 +1992,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
     final completedRides = achievements?['completedRidesCount']?.toString() ?? '0';
     final averageRating = (achievements?['averageRating'] as num?)?.toStringAsFixed(1) ?? 'N/A';
 
-    return Positioned(
-      bottom: 0,
-      left: 0,
-      right: 0,
-      child: Card(
+    return Card(
         elevation: 8,
         margin: const EdgeInsets.all(8), // Add some margin
         shape: RoundedRectangleBorder(
@@ -2008,8 +2050,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
             ],
           ),
         ),
-      ),
-    );
+      );
   }
 
   Widget _buildStatItem(ThemeData theme, IconData icon, String label, String value) {
