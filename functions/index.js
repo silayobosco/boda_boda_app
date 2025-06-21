@@ -17,6 +17,7 @@ const {
   deleteRideRequest,
   handleDriverRideAction, // Added import for the new callable function
   onKijiweUpdate, // Changed from updateKijiwe to match the export from matchRideRequest.js
+  onRideRequestStatusUpdate, // Import the new function
 } = require("./matchRideRequest");
 
 // Import functions from scheduledRidesManager.js
@@ -31,6 +32,7 @@ exports.updateRideRequest = updateRideRequest;
 exports.deleteRideRequest = deleteRideRequest;
 exports.handleDriverRideAction = handleDriverRideAction; // Export the new callable function
 exports.onKijiweUpdate = onKijiweUpdate; // Exporting the renamed function
+exports.onRideRequestStatusUpdate = onRideRequestStatusUpdate; // Export the new function
 
 exports.manageScheduledRide = manageScheduledRide;
 exports.processScheduledRides = processScheduledRides;

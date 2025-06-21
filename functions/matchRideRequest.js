@@ -789,24 +789,33 @@ exports.handleDriverRideAction = onCall(async (request) => {
 /**
  * Cloud Function to handle ride request updates
  */
-exports.updateRideRequest = onDocumentUpdated("/RideRequests/{rideRequestId}", async (event) => {
-  // This function might need more specific logic based on which status changes you want to react to.
-  // For now, it's a placeholder.
+exports.onRideRequestStatusUpdate = onDocumentUpdated("/rideRequests/{rideRequestId}", async (event) => {
   const beforeData = event.data.before.data();
   const afterData = event.data.after.data();
+  const rideRequestId = event.params.rideRequestId;
 
-  if (beforeData.status !== afterData.status) {
-    logger.log(`Ride request ${event.params.rideRequestId} status changed from ${beforeData.status} ` +
+  // Check if status changed to cancelled_by_customer
+  if (beforeData.status !== afterData.status && afterData.status === "cancelled_by_customer") {
+    logger.log(`Ride ${rideRequestId} cancelled by customer. Before status: ${beforeData.status}`);
+
+    // If it was pending driver acceptance, notify the assigned driver to clear their sheet
+    if (beforeData.status === "pending_driver_acceptance" && beforeData.driverId) {
+      const assignedDriverId = beforeData.driverId;
+      logger.log(`Notifying driver ${assignedDriverId} to clear pending ride ${rideRequestId}.`);
+      await sendFCMNotification(
+          assignedDriverId,
+          "Ride Cancelled",
+          "The customer cancelled the ride request.",
+          {
+            rideRequestId: rideRequestId,
+            status: "cancelled_by_customer",
+            action: "clear_pending_ride", // Custom action for the client
+            click_action: "FLUTTER_NOTIFICATION_CLICK",
+          },
+      );
+    } else {
+      logger.log(`Ride request ${rideRequestId} status changed from ${beforeData.status} ` +
         `to ${afterData.status}`);
-    if (afterData.status === "completed") {
-      if (afterData.assignedDriverId) {
-        // Example: Send a generic completion notification to driver
-        // You might want a more specific payload for completion
-        // await sendFCMNotification(afterData.assignedDriverId, "Ride Completed", "Your ride is complete.", {
-        //  id: event.params.rideRequestId, /* other details */ });
-        console.log(`Ride ${event.params.rideRequestId} completed by driver ${afterData.assignedDriverId}.`);
-      }
-      // TODO: Notify customer about ride completion
     }
   }
 });
