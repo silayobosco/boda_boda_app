@@ -1746,7 +1746,7 @@ void _updateDisplayedRoute() {
     );
   }
 
-  Widget _buildRouteSheet({Key? key}) {
+  Widget _buildRouteSheet({Key? key}) { // Removed Key parameter as it's managed by the parent IndexedStack
     // If a driver is assigned, show driver info and ride progress
     final rideDetails = _activeRideRequestDetails;
     if (rideDetails != null) {
@@ -1778,7 +1778,7 @@ void _updateDisplayedRoute() {
     final bool showActionButtons = _pickupLocation != null && _dropOffLocation != null && !_isFindingDriver && _activeRideRequestId == null;
      // Revert to static sheet sizes
     const double initialSheetSize = 0.55;
-    const List<double> snapSizes = [0.35, 0.45, 0.55, 0.7, 0.8, 0.9];
+    const List<double> snapSizes = [0.23, 0.35, 0.45, 0.55, 0.7, 0.8, 0.9]; // Added 0.23 as a snap point
     const double minSheetSize = 0.2;
  
     return DraggableScrollableSheet( // This is the route planning sheet
