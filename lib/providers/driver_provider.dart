@@ -14,6 +14,7 @@ class DriverProvider extends ChangeNotifier {
   bool _isOnline = false;
   String? _currentKijiweId;
   bool _isLoading = false;
+  double _dailyEarnings = 0.0; // New field for daily earnings
   Map<String, dynamic>? _pendingRideRequestDetails;
   Map<String, dynamic>? _driverProfileData; // To store driver-specific profile data
 
@@ -21,6 +22,7 @@ class DriverProvider extends ChangeNotifier {
   bool get isOnline => _isOnline;
   String? get currentKijiweId => _currentKijiweId;
   Map<String, dynamic>? get pendingRideRequestDetails => _pendingRideRequestDetails;
+  double get dailyEarnings => _dailyEarnings; // Getter for daily earnings
   Map<String, dynamic>? get driverProfileData => _driverProfileData; // Getter for driver profile
 
   void setLoading(bool value) {
@@ -49,6 +51,7 @@ class DriverProvider extends ChangeNotifier {
           _currentKijiweId = driverProfile['kijiweId'] as String?;
           _driverProfileData = Map<String, dynamic>.from(driverProfile); // Store the profile
         } else { // Driver profile doesn't exist
+          debugPrint("DriverProvider: Driver profile not found for user $userId.");
           _isOnline = false;
           _currentKijiweId = null;
           _driverProfileData = null;
@@ -56,7 +59,7 @@ class DriverProvider extends ChangeNotifier {
       } else { // User document doesn't exist
         _isOnline = false;
         _currentKijiweId = null;
-        _driverProfileData = null;
+        _driverProfileData = null; // Ensure profile is null if user doc doesn't exist
       }
     } catch (e) {
       debugPrint("Error loading driver data: $e");
@@ -514,6 +517,15 @@ class DriverProvider extends ChangeNotifier {
       }
       throw Exception('Failed to cancel ride: ${e.toString()}');
     } finally {
+      // Fetch daily earnings after loading driver data
+      try {
+        _dailyEarnings = await _firestoreService.getDriverDailyEarnings(userId);
+        debugPrint("DriverProvider: Fetched daily earnings: $_dailyEarnings");
+      } catch (e) {
+        debugPrint("DriverProvider: Error fetching daily earnings: $e");
+        _dailyEarnings = 0.0; // Reset on error
+      }
+
       setLoading(false);
     }
   }
