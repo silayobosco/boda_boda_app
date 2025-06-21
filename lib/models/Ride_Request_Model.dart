@@ -37,6 +37,11 @@ class RideRequestModel {
   final int? driverCompletedRidesCount;
   final DateTime? scheduledDateTime; // Added for scheduled rides
   final String? customerNoteToDriver; // Note from customer to driver
+  final double? estimatedDistanceKm; // New field for estimated distance
+  final double? estimatedDurationMinutes; // New field for estimated duration
+  final double? estimatedFare; // New field for estimated fare (from FCM payload)
+  final Map<String, dynamic>? fareConfigUsed; // New field to store fare config used for final fare
+  final double? customerCalculatedEstimatedFare; // Customer's app calculated estimate
 
 
   RideRequestModel({
@@ -71,9 +76,17 @@ class RideRequestModel {
     this.driverCompletedRidesCount,
     this.scheduledDateTime,
     this.customerNoteToDriver,
+    this.estimatedDistanceKm,
+    this.estimatedDurationMinutes,
+    this.estimatedFare,
+    this.fareConfigUsed,
+    this.customerCalculatedEstimatedFare,
   });
 
   factory RideRequestModel.fromJson(Map<String, dynamic> json, String rideRequestId) {
+    final estimatedFareFromJson = (json['estimatedFare'] as num?)?.toDouble();
+    final customerCalculatedFare = (json['customerCalculatedEstimatedFare'] as num?)?.toDouble();
+
     DateTime? parsedScheduledDateTime;
     if (json['scheduledDateTime'] is Timestamp) {
       parsedScheduledDateTime = (json['scheduledDateTime'] as Timestamp).toDate();
@@ -150,6 +163,11 @@ class RideRequestModel {
       driverCompletedRidesCount: (json['driverCompletedRidesCount'] as num?)?.toInt(),
       customerNoteToDriver: json['customerNoteToDriver'] as String?,
       scheduledDateTime: parsedScheduledDateTime,
+      estimatedDistanceKm: (json['estimatedDistanceKm'] as num?)?.toDouble(),
+      estimatedFare: estimatedFareFromJson ?? customerCalculatedFare, // Use the main one, fallback to customer's
+      fareConfigUsed: json['fareConfigUsed'] != null ? Map<String, dynamic>.from(json['fareConfigUsed'] as Map) : null, // Read fareConfigUsed
+      customerCalculatedEstimatedFare: (json['customerCalculatedEstimatedFare'] as num?)?.toDouble(),
+      estimatedDurationMinutes: (json['estimatedDurationMinutes'] as num?)?.toDouble(),
     );
   }
 
@@ -191,6 +209,11 @@ class RideRequestModel {
       'driverCompletedRidesCount': driverCompletedRidesCount,
       'customerNoteToDriver': customerNoteToDriver,
       'scheduledDateTime': scheduledDateTime != null ? Timestamp.fromDate(scheduledDateTime!) : null, // Save scheduledDateTime
+      'estimatedDistanceKm': estimatedDistanceKm,
+      'estimatedDurationMinutes': estimatedDurationMinutes,
+      'estimatedFare': estimatedFare, // Save estimated fare (if needed, though primarily for FCM)
+      'fareConfigUsed': fareConfigUsed, // Save fareConfigUsed
+      'customerCalculatedEstimatedFare': customerCalculatedEstimatedFare,
     };
   }
 
@@ -226,6 +249,11 @@ class RideRequestModel {
     int? driverCompletedRidesCount,
     String? customerNoteToDriver,
     DateTime? scheduledDateTime,
+    double? estimatedDistanceKm,
+    double? estimatedFare,
+    Map<String, dynamic>? fareConfigUsed,
+    double? customerCalculatedEstimatedFare,
+    double? estimatedDurationMinutes,
   }) {
     return RideRequestModel(
       // Corrected logic: use the provided 'id' parameter if not null, otherwise use current instance's 'id'.
@@ -260,6 +288,11 @@ class RideRequestModel {
       driverCompletedRidesCount: driverCompletedRidesCount ?? this.driverCompletedRidesCount,
       customerNoteToDriver: customerNoteToDriver ?? this.customerNoteToDriver,
       scheduledDateTime: scheduledDateTime ?? this.scheduledDateTime,
+      estimatedFare: estimatedFare ?? this.estimatedFare,
+      fareConfigUsed: fareConfigUsed ?? this.fareConfigUsed,
+      customerCalculatedEstimatedFare: customerCalculatedEstimatedFare ?? this.customerCalculatedEstimatedFare,
+      estimatedDistanceKm: estimatedDistanceKm ?? this.estimatedDistanceKm,
+      estimatedDurationMinutes: estimatedDurationMinutes ?? this.estimatedDurationMinutes,
     );
   }
 
@@ -272,8 +305,9 @@ class RideRequestModel {
         'customerName: $customerName, pickupAddressName: $pickupAddressName, driverName: $driverName, customerProfileImageUrl: $customerProfileImageUrl, '
         'driverProfileImageUrl: $driverProfileImageUrl, dropoffAddressName: $dropoffAddressName, customerNoteToDriver: $customerNoteToDriver, '
         'customerRatingToDriver: $customerRatingToDriver, customerCommentToDriver: $customerCommentToDriver, '
-        'driverRatingToCustomer: $driverRatingToCustomer, driverCommentToCustomer: $driverCommentToCustomer, customerDetails: $customerDetails, driverVehicleType: $driverVehicleType, '
-        'driverGender: $driverGender, driverAgeGroup: $driverAgeGroup, driverLicenseNumber: $driverLicenseNumber, driverAverageRating: $driverAverageRating, driverCompletedRidesCount: $driverCompletedRidesCount)';
+        'driverRatingToCustomer: $driverRatingToCustomer, driverCommentToCustomer: $driverCommentToCustomer, customerDetails: $customerDetails, driverVehicleType: $driverVehicleType, ' 
+        'driverGender: $driverGender, driverAgeGroup: $driverAgeGroup, driverLicenseNumber: $driverLicenseNumber, driverAverageRating: $driverAverageRating, driverCompletedRidesCount: $driverCompletedRidesCount, ' 
+        'estimatedDistanceKm: $estimatedDistanceKm, estimatedDurationMinutes: $estimatedDurationMinutes, estimatedFare: $estimatedFare, fareConfigUsed: $fareConfigUsed, customerCalculatedEstimatedFare: $customerCalculatedEstimatedFare)';
   }
 }
 
