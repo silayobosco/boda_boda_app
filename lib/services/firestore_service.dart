@@ -259,6 +259,33 @@ Stream<DocumentSnapshot> getKijiweQueueStream(String kijiweId) {
     return [];
   }
 
+  // Method to get driver's total earnings for today
+  Future<double> getDriverDailyEarnings(String driverId) async {
+    try {
+      final now = DateTime.now();
+      final startOfToday = DateTime(now.year, now.month, now.day);
+      final endOfToday = startOfToday.add(const Duration(days: 1));
+
+      final querySnapshot = await _firestore
+          .collection('rideRequests')
+          .where('driverId', isEqualTo: driverId)
+          .where('status', isEqualTo: 'completed')
+          .where('completedTime', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfToday))
+          .where('completedTime', isLessThan: Timestamp.fromDate(endOfToday))
+          .get();
+
+      double totalEarnings = 0.0;
+      for (var doc in querySnapshot.docs) {
+        final data = doc.data();
+        totalEarnings += (data['driverEarnings'] as num?)?.toDouble() ?? 0.0;
+      }
+      return totalEarnings;
+    } catch (e) {
+      debugPrint('Error fetching driver daily earnings: $e');
+      return 0.0; // Return 0 on error
+    }
+  }
+
   // Get rideId based on kijiweId and userId
   Future<String?> getRideId(String kijiweId, String userId) async {
     try {
