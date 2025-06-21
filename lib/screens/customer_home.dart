@@ -1526,6 +1526,7 @@ void _updateDisplayedRoute() {
       resizeToAvoidBottomInset: true,
       body: Stack(
         children: [
+          // Use a key to preserve map state
           GoogleMap(
             mapType: MapType.normal,
             initialCameraPosition: CameraPosition(
@@ -1539,6 +1540,7 @@ void _updateDisplayedRoute() {
             ),
             onMapCreated: (controller) {
               _mapController = controller;
+              // No need to call _adjustMapForExpandedSheet here, it's called by _onSheetChanged
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 _adjustMapForExpandedSheet();
               });
@@ -1546,6 +1548,7 @@ void _updateDisplayedRoute() {
             onTap: _handleMapTap,
             markers: _markers,
             polylines: _polylines,
+            zoomControlsEnabled: false, // Disable default zoom controls
             myLocationEnabled: true,
             padding: EdgeInsets.only( // Map padding to avoid overlap with sheet
               bottom: MediaQuery.of(context).size.height * _currentSheetSize,
@@ -1553,7 +1556,9 @@ void _updateDisplayedRoute() {
           ),
           // Listen to the active ride request if its ID is known
           if (_activeRideRequestId != null)
+            // Use a key to preserve the stream builder state
             StreamBuilder<RideRequestModel?>(
+              key: ValueKey('ride_stream_$_activeRideRequestId'),
               stream: rideRequestProvider.getRideStream(_activeRideRequestId!),
               builder: (context, snapshot) {
                 if (snapshot.hasData && snapshot.data != null) {
@@ -1641,7 +1646,45 @@ void _updateDisplayedRoute() {
                   });
                 }
                 return _buildRouteSheet(); // Always build the sheet, its content will change
-              }) else _buildRouteSheet(), // Build sheet even if no active ride ID (initial state)
+              })
+          else
+            // Use a key to preserve the route sheet state when no active ride
+            _buildRouteSheet(key: const ValueKey('route_planning_sheet')),
+
+          // Custom Map Controls (Recenter and Zoom)
+          Positioned(
+            bottom: MediaQuery.of(context).size.height * _currentSheetSize + 20, // Position above the sheet
+            right: 16,
+            child: Column(
+              children: [
+                // Recenter Button
+                FloatingActionButton.small(
+                  heroTag: 'customer_recenter_button', // Unique heroTag
+                  onPressed: _centerMapOnCurrentLocation,
+                  backgroundColor: Theme.of(context).colorScheme.surface,
+                  foregroundColor: Theme.of(context).colorScheme.onSurface,
+                  child: const Icon(Icons.my_location),
+                ),
+                const SizedBox(height: 16),
+                // Zoom Buttons
+                FloatingActionButton.small(
+                  heroTag: 'customer_zoom_in_button',
+                  onPressed: () => _mapController?.animateCamera(CameraUpdate.zoomIn()),
+                  backgroundColor: Theme.of(context).colorScheme.surface,
+                  foregroundColor: Theme.of(context).colorScheme.onSurface,
+                  child: const Icon(Icons.add),
+                ),
+                const SizedBox(height: 2),
+                FloatingActionButton.small(
+                  heroTag: 'customer_zoom_out_button',
+                  onPressed: () => _mapController?.animateCamera(CameraUpdate.zoomOut()),
+                  backgroundColor: Theme.of(context).colorScheme.surface,
+                  foregroundColor: Theme.of(context).colorScheme.onSurface,
+                  child: const Icon(Icons.remove),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -1665,6 +1708,31 @@ void _updateDisplayedRoute() {
     }
   }
 
+  Future<void> _centerMapOnCurrentLocation() async {
+    if (_mapController == null) return;
+
+    final locationProvider = Provider.of<LocationProvider>(context, listen: false);
+    // Prioritize centering on the selected pickup location, otherwise use the user's current location.
+    final targetLocation = _pickupLocation ?? locationProvider.currentLocation;
+
+    if (targetLocation == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Current location not available.')),
+        );
+      }
+      return;
+    }
+
+    final currentZoom = await _mapController!.getZoomLevel();
+
+    _mapController!.animateCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(target: LatLng(targetLocation.latitude, targetLocation.longitude), zoom: currentZoom, bearing: 0),
+      ),
+    );
+  }
+
   Widget _buildFieldContainer(Widget child) {
     return Container(
       height: 56, // Fixed height for all fields
@@ -1678,18 +1746,31 @@ void _updateDisplayedRoute() {
     );
   }
 
-  Widget _buildRouteSheet() {
+  Widget _buildRouteSheet({Key? key}) {
     // If a driver is assigned, show driver info and ride progress
-    if (_activeRideRequestDetails != null && _activeRideRequestDetails!.driverId != null) {
-      debugPrint("CustomerHome: _buildRouteSheet -> Showing DriverAssignedSheet. ActiveRideDetails Status: ${_activeRideRequestDetails?.status}");
-      // A driver is assigned (driverId is present)
-      // _assignedDriverModel might still be loading, _buildDriverAssignedSheet will handle that
-      return _buildDriverAssignedSheet(); 
-    }
+    final rideDetails = _activeRideRequestDetails;
+    if (rideDetails != null) {
+      final status = rideDetails.status;
+      final driverId = rideDetails.driverId;
 
-    // If finding a driver, show loading state in the sheet
-    if (_isFindingDriver) {
-      debugPrint("CustomerHome: _buildRouteSheet -> Showing FindingDriverSheet.");
+      // Active ride with an assigned driver
+      if (driverId != null && ['pending_driver_acceptance', 'accepted', 'goingToPickup', 'arrivedAtPickup', 'onRide'].contains(status)) {
+        debugPrint("CustomerHome: _buildRouteSheet -> Showing DriverAssignedSheet. Status: $status");
+        return _buildDriverAssignedSheet();
+      }
+
+      // Ride was declined or no drivers found
+      if (status == 'declined_by_driver' || status == 'no_drivers_available') {
+        debugPrint("CustomerHome: _buildRouteSheet -> Showing RideFailedSheet. Status: $status");
+        return _buildRideFailedSheet(status);
+      }
+
+      // Still finding a driver
+      if (_isFindingDriver || status == 'pending_match' || status == 'pending_driver_acceptance') {
+        debugPrint("CustomerHome: _buildRouteSheet -> Showing FindingDriverSheet. Status: $status");
+        return _buildFindingDriverSheet();
+      }
+    } else if (_isFindingDriver) { // Handle case where rideDetails is momentarily null but we are finding
       return _buildFindingDriverSheet();
     }
     // Default: Show route planning sheet
@@ -1700,7 +1781,8 @@ void _updateDisplayedRoute() {
     const List<double> snapSizes = [0.35, 0.45, 0.55, 0.7, 0.8, 0.9];
     const double minSheetSize = 0.2;
  
-    return DraggableScrollableSheet(
+    return DraggableScrollableSheet( // This is the route planning sheet
+      key: key, // Apply the key here
       controller: _sheetController,
       initialChildSize: initialSheetSize, // Use the static initial size
       minChildSize: minSheetSize,
@@ -2061,6 +2143,56 @@ void _updateDisplayedRoute() {
               },
               child: Text('Cancel Search', style: TextStyle(color: theme.colorScheme.error)),
             )
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRideFailedSheet(String status) {
+    final theme = Theme.of(context);
+    final message = status == 'declined_by_driver'
+        ? 'The driver is unavailable. Would you like to find another?'
+        : 'No drivers were found nearby. Please try again.';
+
+    return Positioned(
+      bottom: 0,
+      left: 0,
+      right: 0,
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          boxShadow: [BoxShadow(blurRadius: 10, color: Colors.black12, offset: Offset(0, -2))],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('😪', style: TextStyle(fontSize: 40)), // Replaced icon with emoji
+            verticalSpaceMedium,
+            Text(message, style: theme.textTheme.titleMedium, textAlign: TextAlign.center),
+            verticalSpaceMedium,
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => setState(() {
+                      _activeRideRequestId = null;
+                      _isFindingDriver = false;
+                    }),
+                    child: const Text('Cancel'),
+                  ),
+                ),
+                horizontalSpaceMedium,
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: _confirmRideRequest, // Re-run the ride request logic
+                    child: const Text('Find Another Driver'),
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),
@@ -2461,14 +2593,16 @@ void _updateDisplayedRoute() {
                   child: const Text('Submit Rating'),
                   onPressed: () async {
                     final rideProvider = Provider.of<RideRequestProvider>(context, listen: false);
-                    final navigator = Navigator.of(dialogContext); // Navigator for the dialog
+                    final navigator = Navigator.of(dialogContext);
+                    // Capture the ScaffoldMessenger before the async gap
+                    final scaffoldMessenger = ScaffoldMessenger.of(context);
 
                     if (ratingValue > 0) {
                       try {
                         await rideProvider.rateUser(
                           rideId: rideId,
                           ratedUserId: driverId,
-                          ratedUserRole: 'driver',
+                          ratedUserRole: 'Driver', // Ensure role matches what's in Firestore
                           rating: ratingValue,
                           comment: commentController.text.trim().isNotEmpty ? commentController.text.trim() : null,
                         );
@@ -2490,7 +2624,7 @@ void _updateDisplayedRoute() {
                         if (navigator.canPop()) { 
                            navigator.pop();
                         }
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to submit rating: $e')));
+                        scaffoldMessenger.showSnackBar(SnackBar(content: Text('Failed to submit rating: $e')));
                       }
                     } else {
                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select a star rating.')));
