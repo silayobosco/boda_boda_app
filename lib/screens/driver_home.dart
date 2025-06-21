@@ -58,6 +58,12 @@ class _DriverHomeState extends State<DriverHome> with AutomaticKeepAliveClientMi
   String? _currentlyDisplayedProposedRideId; // To track the ID of the ride for which a proposed route is shown
   final String _googlePlacesApiKey = 'AIzaSyCkKD8FP-r9bqi5O-sOjtuksT-0Dr9dgeg'; // TODO: Move to a config file
   
+  final DraggableScrollableController _sheetController = DraggableScrollableController();
+  double _currentSheetSize = 0.0; // For map padding
+ 
+  final GlobalKey _rideRequestSheetKey = GlobalKey();
+  double _rideRequestSheetHeight = 0.0;
+
   // Ride Tracking Variables
   DateTime? _rideTrackingStartTime;
   ll.LatLng? _rideTrackingLastLocation;
@@ -102,6 +108,7 @@ void initState() {
   // Add listener for LocationProvider
   debugPrint("DriverHome: initState - Adding LocationProvider listener.");
   final locationProvider = Provider.of<LocationProvider>(context, listen: false);
+  _sheetController.addListener(_onSheetChanged);
   locationProvider.addListener(_locationProviderListener);
 
   // Listen to DriverProvider's pendingRideRequestDetails
@@ -114,6 +121,8 @@ void initState() {
 void dispose() {
   debugPrint("DriverHome: dispose() called");
   _mapController?.dispose();
+  _sheetController.removeListener(_onSheetChanged);
+  _sheetController.dispose();
   final locationProvider = Provider.of<LocationProvider>(context, listen: false);
   locationProvider.removeListener(_locationProviderListener);
   final driverProvider = Provider.of<DriverProvider>(context, listen: false);
@@ -122,6 +131,16 @@ void dispose() {
   super.dispose();
   debugPrint("DriverHome: dispose() completed.");
 }
+
+void _onSheetChanged() {
+  if (!mounted) return;
+  // Only update the size if the active ride sheet is the one being shown
+  if (_activeRideDetails != null) {
+    setState(() {
+      _currentSheetSize = _sheetController.size;
+    });
+  }
+  }
 
 void _onDriverProviderChange() {
   if (!mounted) {
@@ -140,6 +159,7 @@ void _onDriverProviderChange() {
     // Only initiate if not already loading a route AND the new ride ID is different from the one currently being proposed (or if no route is proposed) AND the sheet is not already showing an active ride
     if (!_isLoadingRoute && (newRideId != _currentlyDisplayedProposedRideId || _activeRoutePolylines.isEmpty)) {
       debugPrint("DriverHome: Initiating full proposed route for sheet for ride ID: $newRideId.");
+      _measureRideRequestSheet(); // Measure the sheet when it's about to be displayed
       _initiateFullProposedRideRouteForSheet(driverProvider.pendingRideRequestDetails!);
     } else {
       debugPrint("DriverHome: New pending ride detected (ID: $newRideId), but either already loading a route or this route is already proposed/displayed. Skipping initiation.");
@@ -152,6 +172,7 @@ void _onDriverProviderChange() {
     if (_currentlyDisplayedProposedRideId != null || _activeRoutePolylines.isNotEmpty || _rideSpecificMarkers.isNotEmpty) {
       debugPrint("DriverHome: Clearing proposed route visuals.");
     }
+    _rideRequestSheetHeight = 0.0; // Reset sheet height when no pending ride
     if (mounted) {
       setState(() {
         _activeRoutePolylines.clear();
@@ -170,6 +191,22 @@ void _onDriverProviderChange() {
   }
   // If pendingRideRequestDetails is null but _activeRideDetails is NOT null, we do nothing here,
   // as the active ride sheet (_buildActiveRideSheet) will be shown.
+}
+
+void _measureRideRequestSheet() {
+  // This function is called when we know the sheet is about to be built.
+  // We use a post-frame callback to ensure the widget has been laid out.
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (!mounted || _rideRequestSheetKey.currentContext == null) return;
+    
+    final RenderBox? renderBox = _rideRequestSheetKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox != null) {
+      final newHeight = renderBox.size.height;
+      if (_rideRequestSheetHeight != newHeight) {
+        setState(() => _rideRequestSheetHeight = newHeight);
+      }
+    }
+  });
 }
   // This method is called by the LocationProvider listener
   void _updateDynamicPolylineForProgress(gmf.LatLng driverCurrentLocation) { // This is correct
@@ -249,6 +286,14 @@ void _onDriverProviderChange() {
     final locationProvider = Provider.of<LocationProvider>(context);
     final theme = Theme.of(context); // Get the current theme
 
+    double bottomPadding = 0;
+    if (_activeRideDetails != null) {
+      bottomPadding = MediaQuery.of(context).size.height * _currentSheetSize;
+    } else if (driverProvider.pendingRideRequestDetails != null) {
+      // Use the measured height of the ride request sheet for padding
+      bottomPadding = _rideRequestSheetHeight;
+    }
+
     return Scaffold(
       body: Stack(
         children: [
@@ -257,44 +302,30 @@ void _onDriverProviderChange() {
             initialCameraPosition: gmf.CameraPosition(
               target: locationProvider.currentLocation is gmf.LatLng
                   ? locationProvider.currentLocation as gmf.LatLng
-                  : const gmf.LatLng(0, 0),
-              zoom: 17,
-              bearing: _currentHeading ?? 0,
+                  : const gmf.LatLng(0, 0), // Default if no location
+              zoom: 17, // Keep zoom level
+              bearing: 0, // Always keep North up
             ),
             onMapCreated: (gmf.GoogleMapController controller) {
               _mapController = controller;
               _centerMapOnDriver();
             },
             myLocationEnabled: false,
+            zoomControlsEnabled: false, // Disable default zoom controls
             markers: _buildDriverMarker(locationProvider),
             onCameraMove: (position) {
-              _currentHeading = position.bearing;
+              // _currentHeading = position.bearing; // This can cause jerky rotations, location provider heading is better
             },
             polylines: _activeRoutePolylines,
+            padding: EdgeInsets.only(bottom: bottomPadding, top: MediaQuery.of(context).padding.top + 70),
           ),
 
-          // Online Status Toggle (floating button instead of app bar)
+          // Online Status Toggle / Card
           Positioned(
             top: MediaQuery.of(context).padding.top + 16,
             right: 16,
-            child: FloatingActionButton(
-              mini: true,
-              backgroundColor: driverProvider.isOnline ? successColor : theme.colorScheme.onSurface.withOpacity(0.6),
-              onPressed: _toggleOnlineStatus,
-              child: Icon(
-                Icons.offline_bolt,
-                color: theme.colorScheme.surface, // Color for icon on FAB
-              ),
-            ),
+            child: _buildOnlineStatusWidget(),
           ),
-
-          // Driver Info Card
-          if (driverProvider.isOnline) // Use provider's state
-            Positioned(
-              top: MediaQuery.of(context).padding.top + 16,
-              right: 16, // Only right alignment needed now
-              child: _buildOnlineStatusWidget(),
-            ),
 
           // Add this debug print
           // Positioned(top: 100, left: 10, child: Text("DEBUG: Active: ${_activeRideDetails?.id}, Pending: ${driverProvider.pendingRideRequestDetails?['rideRequestId']}", style: TextStyle(backgroundColor: Colors.yellow, color: Colors.black))),
@@ -311,6 +342,41 @@ void _onDriverProviderChange() {
               driverProvider.pendingRideRequestDetails != null && // Data for the sheet exists
               _activeRideDetails == null) // And no other ride is active
             _buildRideRequestSheet(driverProvider.pendingRideRequestDetails!),
+
+          // Custom Map Controls (Relocation and Zoom) - Placed last to be drawn on top
+          Positioned(
+            bottom: bottomPadding + 20, // Position above the sheet
+            right: 16,
+            child: Column(
+              children: [
+                // Relocation Button
+                FloatingActionButton.small(
+                  heroTag: 'recenter_button', // Unique heroTag
+                  onPressed: _centerMapOnDriver,
+                  backgroundColor: theme.colorScheme.surface,
+                  foregroundColor: theme.colorScheme.onSurface,
+                  child: const Icon(Icons.my_location),
+                ),
+                const SizedBox(height: 16),
+                // Zoom Buttons
+                FloatingActionButton.small(
+                  heroTag: 'zoom_in_button',
+                  onPressed: () => _mapController?.animateCamera(gmf.CameraUpdate.zoomIn()),
+                  backgroundColor: theme.colorScheme.surface,
+                  foregroundColor: theme.colorScheme.onSurface,
+                  child: const Icon(Icons.add),
+                ),
+                const SizedBox(height: 2),
+                FloatingActionButton.small(
+                  heroTag: 'zoom_out_button',
+                  onPressed: () => _mapController?.animateCamera(gmf.CameraUpdate.zoomOut()),
+                  backgroundColor: theme.colorScheme.surface,
+                  foregroundColor: theme.colorScheme.onSurface,
+                  child: const Icon(Icons.remove),
+                ),
+              ],
+            ),
+          ),
           
         ],
       ),
@@ -402,7 +468,7 @@ Widget _buildOfflineButton(DriverProvider driverProvider) {
     key: ValueKey('offline-button'),
     mini: true,
     backgroundColor: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
-    onPressed: () => driverProvider.toggleOnlineStatus(),
+    onPressed: _toggleOnlineStatus,
     child: driverProvider.isLoading
         ? CircularProgressIndicator(
             valueColor: AlwaysStoppedAnimation(Theme.of(context).colorScheme.surface),
@@ -425,7 +491,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
           )
         : Icon(Icons.power_settings_new, size: 20),
     color: Theme.of(context).colorScheme.error,
-    onPressed: () => driverProvider.toggleOnlineStatus(),
+    onPressed: _toggleOnlineStatus,
   );
 }
 
@@ -442,8 +508,10 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
     final bool canNavigate = isGoingToPickup || isRideInProgress || isAtPickup; 
     final bool mainRideStarted = isRideInProgress;
     final List<Map<String, dynamic>> stops = _activeRideDetails?.stops ?? [];
+    final String? imageUrl = _activeRideDetails?.customerProfileImageUrl;
 
     return DraggableScrollableSheet(
+      controller: _sheetController,
       initialChildSize: 0.3,
       minChildSize: 0.25,
       maxChildSize: 0.4,
@@ -485,12 +553,17 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
 
               // Ride info
               ListTile(
-                leading: CircleAvatar(
-                  key: ValueKey('active-ride-customer-avatar'), // Add key
-                  // TODO: Use customer profile image if available in _currentRide
+                leading: CircleAvatar( // Use CircleAvatar for a nice circular image
+                  key: const ValueKey('active-ride-customer-avatar'),
+                  radius: 25, // Adjust size as needed
                   backgroundColor: theme.colorScheme.primaryContainer, // Fallback color
-                  child: Icon(Icons.person, color: theme.colorScheme.onPrimaryContainer), // Fallback icon
-                 ),
+                  backgroundImage: (imageUrl != null && imageUrl.isNotEmpty)
+                      ? NetworkImage(imageUrl)
+                      : null, // Use NetworkImage if URL exists
+                  child: (imageUrl == null || imageUrl.isEmpty)
+                      ? Icon(Icons.person, color: theme.colorScheme.onPrimaryContainer)
+                      : null, // Show icon only if no image
+                ),
                 title: Text(customerName, style: theme.textTheme.titleMedium),
                 // Display customer details here
                 subtitle: Text(
@@ -695,6 +768,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
       left: 0,
       right: 0,
       child: Card(
+        key: _rideRequestSheetKey, // Assign the key to the Card
         elevation: 8,
         margin: EdgeInsets.zero, // Remove default card margin
         shape: const RoundedRectangleBorder(
@@ -729,6 +803,22 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
                       style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: theme.colorScheme.primary)),
                 ),
 
+              // Main Ride Distance and Duration
+              if (_mainRideDistance != null && _mainRideDuration != null)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.directions_car, color: theme.colorScheme.secondary, size: 18),
+                      horizontalSpaceSmall,
+                      Text(
+                        'Ride: $_mainRideDuration · $_mainRideDistance',
+                        style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.secondary, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ),
               // Estimated Fare
               if (displayEstimatedFareText != null && displayEstimatedFareText.isNotEmpty)
                 Padding(
@@ -855,15 +945,16 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
       ..._rideSpecificMarkers, // Add markers for the current ride context
     };
   }
-  void _centerMapOnDriver() {
+  Future<void> _centerMapOnDriver() async {
     final locationProvider = Provider.of<LocationProvider>(context, listen: false); // Listen: false is correct here
     if (locationProvider.currentLocation == null || _mapController == null) return;
 
-    _mapController?.animateCamera( // This LatLng is google_maps_flutter.LatLng
-      gmf.CameraUpdate.newLatLng(
-        gmf.LatLng(
-          locationProvider.currentLocation!.latitude,
-          locationProvider.currentLocation!.longitude,
+    _mapController?.animateCamera(
+      gmf.CameraUpdate.newCameraPosition(
+        gmf.CameraPosition(
+          target: gmf.LatLng(locationProvider.currentLocation!.latitude, locationProvider.currentLocation!.longitude),
+          zoom: await _mapController!.getZoomLevel(), // Maintain current zoom
+          bearing: 0, // Ensure North is always up when re-centering
         ),
       ),
     );
@@ -1375,7 +1466,9 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
       debugPrint("DriverHome: _acceptRide - Ride accepted in provider. Updating local state.");
       if (isMounted) {
         setState(() {
+        _rideRequestSheetHeight = 0.0; // Clear the request sheet height
         // Create a basic RideRequestModel instance.
+        _currentSheetSize = 0.3; // Set initial sheet size for padding
         // The full details will come from the Firestore stream.
         _activeRideDetails = RideRequestModel(
           id: rideId,
@@ -1432,6 +1525,9 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
           debugPrint("DriverHome: _listenToActiveRide - Received update for ride ID: ${newRideDetails.id}, Status: ${newRideDetails.status}");
           if (mounted) {
             setState(() {
+            if (_activeRideDetails == null) { // If this is the first time we're seeing this active ride
+              _currentSheetSize = 0.3; // Set initial sheet size for padding
+            }
             _activeRideDetails = newRideDetails;
             // Potentially update map/route based on new status if needed here,
             // though specific actions like _confirmArrival already handle this.
@@ -1478,6 +1574,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
       await driverProvider.declineRideRequest(currentContext, rideId, customerId);
       if (!isMounted) return;
       debugPrint("DriverHome: _declineRide - Ride declined in provider. Clearing local proposed ride state."); // This is correct
+      _rideRequestSheetHeight = 0.0; // Clear the request sheet height
       if (isMounted) {
         setState(() {
         _proposedRideDistance = null; _proposedRideDuration = null; // This is correct
@@ -1666,6 +1763,8 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
   void _resetActiveRideState() {
     debugPrint("DriverHome: _resetActiveRideState - ENTERED.  Current _activeRideDetails = ${_activeRideDetails?.id}, Clear provider pending= ${Provider.of<DriverProvider>(context, listen: false).pendingRideRequestDetails}");
     if (mounted) {
+      _rideRequestSheetHeight = 0.0; // Reset sheet height
+      _currentSheetSize = 0.0; // Reset sheet size for padding
       debugPrint("DriverHome: _resetActiveRideState called.");
       if (mounted) {
         setState(() { // Use setState to trigger UI rebuild
