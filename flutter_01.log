@@ -1,0 +1,87 @@
+Flutter crash report.
+Please report a bug at https://github.com/flutter/flutter/issues.
+
+## command
+
+flutter run --release
+
+## exception
+
+FileSystemException: FileSystemException: Failed to decode data using encoding 'utf-8', path = 'C:\Users\johnb\AndroidStudioProjects\MyApplication\boda_boda_app\.gitignore'
+
+```
+#0      _File._tryDecode (dart:io/file_impl.dart:707:7)
+#1      _File.readAsStringSync (dart:io/file_impl.dart:718:7)
+#2      _File.readAsLinesSync (dart:io/file_impl.dart:724:36)
+#3      ForwardingFile.readAsLinesSync (package:file/src/forwarding/forwarding_file.dart:107:16)
+#4      ForwardingFile.readAsLinesSync (package:file/src/forwarding/forwarding_file.dart:107:16)
+#5      ProjectMigrator.processFileLines (package:flutter_tools/src/base/project_migrator.dart:40:37)
+#6      ScrubGeneratedPluginRegistrant.migrate (package:flutter_tools/src/web/migrations/scrub_generated_plugin_registrant.dart:28:7)
+#7      ProjectMigration.run (package:flutter_tools/src/base/project_migrator.dart:86:22)
+#8      WebBuilder.buildWeb (package:flutter_tools/src/web/compile.dart:88:21)
+<asynchronous suspension>
+#9      ResidentWebRunner.run.<anonymous closure> (package:flutter_tools/src/isolated/resident_web_runner.dart:347:11)
+<asynchronous suspension>
+#10     asyncGuard.<anonymous closure> (package:flutter_tools/src/base/async_guard.dart:109:26)
+<asynchronous suspension>
+```
+
+## flutter doctor
+
+```
+[33m[!][39m Flutter (Channel stable, 3.29.1, on Microsoft Windows [Version 10.0.22000.2538], locale en-US) [3.1s]
+    [32m•[39m Flutter version 3.29.1 on channel stable at C:\Users\johnb\flutter
+    [33m![39m Warning: `dart` on your path resolves to C:\Users\johnb\DEV\flutter\bin\cache\dart-sdk\bin\dart.exe, which is not inside your current Flutter SDK checkout
+      at C:\Users\johnb\flutter. Consider adding C:\Users\johnb\flutter\bin to the front of your path.
+    [32m•[39m Upstream repository https://github.com/flutter/flutter.git
+    [32m•[39m Framework revision 09de023485 (11 days ago), 2025-02-28 13:44:05 -0800
+    [32m•[39m Engine revision 871f65ac1b
+    [32m•[39m Dart version 3.7.0
+    [32m•[39m DevTools version 2.42.2
+    [32m•[39m If those were intentional, you can disregard the above warnings; however it is recommended to use "git" directly to perform update checks and upgrades.
+
+[32m[✓][39m Windows Version (11 Pro 64-bit, 21H2, 2009) [7.5s]
+
+[33m[!][39m Android toolchain - develop for Android devices (Android SDK version 35.0.0) [20.6s]
+    [32m•[39m Android SDK at C:\Users\johnb\AppData\Local\Android\Sdk
+    [32m•[39m Platform android-35-ext14, build-tools 35.0.0
+    [32m•[39m ANDROID_HOME = C:\Users\johnb\AppData\Local\Android\Sdk
+    [32m•[39m ANDROID_SDK_ROOT = C:\Users\johnb\AppData\Local\Android\Sdk
+    [32m•[39m Java binary at: C:\Program Files\Java\jdk-17\bin\java
+      This JDK is specified by the JAVA_HOME environment variable.
+      To manually set the JDK path, use: `flutter config --jdk-dir="path/to/jdk"`.
+    [32m•[39m Java version Java(TM) SE Runtime Environment (build 17.0.12+8-LTS-286)
+    [33m![39m Some Android licenses not accepted. To resolve this, run: flutter doctor --android-licenses
+
+[32m[✓][39m Chrome - develop for the web [1,703ms]
+    [32m•[39m Chrome at C:\Program Files\Google\Chrome\Application\chrome.exe
+
+[32m[✓][39m Visual Studio - develop Windows apps (Visual Studio Build Tools 2019 16.11.40) [1,701ms]
+    [32m•[39m Visual Studio at C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools
+    [32m•[39m Visual Studio Build Tools 2019 version 16.11.35229.62
+    [32m•[39m Windows 10 SDK version 10.0.19041.0
+
+[33m[!][39m Android Studio (not installed) [822ms]
+    [32m•[39m Android Studio not found; download from https://developer.android.com/studio/index.html
+      (or visit https://flutter.dev/to/windows-android-setup for detailed instructions).
+
+[32m[✓][39m IntelliJ IDEA Community Edition (version 2024.2) [821ms]
+    [32m•[39m IntelliJ at C:\Program Files\JetBrains\IntelliJ IDEA Community Edition 2024.2.4
+    [32m•[39m Flutter plugin version 83.0.3
+    [32m•[39m Dart plugin version 242.24931
+
+[32m[✓][39m VS Code (version unknown) [8ms]
+    [32m•[39m VS Code at C:\Users\johnb\AppData\Local\Programs\Microsoft VS Code
+    [32m•[39m Flutter extension version 3.104.0
+    [31m✗[39m Unable to determine VS Code version.
+
+[32m[✓][39m Connected device (3 available) [407ms]
+    [32m•[39m Windows (desktop) • windows • windows-x64    • Microsoft Windows [Version 10.0.22000.2538]
+    [32m•[39m Chrome (web)      • chrome  • web-javascript • Google Chrome 133.0.6943.142
+    [32m•[39m Edge (web)        • edge    • web-javascript • Microsoft Edge 134.0.3124.51
+
+[32m[✓][39m Network resources [1,183ms]
+    [32m•[39m All expected network resources are available.
+
+[33m![39m Doctor found issues in 3 categories.
+```
