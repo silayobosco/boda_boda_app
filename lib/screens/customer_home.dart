@@ -638,10 +638,8 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
 
     if (routes != null && routes.isNotEmpty) {
       setState(() {
-        _allFetchedRoutes = routes;
-        _selectedRouteIndex = 0; // Default to the first route
-        _updateDisplayedRoute();
-        // _calculateEstimatedFare(); // Moved to _updateDisplayedRoute
+        _allFetchedRoutes = routes; // Store all fetched routes
+        _selectRoute(0); // Select and display the first route by default
       });
 
       // Adjust camera to fit all points of the first (primary) route initially
@@ -681,6 +679,28 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
     _checkRouteReady();
   }
 }
+
+  void _selectRoute(int index) {
+    // This method updates all state related to the selected route.
+    // It should be called from within a setState() block.
+    if (_allFetchedRoutes.isEmpty) return;
+
+    _selectedRouteIndex = index;
+    _polylines.clear();
+    for (int i = 0; i < _allFetchedRoutes.length; i++) {
+      final routeData = _allFetchedRoutes[i];
+      final Polyline originalPolyline = routeData['polyline'] as Polyline;
+
+      _polylines.add(originalPolyline.copyWith(
+        colorParam: i == _selectedRouteIndex ? Colors.blueAccent : Colors.grey,
+        widthParam: i == _selectedRouteIndex ? 6 : 4,
+        onTapParam: () => setState(() => _selectRoute(i)), // Cleanly update state on tap
+      ));
+    }
+    _selectedRouteDistance = _allFetchedRoutes[_selectedRouteIndex]['distance'] as String?;
+    _selectedRouteDuration = _allFetchedRoutes[_selectedRouteIndex]['duration'] as String?;
+    _calculateEstimatedFare(); // Recalculate fare for the newly selected route
+  }
 
   // Update polylines based on selected route
   void _startListeningToDriverLocation(String driverId) {
@@ -725,33 +745,6 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
     _markers.removeWhere((m) => m.markerId.value == 'driver_active_location');
     // No need to call setState here if the marker removal is part of a larger state reset
   }
-
-void _updateDisplayedRoute() {
-  if (_allFetchedRoutes.isEmpty) return;
-
-  setState(() {
-    _polylines.clear();
-    for (int i = 0; i < _allFetchedRoutes.length; i++) {
-      final routeData = _allFetchedRoutes[i];
-      final Polyline originalPolyline = routeData['polyline'] as Polyline;
-      
-      _polylines.add(originalPolyline.copyWith(
-        colorParam: i == _selectedRouteIndex ? Colors.blueAccent : Colors.grey,
-        widthParam: i == _selectedRouteIndex ? 6 : 4,
-        onTapParam: () {
-        setState(() {
-            _selectedRouteIndex = i;
-            _updateDisplayedRoute(); // Rebuild polylines with new selection
-          });
-        }),
-      );
-    }
-    _selectedRouteDistance = _allFetchedRoutes[_selectedRouteIndex]['distance'] as String?;
-    _selectedRouteDuration = _allFetchedRoutes[_selectedRouteIndex]['duration'] as String?;
-    debugPrint("CustomerHome: _updateDisplayedRoute - Selected Distance: $_selectedRouteDistance, Duration: $_selectedRouteDuration. Calling _calculateEstimatedFare.");
-  });
-  _calculateEstimatedFare(); // Calculate fare after distance/duration are updated
-}
 
   Future<List<Map<String, dynamic>>> _getGooglePlacesSuggestions(String query) async {
     if (query.isEmpty) return [];
