@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
+import '../services/firestore_service.dart';
 import '../services/auth_service.dart';
 import '../utils/ui_utils.dart';
 import 'package:intl/intl.dart';
@@ -9,12 +10,16 @@ class ChatScreen extends StatefulWidget {
   final String rideRequestId;
   final String recipientId; // UID of the other user (customer or driver)
   final String recipientName;
+  final bool isChatActive;
+  final bool canContactAdmin;
 
   const ChatScreen({
     super.key,
     required this.rideRequestId,
     required this.recipientId,
     required this.recipientName,
+    this.isChatActive = true,
+    this.canContactAdmin = false,
   });
 
   @override
@@ -24,6 +29,7 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  final FirestoreService _firestoreService = FirestoreService();
   String? _currentUserId;
   String? _currentUserRole;
 
@@ -127,20 +133,13 @@ class _ChatScreenState extends State<ChatScreen> {
       appBar: AppBar(
         title: Text('Chat with ${widget.recipientName}'),
         actions: [
-          if (_currentUserRole == 'Customer')
+          if (widget.canContactAdmin)
             IconButton(
               icon: const Icon(Icons.support_agent_outlined),
-              onPressed: () {
-                // This is where you would implement the logic from the previous suggestion
-                // to get the Kijiwe Admin ID and show a dialog to send a message.
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Contact Kijiwe Admin - Not implemented yet.')),
-                );
-              },
+              onPressed: _contactKijiweAdmin,
               tooltip: 'Contact Kijiwe Admin',
             ),
-        ],
-      ),
+        ],      ),
       body: Column(
         children: [
           Expanded(
@@ -186,13 +185,14 @@ class _ChatScreenState extends State<ChatScreen> {
                 Expanded(
                   child: TextField(
                     controller: _messageController,
-                    decoration: appInputDecoration(hintText: 'Type a message...'),
-                    textCapitalization: TextCapitalization.sentences,
+                    enabled: widget.isChatActive,
+                    decoration: appInputDecoration(hintText: widget.isChatActive ? 'Type a message...' : 'Chat is disabled for this ride.'),
+                    onSubmitted: (_) => _sendMessage(),
                   ),
                 ),
                 IconButton(
                   icon: Icon(Icons.send, color: theme.colorScheme.primary),
-                  onPressed: _sendMessage,
+                  onPressed: widget.isChatActive ? _sendMessage : null,
                 ),
               ],
             ),
@@ -263,6 +263,56 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
             ],
           ),
+      ),
+    );
+  }
+
+  Future<void> _contactKijiweAdmin() async {
+    // This logic assumes the recipient of the chat is the driver
+    final String driverId = widget.recipientId;
+    final String? adminId = await _firestoreService.getKijiweAdminIdForDriver(driverId);
+
+    if (!mounted) return;
+
+    if (adminId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not find Kijiwe admin for this driver.')),
+      );
+      return;
+    }
+
+    // Show a dialog to compose the message
+    final messageController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text("Message Kijiwe Admin"),
+        content: TextField(
+          controller: messageController,
+          decoration: appInputDecoration(hintText: "Your message..."),
+          maxLines: 3,
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text("Cancel")),
+          ElevatedButton(
+            onPressed: () async {
+              final text = messageController.text.trim();
+              if (text.isNotEmpty) {
+                // Send the message with the current user's ID but a special role
+                // to distinguish it in the chat UI.
+                await FirebaseFirestore.instance.collection('rideChats').doc(widget.rideRequestId).collection('messages').add({
+                  'senderId': _currentUserId,
+                  'senderRole': 'KijiweAdmin', // This indicates it's a message *to* the admin, but we'll style it as if from them for clarity
+                  'text': text,
+                  'timestamp': FieldValue.serverTimestamp(),
+                  'isRead': false,
+                });
+                Navigator.pop(dialogContext);
+              }
+            },
+            child: const Text("Send"),
+          ),
+        ],
       ),
     );
   }
