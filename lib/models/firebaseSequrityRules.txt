@@ -120,5 +120,28 @@ service cloud.firestore {
         )
       );
     }
+
+    // Rules for ride chats
+    match /rideChats/{rideRequestId}/messages/{messageId} {
+      // Allow read/create if user is the customer or the assigned driver for this ride.
+      // This ensures only participants of a ride can access its chat.
+      allow read, create: if request.auth != null && (
+        get(/databases/$(database)/documents/rideRequests/$(rideRequestId)).data.customerId == request.auth.uid ||
+        get(/databases/$(database)/documents/rideRequests/$(rideRequestId)).data.driverId == request.auth.uid
+      ) ||
+      // Allow Kijiwe admin to create messages (restrict to admin of driver's kijiwe)
+      (
+        request.auth != null &&
+        request.resource.data.senderRole == "KijiweAdmin" &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "Admin" &&
+        getKijiweAdminIdForDriver(get(/databases/$(database)/documents/rideRequests/$(rideRequestId)).data.driverId) == request.auth.uid
+      );
+      // Prevent updates and deletes for chat history integrity.
+      allow update, delete: if false;
+    }
+
+    function getKijiweAdminIdForDriver(driverId) {
+        return get(/databases/$(database)/documents/users/$(driverId)).data.driverProfile.kijiweId == null ? null : get(/databases/$(database)/documents/kijiwe/$(get(/databases/$(database)/documents/users/$(driverId)).data.driverProfile.kijiweId)).data.adminId
+    }
   }
 }
