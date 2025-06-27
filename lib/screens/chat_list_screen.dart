@@ -4,7 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/Ride_Request_Model.dart';
 import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
-import 'chat_screen.dart';
+import '../widgets/chat_list_item.dart';
 import '../utils/ui_utils.dart'; // For styling
 
 class ChatListScreen extends StatefulWidget {
@@ -64,7 +64,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Active Chats'),
+        title: const Text('Chats'),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -80,17 +80,17 @@ class _ChatListScreenState extends State<ChatListScreen> {
                       return Center(child: Text('Error: ${snapshot.error}'));
                     }
                     if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                      return const Center(
+                      return Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.chat_bubble_outline, size: 60, color: Colors.grey),
+                            Icon(Icons.chat_bubble_outline, size: 60, color: Theme.of(context).hintColor),
                             verticalSpaceMedium,
-                            Text(
+                            const Text(
                               'No active chats',
                               style: TextStyle(fontSize: 18, color: Colors.grey),
                             ),
-                            Text(
+                            const Text(
                               'Chats for active rides will appear here.',
                               style: TextStyle(color: Colors.grey),
                             ),
@@ -99,53 +99,55 @@ class _ChatListScreenState extends State<ChatListScreen> {
                       );
                     }
 
-                    final activeRides = snapshot.data!;
+                    final allRides = snapshot.data!;
+                    final activeChats = allRides.where((ride) => ['accepted', 'goingToPickup', 'arrivedAtPickup', 'onRide'].contains(ride.status)).toList();
+                    final pastChats = allRides.where((ride) => ['completed', 'cancelled_by_customer', 'cancelled_by_driver'].contains(ride.status)).toList();
 
-                    return ListView.builder(
-                      itemCount: activeRides.length,
-                      itemBuilder: (context, index) {
-                        final ride = activeRides[index];
-                        final isDriver = _currentUserRole == 'Driver';
-                        
-                        final recipientId = isDriver ? ride.customerId : ride.driverId;
-                        final recipientName = isDriver ? ride.customerName : ride.driverName;
-                        final recipientImageUrl = isDriver ? ride.customerProfileImageUrl : ride.driverProfileImageUrl;
-                        
-                        // A ride might be accepted before driver details are fully denormalized.
-                        if (recipientId == null || recipientName == null) {
-                          return const ListTile(
-                            leading: CircleAvatar(child: Icon(Icons.person)),
-                            title: Text("Loading chat..."),
-                            subtitle: Text("Ride accepted"),
-                          );
-                        }
-
-                        return ListTile(
-                          leading: CircleAvatar(
-                            backgroundImage: recipientImageUrl != null && recipientImageUrl.isNotEmpty
-                                ? NetworkImage(recipientImageUrl)
-                                : null,
-                            child: recipientImageUrl == null || recipientImageUrl.isEmpty
-                                ? const Icon(Icons.person)
-                                : null
+                    return CustomScrollView(
+                      slivers: [
+                        if (activeChats.isNotEmpty) ...[
+                          SliverToBoxAdapter(
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                              child: Text('Active', style: Theme.of(context).textTheme.titleLarge),
+                            ),
                           ),
-                          title: Text(recipientName),
-                          subtitle: Text('Ride to: ${ride.dropoffAddressName ?? 'Destination'}'),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => ChatScreen(
-                                  rideRequestId: ride.id!,
-                                  recipientId: recipientId,
-                                  recipientName: recipientName,
-                                ),
-                              ),
-                            );
-                          },
-                        );
-                      },
+                          SliverList(
+                            delegate: SliverChildBuilderDelegate(
+                              (context, index) {
+                                final ride = activeChats[index];
+                                return ChatListItem(
+                                  ride: ride,
+                                  currentUserId: _currentUserId!,
+                                  currentUserRole: _currentUserRole!,
+                                );
+                              },
+                              childCount: activeChats.length,
+                            ),
+                          ),
+                        ],
+                        if (pastChats.isNotEmpty) ...[
+                          SliverToBoxAdapter(
+                            child: Padding(
+                              padding: EdgeInsets.fromLTRB(16, activeChats.isNotEmpty ? 24 : 16, 16, 8),
+                              child: Text('Past', style: Theme.of(context).textTheme.titleLarge),
+                            ),
+                          ),
+                          SliverList(
+                            delegate: SliverChildBuilderDelegate(
+                              (context, index) {
+                                final ride = pastChats[index];
+                                return ChatListItem(
+                                  ride: ride,
+                                  currentUserId: _currentUserId!,
+                                  currentUserRole: _currentUserRole!,
+                                );
+                              },
+                              childCount: pastChats.length,
+                            ),
+                          ),
+                        ],
+                      ],
                     );
                   },
                 ),
