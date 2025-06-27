@@ -62,7 +62,7 @@ class RideRequestProvider extends ChangeNotifier {
       throw Exception('User profile not found');
     }
 
-    // Fetch customer details for denormalization
+    // Fetch Customer details for denormalization
     String customerGender = userModel.gender ?? 'Unknown';
     int? customerAge;
     if (userModel.dob != null) {
@@ -77,7 +77,7 @@ class RideRequestProvider extends ChangeNotifier {
     }
     String customerAgeRange = (customerAge != null && customerAge >=0) ? '${(customerAge ~/ 10) * 10}s' : 'Unknown';
 
-    // Calculate customer's average rating (handling potential nulls)
+    // Calculate Customer's average rating (handling potential nulls)
     final customerProfile = userModel.customerProfile;
     double averageRating = 0.0; // Default value
     if (customerProfile != null) {
@@ -88,7 +88,7 @@ class RideRequestProvider extends ChangeNotifier {
       }
     }
 
-    // Prepare a formatted customer details string
+    // Prepare a formatted Customer details string
     List<String> detailsParts = [];
     if (customerGender != 'Unknown') {
       detailsParts.add(customerGender); // Just the value
@@ -156,8 +156,8 @@ class RideRequestProvider extends ChangeNotifier {
       customerDetails: formattedCustomerDetails, // Include formatted details
       customerNoteToDriver: customerNote, // Store the note in the ride request document
       estimatedDistanceKm: estimatedDistanceKm,
-      // estimatedFare: estimatedFare, // This field in model is for FCM estimate to driver
-      customerCalculatedEstimatedFare: estimatedFare, // Save customer's app calculated estimate
+      // estimatedFare: estimatedFare, // This field in model is for FCM estimate to Driver
+      customerCalculatedEstimatedFare: estimatedFare, // Save Customer's app calculated estimate
       estimatedDurationMinutes: estimatedDurationMinutes,
     );
 
@@ -168,7 +168,7 @@ class RideRequestProvider extends ChangeNotifier {
       rideRequestData
     );
 
-    // If a customer note was provided, add it as the first message in the chat
+    // If a Customer note was provided, add it as the first message in the chat
     if (customerNote != null && customerNote.isNotEmpty) {
       try {
         await FirebaseFirestore.instance
@@ -182,19 +182,19 @@ class RideRequestProvider extends ChangeNotifier {
           'timestamp': FieldValue.serverTimestamp(),
           'isRead': false,
         });
-        debugPrint("RideRequestProvider: Initial customer note added to chat for ride $rideRequestId");
+        debugPrint("RideRequestProvider: Initial Customer note added to chat for ride $rideRequestId");
       } catch (e) {
-        debugPrint("RideRequestProvider: Error adding initial customer note to chat: $e");
+        debugPrint("RideRequestProvider: Error adding initial Customer note to chat: $e");
         // Non-fatal error, ride request is already created.
       }
     }
 
-    // Increment customer's requestedRidesCount
+    // Increment Customer's requestedRidesCount
     if (currentUser.uid.isNotEmpty) {
       await FirebaseFirestore.instance.collection('users').doc(currentUser.uid).update({
         'customerProfile.requestedRidesCount': FieldValue.increment(1),
       }).catchError((e) {
-        debugPrint("Error incrementing requestedRidesCount for customer ${currentUser.uid}: $e");
+        debugPrint("Error incrementing requestedRidesCount for Customer ${currentUser.uid}: $e");
         // Decide if this error should be rethrown or just logged
       });
     }
@@ -209,7 +209,7 @@ class RideRequestProvider extends ChangeNotifier {
     await _firestoreService.updateRideRequestStatus(
       rideRequestId, 
       newStatus, // Use the newStatus parameter
-      driverId: driverId, // driverId is explicitly passed when a driver is involved
+      driverId: driverId, // driverId is explicitly passed when a Driver is involved
     );
     notifyListeners();
   }
@@ -226,7 +226,7 @@ class RideRequestProvider extends ChangeNotifier {
     final customerUserRef = FirebaseFirestore.instance.collection('users').doc(customer.uid);
 
     batch.update(rideRef, {'status': 'cancelled_by_customer'});
-    // Increment customer's cancelledByCustomerCount
+    // Increment Customer's cancelledByCustomerCount
     batch.update(customerUserRef, {'customerProfile.cancelledByCustomerCount': FieldValue.increment(1)});
 
     await batch.commit();
@@ -306,7 +306,7 @@ class RideRequestProvider extends ChangeNotifier {
   }
 
   // The rateUser method is now split.
-  // Driver rating customer is handled by DriverProvider via Cloud Function.
+  // Driver rating Customer is handled by DriverProvider via Cloud Function.
   Future<void> rateUser({
     required String rideId,
     required String ratedUserId, 
@@ -315,20 +315,20 @@ class RideRequestProvider extends ChangeNotifier {
     String? comment,
   }) async {
     // This method is now primarily for CUSTOMER rating a DRIVER.
-    // If a driver is rating a customer, that logic is in DriverProvider.
-    if (ratedUserRole == 'customer') {
-      throw Exception("Driver rating customer is handled by DriverProvider.");
+    // If a Driver is rating a Customer, that logic is in DriverProvider.
+    if (ratedUserRole == 'Customer') {
+      throw Exception("Driver rating Customer is handled by DriverProvider.");
     }
     final raterUserId = authService.currentUser?.uid;
     if (raterUserId == null) throw Exception("Rater not authenticated");
 
     final rideRequestRef = FirebaseFirestore.instance.collection('rideRequests').doc(rideId);
-    // final ratedUserRef = FirebaseFirestore.instance.collection('users').doc(ratedUserId); // REMOVE: Customer cannot update driver's profile directly
+    // final ratedUserRef = FirebaseFirestore.instance.collection('users').doc(ratedUserId); // REMOVE: Customer cannot update Driver's profile directly
 
     Map<String, dynamic> rideUpdateData = {};
     //Map<String, dynamic> userProfileUpdate = {};
 
-    if (ratedUserRole == 'driver') { // Customer is rating the driver
+    if (ratedUserRole == 'Driver') { // Customer is rating the Driver
       rideUpdateData['customerRatingToDriver'] = rating;
       if (comment != null && comment.isNotEmpty) {
         rideUpdateData['customerCommentToDriver'] = comment;
@@ -365,7 +365,7 @@ class RideRequestProvider extends ChangeNotifier {
     return Stream.value([]); // Return empty stream for unknown roles or if userId is null
   }
 
-  // Method to get scheduled rides for a customer
+  // Method to get scheduled rides for a Customer
   Stream<List<RideRequestModel>> getScheduledRides(String customerId) {
     // Assuming scheduled rides are only for customers for now
     return _firestoreService.getScheduledRidesForCustomer(customerId);
