@@ -7,11 +7,13 @@ import '../screens/chat_screen.dart'; // For navigation
 class ChatListItem extends StatefulWidget {
   final RideRequestModel ride;
   final String currentUserId;
+  final String currentUserRole;
 
   const ChatListItem({
     super.key,
     required this.ride,
     required this.currentUserId,
+    required this.currentUserRole,
   });
 
   @override
@@ -67,8 +69,10 @@ class _ChatListItemState extends State<ChatListItem> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final otherParticipantName = widget.ride.driverName ?? 'Driver';
-    final otherParticipantId = widget.ride.driverId;
+    final isDriver = widget.currentUserRole == 'Driver';
+    final otherParticipantName = isDriver ? widget.ride.customerName : widget.ride.driverName;
+    final otherParticipantId = isDriver ? widget.ride.customerId : widget.ride.driverId;
+    final otherParticipantImageUrl = isDriver ? widget.ride.customerProfileImageUrl : widget.ride.driverProfileImageUrl;
 
     String subtitleText = 'Ride to: ${widget.ride.dropoffAddressName ?? 'Destination'}';
     String lastMessageTime = '';
@@ -92,11 +96,14 @@ class _ChatListItemState extends State<ChatListItem> {
 
     return ListTile(
       leading: CircleAvatar(
-        backgroundColor: theme.colorScheme.primaryContainer,
-        child: Icon(Icons.person_outline, color: theme.colorScheme.onPrimaryContainer),
-        // TODO: Use ride.driverProfileImageUrl if available
+        backgroundImage: otherParticipantImageUrl != null && otherParticipantImageUrl.isNotEmpty
+            ? NetworkImage(otherParticipantImageUrl)
+            : null,
+        child: otherParticipantImageUrl == null || otherParticipantImageUrl.isEmpty
+            ? const Icon(Icons.person)
+            : null,
       ),
-      title: Text('Chat with $otherParticipantName'),
+      title: Text(otherParticipantName ?? (isDriver ? 'Customer' : 'Driver')),
       subtitle: Text(
         subtitleText,
         maxLines: 1,
@@ -116,13 +123,21 @@ class _ChatListItemState extends State<ChatListItem> {
       ),
       onTap: () {
         if (widget.ride.id != null && otherParticipantId != null) {
+          final bool isRideActiveForChat = ['accepted', 'goingToPickup', 'arrivedAtPickup', 'onRide'].contains(widget.ride.status);
+          // Allow contacting admin if ride is completed within the last 24 hours
+          final bool canContactAdmin = widget.ride.status == 'completed' &&
+              widget.ride.completedTime != null &&
+              DateTime.now().difference(widget.ride.completedTime!).inHours < 24;
+
           Navigator.push(
             context,
             MaterialPageRoute(
               builder: (context) => ChatScreen(
                 rideRequestId: widget.ride.id!,
                 recipientId: otherParticipantId,
-                recipientName: otherParticipantName,
+                recipientName: otherParticipantName ?? (isDriver ? 'Customer' : 'Driver'),
+                isChatActive: isRideActiveForChat,
+                canContactAdmin: canContactAdmin,
               ),
             ),
           );
