@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
-import '../services/auth_service.dart'; // To get current user's ID
-import '../utils/ui_utils.dart'; // For styling
-//import '../services/firestore_service.dart'; // For fetching user role
-import 'package:intl/intl.dart'; // For date formatting
+import '../services/auth_service.dart';
+import '../utils/ui_utils.dart';
+import 'package:intl/intl.dart';
 
 class ChatScreen extends StatefulWidget {
   final String rideRequestId;
@@ -25,24 +24,20 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  late String _currentUserId;
-  String? _currentUserRole; // To store the fetched role
+  String? _currentUserId;
+  String? _currentUserRole;
 
   @override
   void initState() {
     super.initState();
-    // Safely access currentUserId
     final authService = Provider.of<AuthService>(context, listen: false);
-    if (authService.currentUser?.uid != null) {
-      _currentUserId = authService.currentUser!.uid;
+    _currentUserId = authService.currentUser?.uid;
+
+    if (_currentUserId == null) {
+      debugPrint("ChatScreen: CRITICAL - Current user is null. Chat will not function.");
     } else {
-      // Fallback or error handling if user is not logged in.
-      // For a chat screen, this would ideally prevent the screen from loading
-      // or show an error message. For now, setting to an empty string.
-      _currentUserId = ''; 
-      debugPrint("ChatScreen: Error - Current user is null. Chat functionality might be impaired.");
+      _fetchCurrentUserRole();
     }
-    _fetchCurrentUserRole();
     // TODO: Implement logic to mark messages as read when screen is opened
   }
 
@@ -54,10 +49,8 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _fetchCurrentUserRole() async {
-    if (_currentUserId.isEmpty) return;
+    if (_currentUserId == null) return;
     try {
-      // Assuming FirestoreService has a method to get user data or role
-      // If not, we can directly query Firestore here.
       final userDoc = await FirebaseFirestore.instance.collection('users').doc(_currentUserId).get();
       if (userDoc.exists && userDoc.data() != null) {
         if (mounted) {
@@ -68,58 +61,85 @@ class _ChatScreenState extends State<ChatScreen> {
       }
     } catch (e) { debugPrint("ChatScreen: Error fetching user role: $e"); }
   }
+
   Future<void> _sendMessage() async {
-    if (_messageController.text.trim().isEmpty) return;
-    if (_currentUserId.isEmpty) {
-      // Prevent sending message if user ID is not available
+    final messageText = _messageController.text.trim();
+    if (messageText.isEmpty) return;
+
+    if (_currentUserId == null) {
       debugPrint("ChatScreen: Cannot send message, current user ID is not available.");
       return;
     }
+
     if (_currentUserRole == null) {
-      await _fetchCurrentUserRole(); // Attempt to fetch role if not already available
+      await _fetchCurrentUserRole();
       if (_currentUserRole == null) {
         debugPrint("ChatScreen: Cannot send message, user role is not available.");
-        // Optionally show a SnackBar to the user
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Could not send message. User role unknown.")));
         return;
       }
     }
-    final messageText = _messageController.text.trim();
+
     _messageController.clear();
 
-    await FirebaseFirestore.instance
-        .collection('rideChats')
-        .doc(widget.rideRequestId)
-        .collection('messages')
-        .add({
-      'senderId': _currentUserId,
-      'senderRole': _currentUserRole, // Use the fetched role
-      'text': messageText,
-      'timestamp': FieldValue.serverTimestamp(),
-      'isRead': false, // Initially false
-    });
+    try {
+      await FirebaseFirestore.instance
+          .collection('rideChats')
+          .doc(widget.rideRequestId)
+          .collection('messages')
+          .add({
+        'senderId': _currentUserId,
+        'senderRole': _currentUserRole,
+        'text': messageText,
+        'timestamp': FieldValue.serverTimestamp(),
+        'isRead': false,
+      });
 
-    // TODO: Trigger FCM notification to the recipient
-
-    // Scroll to bottom after sending
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      // Check mounted before interacting with scrollController
-      if (mounted && _scrollController.hasClients) { 
-        _scrollController.animateTo(
-          _scrollController.position.minScrollExtent, // Correct for reversed list
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
+      // Scroll to bottom after sending
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _scrollController.hasClients) {
+          _scrollController.animateTo(
+            _scrollController.position.minScrollExtent,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          );
+        }
+      });
+    } catch (e) {
+      debugPrint("Error sending message: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to send message. Please check permissions and try again.')),
         );
       }
-    });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+
+    if (_currentUserId == null) {
+      return Scaffold(appBar: AppBar(), body: const Center(child: Text("Error: User not authenticated.")));
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: Text('Chat with ${widget.recipientName}'),
+        actions: [
+          if (_currentUserRole == 'Customer')
+            IconButton(
+              icon: const Icon(Icons.support_agent_outlined),
+              onPressed: () {
+                // This is where you would implement the logic from the previous suggestion
+                // to get the Kijiwe Admin ID and show a dialog to send a message.
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Contact Kijiwe Admin - Not implemented yet.')),
+                );
+              },
+              tooltip: 'Contact Kijiwe Admin',
+            ),
+        ],
       ),
       body: Column(
         children: [
@@ -129,7 +149,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   .collection('rideChats')
                   .doc(widget.rideRequestId)
                   .collection('messages')
-                  .orderBy('timestamp', descending: true) // Show newest messages at the bottom
+                  .orderBy('timestamp', descending: true)
                   .snapshots(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
@@ -144,30 +164,21 @@ class _ChatScreenState extends State<ChatScreen> {
 
                 final messages = snapshot.data!.docs;
 
-                // Scroll to bottom when new messages arrive or view is built
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  // Check mounted before interacting with scrollController
-                  if (mounted && _scrollController.hasClients) { 
-                    _scrollController.jumpTo(_scrollController.position.minScrollExtent); // Correct for reversed list
-                  }
-                });
-
                 return ListView.builder(
                   controller: _scrollController,
-                  reverse: true, // To keep input field at bottom and messages loading from bottom-up
+                  reverse: true,
                   itemCount: messages.length,
                   itemBuilder: (context, index) {
                     final messageData = messages[index].data() as Map<String, dynamic>;
                     final bool isMe = messageData['senderId'] == _currentUserId;
-                    return _buildMessageItem(
-                      messageData['text'] as String? ?? '',
-                      messageData['timestamp'] as Timestamp?,
-                      isMe,
-                    );
+                    final bool isKijiweAdmin = messageData['senderRole'] == 'KijiweAdmin';
+
+                    return _buildMessageItem(messageData, isMe, isKijiweAdmin);
                   },
                 );
               },
-            ),          ),
+            ),
+          ),
           Padding(
             padding: const EdgeInsets.all(8.0),
             child: Row(
@@ -191,49 +202,67 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget _buildMessageItem(String text, Timestamp? timestamp, bool isMe) {
+  Widget _buildMessageItem(Map<String, dynamic> messageData, bool isMe, bool isKijiweAdmin) {
     final theme = Theme.of(context);
     final timeFormat = DateFormat('hh:mm a'); // e.g., 10:30 AM
-    final String displayTime = timestamp != null ? timeFormat.format(timestamp.toDate()) : '';
 
-    return Align(
-      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+    final text = messageData['text'] as String? ?? '';
+    final timestamp = messageData['timestamp'] as Timestamp?;
+    final displayTime = timestamp != null ? timeFormat.format(timestamp.toDate()) : '';
+
+    Color bubbleColor;
+    Color textColor;
+    Alignment alignment;
+    String? senderLabel;
+
+    if (isKijiweAdmin) {
+      bubbleColor = theme.colorScheme.tertiaryContainer;
+      textColor = theme.colorScheme.onTertiaryContainer;
+      alignment = Alignment.centerLeft;
+      senderLabel = "Kijiwe Admin";
+    } else if (isMe) {
+      bubbleColor = theme.colorScheme.primary;
+      textColor = theme.colorScheme.onPrimary;
+      alignment = Alignment.centerRight;
+    } else {
+      bubbleColor = theme.colorScheme.surfaceVariant;
+      textColor = theme.colorScheme.onSurfaceVariant;
+      alignment = Alignment.centerLeft;
+    }
+
+    return Container(
+      alignment: alignment,
       child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
+        margin: const EdgeInsets.symmetric(vertical: 5, horizontal: 10),
         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
         decoration: BoxDecoration(
-          color: isMe ? theme.colorScheme.primary : theme.colorScheme.secondaryContainer,
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(12),
-            topRight: const Radius.circular(12),
-            bottomLeft: isMe ? const Radius.circular(12) : const Radius.circular(0),
-            bottomRight: isMe ? const Radius.circular(0) : const Radius.circular(12),
-          ),
+          color: bubbleColor,
+          borderRadius: BorderRadius.circular(16),
         ),
         child: Column(
-          crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              text,
-              style: TextStyle(
-                color: isMe ? theme.colorScheme.onPrimary : theme.colorScheme.onSecondaryContainer,
-              ),
-            ),
-            if (displayTime.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Text(
-                displayTime,
-                style: TextStyle(
-                  fontSize: 10,
-                  color: isMe
-                      ? theme.colorScheme.onPrimary.withOpacity(0.7)
-                      : theme.colorScheme.onSecondaryContainer.withOpacity(0.7),
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (senderLabel != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4.0),
+                  child: Text(
+                    senderLabel,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: textColor.withOpacity(0.8),
+                    ),
+                  ),
                 ),
-              ),
+              Text(text, style: TextStyle(color: textColor, fontSize: 16)),
+              if (displayTime.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4.0),
+                  child: Text(displayTime, style: TextStyle(fontSize: 10, color: textColor.withOpacity(0.7))),
+                ),
             ],
-          ],
-        ),
+          ),
       ),
     );
   }
