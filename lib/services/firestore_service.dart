@@ -339,4 +339,14 @@ Stream<DocumentSnapshot> getKijiweQueueStream(String kijiweId) {
   CollectionReference<Map<String, dynamic>> getKijiweCollectionRef() {
     return _firestore.collection('kijiwe');
   }
+  // Method to get adminId of a driver's Kijiwe
+  Future<String?> getKijiweAdminIdForDriver(String driverId) async {
+    final driverDoc = await _firestore.collection('users').doc(driverId).get();
+    final kijiweId = driverDoc.data()?['driverProfile']?['kijiweId'] as String?;
+    if (kijiweId != null) {
+      final kijiweDoc = await _firestore.collection('kijiwe').doc(kijiweId).get();
+      return kijiweDoc.data()?['adminId'] as String?;
+    }
+    return null;
+  }
 }
