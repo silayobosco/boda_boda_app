@@ -74,6 +74,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
   String? _activeRideRequestId;
   RideRequestModel? _activeRideRequestDetails; // This will be updated by the stream
   UserModel? _assignedDriverModel;
+  StreamSubscription? _activeRideSubscription;
   StreamSubscription? _driverLocationSubscription;
   BitmapDescriptor? _driverIcon; // For the driver's marker
   bool _isDriverIconLoaded = false;
@@ -84,6 +85,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
   double? _estimatedFare; // Declare _estimatedFare
   Map<String, dynamic>? _fareConfig; // Declare _fareConfig
   final TextEditingController _customerNoteController = TextEditingController(); // For the initial note
+  String? _processedCompletedRideId; // Flag to prevent re-processing a completed ride
 
   @override
   bool get wantKeepAlive => true;
@@ -702,6 +704,58 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
     _calculateEstimatedFare(); // Recalculate fare for the newly selected route
   }
 
+  void _listenToActiveRide(String rideId) {
+    _stopListeningToActiveRide(); // Cancel any previous subscription first
+    final rideRequestProvider = Provider.of<RideRequestProvider>(context, listen: false);
+
+    _activeRideSubscription = rideRequestProvider.getRideStream(rideId).listen((rideDetails) {
+      if (!mounted) return;
+
+      // Update the main ride details state
+      setState(() {
+        _activeRideRequestDetails = rideDetails;
+      });
+
+      if (rideDetails == null) {
+        // Ride document was deleted or an error occurred.
+        _resetUIForNewTrip();
+        return;
+      }
+
+      final driverId = rideDetails.driverId;
+      final rideStatus = rideDetails.status;
+
+      // Handle driver assignment and location tracking
+      if (driverId != null) {
+        if (['accepted', 'goingToPickup', 'arrivedAtPickup', 'onRide'].contains(rideStatus)) {
+          if (_isFindingDriver) setState(() => _isFindingDriver = false);
+          if (_driverLocationSubscription == null || _assignedDriverModel?.uid != driverId) {
+            setState(() => _assignedDriverModel = UserModel(uid: driverId));
+            _startListeningToDriverLocation(driverId);
+          }
+        }
+      } else {
+        if (_driverLocationSubscription != null) {
+          _stopListeningToDriverLocation();
+          setState(() => _assignedDriverModel = null);
+        }
+      }
+
+      // Handle ride completion flow
+      if ((rideStatus == 'completed' || rideStatus.contains('cancelled') || rideStatus == 'no_drivers_available') &&
+          rideId == _activeRideRequestId && rideId != _processedCompletedRideId) {
+        _processedCompletedRideId = rideId;
+        final endMessage = _getRideEndMessage(rideStatus);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(endMessage)));
+        if (rideStatus == 'completed' && rideDetails.driverId != null) {
+          _showRateDriverDialog(rideId, rideDetails.driverId!);
+        } else {
+          _resetUIForNewTrip();
+        }
+      }
+    });
+  }
+
   // Update polylines based on selected route
   void _startListeningToDriverLocation(String driverId) {
     _driverLocationSubscription?.cancel(); // Cancel any previous subscription
@@ -908,7 +962,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
         ));
       }
       
-      _drawRoute();
+      // _drawRoute(); // REMOVED: This will be called by the dialog's onPressed handler.
     });
     _checkRouteReady();
   }
@@ -1019,6 +1073,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
       if (mounted) { // Set finding driver true just before the async call
         setState(() => _isFindingDriver = true);
       }
+      _processedCompletedRideId = null; // Reset the flag for a new ride
  // Unused variable
 
       String rideId = await rideRequestProvider.createRideRequest(
@@ -1041,17 +1096,11 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
       // After await, check if the widget is still mounted before using context or calling setState.
       if (mounted) { 
         setState(() {
-          _activeRideRequestId = rideId; // Now _activeRideRequestId is set
-          _isFindingDriver = true;      // And _isFindingDriver is also true
-                                        // The StreamBuilder will now listen to this rideId
+          _activeRideRequestId = rideId;
+          _isFindingDriver = true;
         });
-        // Use the captured context if showing a SnackBar immediately after success.
-        // However, it's often better to let the StreamBuilder update the UI,
-        // and show SnackBars based on those state changes if needed.
-        // For now, let's assume the "Finding a driver..." state is clear enough from the UI.
-        // ScaffoldMessenger.of(currentContext).showSnackBar(
-        //   const SnackBar(content: Text('Ride request created. Finding a driver...')),
-        // );
+        // Start listening to the ride document for real-time updates.
+        _listenToActiveRide(rideId);
       }
     } catch (e) {
       // After await (in catch), check if the widget is still mounted.
@@ -1393,7 +1442,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
               child: const Text('Plan Another Ride'),
               onPressed: () {
                 Navigator.of(dialogContext).pop();
-                _clearAndResetForm();
+                _resetUIForNewTrip();
               },
             ),
             TextButton(
@@ -1404,7 +1453,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                   context,
                   MaterialPageRoute(builder: (context) => const ScheduledRidesListWidget()),
                 );
-                _clearAndResetForm(); // Also clear form after navigating
+                _resetUIForNewTrip(); // Also clear form after navigating
               },
             ),
             TextButton(
@@ -1420,7 +1469,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
     );
   }
 
-  void _clearAndResetForm() {
+  void _resetUIForNewTrip() {
     setState(() {
       _pickupController.clear();
       _destinationController.clear();
@@ -1442,6 +1491,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
       _pickupSuggestions = [];
       _destinationSuggestions = [];
       _stopSuggestions = [];
+      // _processedCompletedRideId = null; // DO NOT reset this here. It's reset when a new ride is created.
 
       // Reset editing states
       _editingPickup = false;
@@ -1451,6 +1501,14 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
       _pickupFocusNode.unfocus();
       _destinationFocusNode.unfocus();
       _stopFocusNode.unfocus();
+
+      // Also reset the active ride state
+      _activeRideRequestId = null;
+      _activeRideRequestDetails = null;
+      _assignedDriverModel = null;
+      _isFindingDriver = false;
+      _stopListeningToActiveRide(); // Cancel the active ride subscription
+      _stopListeningToDriverLocation();
     });
     // Re-initialize pickup location and collapse sheet to default
     _setupInitialLocationAndMap();
@@ -1513,7 +1571,6 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
   Widget build(BuildContext context) {
     super.build(context);
     final locationProvider = Provider.of<LocationProvider>(context);
-    final rideRequestProvider = Provider.of<RideRequestProvider>(context);
 
     return Scaffold(
       resizeToAvoidBottomInset: true,
@@ -1547,102 +1604,10 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
               bottom: MediaQuery.of(context).size.height * _currentSheetSize,
             ),
           ),
-          // Listen to the active ride request if its ID is known
-          if (_activeRideRequestId != null)
-            // Use a key to preserve the stream builder state
-            StreamBuilder<RideRequestModel?>(
-              key: ValueKey('ride_stream_$_activeRideRequestId'),
-              stream: rideRequestProvider.getRideStream(_activeRideRequestId!),
-              builder: (context, snapshot) {
-                if (snapshot.hasData && snapshot.data != null) {
-                  _activeRideRequestDetails = snapshot.data;
-                  final rideStatus = _activeRideRequestDetails!.status;
-                  final driverId = _activeRideRequestDetails!.driverId;
-
-                  if (driverId != null) {
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      if (mounted) { // Check mounted inside the callback
-                        if (rideStatus == 'pending_driver_acceptance') {
-                          if (!_isFindingDriver) {
-                            setState(() => _isFindingDriver = true);
-                          }
-                        } else if (rideStatus == 'accepted' || rideStatus == 'goingToPickup' || rideStatus == 'arrivedAtPickup' || rideStatus == 'onRide') {
-                          if (_isFindingDriver) {
-                            setState(() => _isFindingDriver = false);
-                          }
-                          if (_driverLocationSubscription == null || _assignedDriverModel?.uid != driverId) {
-                            _assignedDriverModel = UserModel(uid: driverId);
-                            _startListeningToDriverLocation(driverId);
-                          }
-                        }
-                      }
-                    });
-                  } else if (driverId == null && _assignedDriverModel != null) { // Driver was unassigned
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      if (mounted) {
-                        setState(() {
-                          _isFindingDriver = false;
-                          _assignedDriverModel = null;
-                          _stopListeningToDriverLocation();
-                          // If the ride was cancelled by driver before pickup,
-                          // and you want to fully reset, you might clear _activeRideRequestId here too.
-                          // For now, assuming the stream for the ride itself will eventually
-                          // lead to the 'completed' or 'cancelled' block below.
-                        });
-                      }                   
-                    });
-                  }
-                  // Handle other status updates like 'arrived', 'onRide', 'completed'
-                  // For example, if status is 'completed', reset _activeRideRequestId
-                  if (_activeRideRequestDetails!.status == 'completed' || 
-                      _activeRideRequestDetails!.status.contains('cancelled') || // More generic cancel check
-                      _activeRideRequestDetails!.status == 'no_drivers_available') {
-                        final String? prevStatus = _activeRideRequestDetails!.status; // Capture status before potential reset
-                        WidgetsBinding.instance.addPostFrameCallback((_) {
-                          final String endMessage = _getRideEndMessage(_activeRideRequestDetails!.status);
-                          if (mounted) {
-                            final String? rideIdForRating = _activeRideRequestDetails?.id; // Capture before nulling
-                            final String? driverIdForRating = _activeRideRequestDetails?.driverId; // Capture before nulling
-
-                            setState(() {
-                              _activeRideRequestId = null;
-                              _activeRideRequestDetails = null;
-                              _assignedDriverModel = null;
-                              _isFindingDriver = false;
-                              _stopListeningToDriverLocation();
-                              _polylines.clear(); // Clear route polylines
-                              _markers.removeWhere((m) => m.markerId.value == 'driver_active_location');
-                            });
-                            // After resetting UI, if ride was completed, show rating dialog
-                            if (prevStatus == 'completed' && rideIdForRating != null && driverIdForRating != null) {
-                               _showRateDriverDialog(rideIdForRating, driverIdForRating);
-                            }
-                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(endMessage)));
-                          }
-                        });
-                      }
-                } else if (snapshot.connectionState == ConnectionState.active && snapshot.data == null && _activeRideRequestId != null) {
-                  // Stream is active, but data is null (e.g. document deleted)
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ride details are no longer available.')));
-                      setState(() {
-                        _activeRideRequestId = null;
-                        _activeRideRequestDetails = null;
-                        _assignedDriverModel = null;
-                        _isFindingDriver = false;
-                        _stopListeningToDriverLocation();
-                        _polylines.clear();
-                        _markers.removeWhere((m) => m.markerId.value == 'driver_active_location');
-                      });
-                    }
-                  });
-                }
-                return _buildRouteSheet(); // Always build the sheet, its content will change
-              })
-          else
-            // Use a key to preserve the route sheet state when no active ride
-            _buildRouteSheet(key: const ValueKey('route_planning_sheet')),
+          // The DraggableScrollableSheet is now built directly, using the state
+          // variables (_activeRideRequestDetails, _isFindingDriver) that are
+          // updated by our new _listenToActiveRide subscription.
+          _buildRouteSheet(key: const ValueKey('main_sheet')),
 
           // Custom Map Controls (Recenter and Zoom)
           Positioned(
@@ -2587,7 +2552,6 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                   onPressed: () async {
                     final rideProvider = Provider.of<RideRequestProvider>(context, listen: false);
                     final navigator = Navigator.of(dialogContext);
-                    // Capture the ScaffoldMessenger before the async gap
                     final scaffoldMessenger = ScaffoldMessenger.of(context);
 
                     if (ratingValue > 0) {
@@ -2595,23 +2559,21 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                         await rideProvider.rateUser(
                           rideId: rideId,
                           ratedUserId: driverId,
-                          ratedUserRole: 'Driver', // Ensure role matches what's in Firestore
+                          ratedUserRole: 'Driver',
                           rating: ratingValue,
                           comment: commentController.text.trim().isNotEmpty ? commentController.text.trim() : null,
                         );
                         
-                        // After await, check if CustomerHome is still mounted
                         if (!mounted) return;
 
-                        if (navigator.canPop()) { // Pop the dialog
+                        // Pop the dialog before showing other UI
+                        if (navigator.canPop()) {
                            navigator.pop();
                         }
 
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Rating submitted! Thank you.')));
-                        debugPrint("CustomerHome: Attempting to show post-ride completion dialog."); 
+                        scaffoldMessenger.showSnackBar(const SnackBar(content: Text('Rating submitted! Thank you.')));
                         _showPostRideCompletionDialog();
                       } catch (e) {
-                        // After await, check if CustomerHome is still mounted
                         if (!mounted) return;
 
                         if (navigator.canPop()) { 
@@ -2620,7 +2582,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                         scaffoldMessenger.showSnackBar(SnackBar(content: Text('Failed to submit rating: $e')));
                       }
                     } else {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select a star rating.')));
+                      scaffoldMessenger.showSnackBar(const SnackBar(content: Text('Please select a star rating.')));
                     }
                   },
                 ),
@@ -2631,20 +2593,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
       },
     );
   }
-  @override
-  void dispose() {
-    _sheetController.dispose();
-    _destinationFocusNode.dispose();
-    _pickupFocusNode.dispose();
-    _customerNoteController.dispose(); // Dispose the new controller
-    _stopFocusNode.dispose();
-    _driverLocationSubscription?.cancel();
-    for (var stop in _stops) { // Dispose resources for each stop
-      stop.dispose();
-    }
-    super.dispose();
-  }
-
+  
   void _showPostRideCompletionDialog() {
     showDialog(
       context: context,
@@ -2658,6 +2607,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
               child: const Text('Return Trip'),
               onPressed: () async { // Make onPressed async
                 Navigator.of(dialogContext).pop();
+                _resetActiveRideStateOnly(); // Reset the ride state but keep locations
                 if (_stops.isNotEmpty) {
                   // Show another dialog to ask about stops
                   bool? clearStops = await showDialog<bool>(
@@ -2694,6 +2644,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
               child: const Text('View Ride History'),
               onPressed: () {
                 Navigator.of(dialogContext).pop();
+                _resetUIForNewTrip(); // Reset the form before navigating
                 Navigator.push(context, MaterialPageRoute(builder: (context) => const RidesScreen(role: 'Customer')));
               },
             ),
@@ -2701,12 +2652,48 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
               child: const Text('Thanks'),
               onPressed: () {
                 Navigator.of(dialogContext).pop();
-                _clearAndResetForm(); // Reset the form
+                _resetUIForNewTrip(); // Reset the form
               },
             ),
           ],
         );
       },
     );
+  }
+
+  void _stopListeningToActiveRide() {
+    _activeRideSubscription?.cancel();
+    _activeRideSubscription = null;
+  }
+
+  // Resets only the active ride state, keeping locations for a return trip.
+  void _resetActiveRideStateOnly() {
+    setState(() {
+      _activeRideRequestId = null;
+      _activeRideRequestDetails = null;
+      _assignedDriverModel = null;
+      _isFindingDriver = false;
+      _stopListeningToActiveRide();
+      _stopListeningToDriverLocation();
+      _polylines.clear();
+      _markers.removeWhere((m) => m.markerId.value == 'driver_active_location');
+      _routeReady = false;
+      _estimatedFare = null;
+    });
+  }
+
+@override
+  void dispose() {
+    _sheetController.dispose();
+    _destinationFocusNode.dispose();
+    _pickupFocusNode.dispose();
+    _customerNoteController.dispose(); // Dispose the new controller
+    _stopFocusNode.dispose();
+    _driverLocationSubscription?.cancel();
+    _stopListeningToActiveRide(); // Ensure subscription is cancelled on dispose
+    for (var stop in _stops) { // Dispose resources for each stop
+      stop.dispose();
+    }
+    super.dispose();
   }
 }
