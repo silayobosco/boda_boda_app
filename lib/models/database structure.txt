@@ -13,8 +13,7 @@
     - unionId: String
     - position: Map  // For GeoFlutterFirePlus
         - geohash: String
-        // - geoPoint: GeoPoint // This is part of the geohash data structure from GeoFlutterFire
-        - geoPoint: GeoPoint
+        - geopoint: GeoPoint // Note: field name is all lowercase
     //TODO- Rules
     - queue: Array of Strings // driverIds
 
