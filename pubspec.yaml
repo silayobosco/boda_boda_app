@@ -40,7 +40,7 @@ dependencies:
   firebase_messaging: ^15.2.4
   firebase_storage: ^12.4.4
   firebase_analytics: ^11.4.5
-  google_sign_in: ^6.3.0
+  google_sign_in: ^6.1.5 # Google Sign In package 6.1.5
   intl: ^0.20.2
   image_picker: ^1.1.2
   cupertino_icons: ^1.0.8
@@ -91,6 +91,8 @@ flutter:
     - assets/google_logo.png
     - assets/icon.png
     - assets/boda_marker.png
+    - assets/kijiwe_marker.png
+    - assets/home_kijiwe_marker.png
    
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
