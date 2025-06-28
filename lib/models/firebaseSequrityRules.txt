@@ -5,10 +5,12 @@ service cloud.firestore {
 
     // Rules for the 'users' collection
     match /users/{userId} {
-      // Allow users to read, update, and delete their own document.
-      // Allow any authenticated user to create their user document (e.g., during signup).
-      allow read, update, delete: if request.auth != null && request.auth.uid == userId;
-      allow create: if request.auth != null; // For initial signup, or can be request.auth.uid == userId
+      // Allow any authenticated user to read user profiles (e.g., for driver location).
+      allow read: if request.auth != null;
+      // Allow users to create their own document during signup.
+      allow create: if request.auth != null;
+      // Only allow users to update or delete their own document.
+      allow update, delete: if request.auth != null && request.auth.uid == userId;
     }
 
     // Rules for the 'rideRequests' collection
@@ -120,8 +122,7 @@ service cloud.firestore {
         )
       );
     }
-
-    // Rules for ride chats
+// Rules for ride chats
     match /rideChats/{rideRequestId}/messages/{messageId} {
       // Allow read/create if user is the customer or the assigned driver for this ride.
       // This ensures only participants of a ride can access its chat.
