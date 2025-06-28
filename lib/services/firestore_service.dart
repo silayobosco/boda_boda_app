@@ -1,7 +1,7 @@
 import 'package:boda_boda/models/Ride_Request_Model.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/user_model.dart'; // Import the UserModel class
-import 'package:latlong2/latlong.dart';
+import 'package:latlong2/latlong.dart' as ll;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:geoflutterfire3/geoflutterfire3.dart';
@@ -170,7 +170,7 @@ Future<String> createRideRequest(RideRequestModel rideRequest) async {
 
   // User Location Updates
 
-  Future<void> updateUserLocation(String userId, LatLng location) async {
+  Future<void> updateUserLocation(String userId, ll.LatLng location) async {
     try {
       // This updates the general user location.
       await _firestore.collection('users').doc(userId).update({
@@ -333,6 +333,19 @@ Stream<DocumentSnapshot> getKijiweQueueStream(String kijiweId) {
       debugPrint("Error fetching all kijiwes: $e");
       rethrow;
     }
+  }
+
+  // Get nearby Kijiwes using GeoFlutterFire
+  Stream<List<DocumentSnapshot>> getNearbyKijiwes(ll.LatLng center, double radiusInKm) {
+    final collectionRef = getKijiweCollectionRef();
+    final geoPointCenter = GeoPoint(center.latitude, center.longitude);
+
+    return geo.collection(collectionRef: collectionRef).within(
+          center: geo.point(latitude: geoPointCenter.latitude, longitude: geoPointCenter.longitude),
+          radius: radiusInKm,
+          field: 'position', // The field in your document that contains the geohash/geopoint
+          strictMode: true,
+        );
   }
 
   // Helper to get Kijiwe collection reference for GeoFlutterFire
