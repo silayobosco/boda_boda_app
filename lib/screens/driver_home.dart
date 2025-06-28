@@ -72,6 +72,10 @@ class _DriverHomeState extends State<DriverHome> with AutomaticKeepAliveClientMi
   ll.LatLng? _rideTrackingLastLocation;
   double _trackedDistanceKm = 0.0;
   int _trackedDrivingDurationSeconds = 0; 
+
+  // To safely access providers in dispose() and listeners
+  late final LocationProvider _locationProvider;
+  late final DriverProvider _driverProvider;
   // Helper to get leg details
   String? getLegInfo(int legIndex) {
     // debugPrint("getLegInfo called for index: $legIndex. _proposedRouteLegsData has ${_proposedRouteLegsData?.length ?? 0} items.");
@@ -90,9 +94,9 @@ class _DriverHomeState extends State<DriverHome> with AutomaticKeepAliveClientMi
 
     // Define the listener method
   void _locationProviderListener() {
-    final locationProvider = Provider.of<LocationProvider>(context, listen: false); // Listen: false is correct here
-    if (mounted && locationProvider.currentLocation != null) { // Check if mounted before calling setState
-      _updateDriverLocationAndMap(locationProvider);
+    // Use the stored provider instance. The mounted check prevents calling setState on a disposed widget.
+    if (mounted && _locationProvider.currentLocation != null) {
+      _updateDriverLocationAndMap(_locationProvider);
     }
   }
 
@@ -100,6 +104,10 @@ class _DriverHomeState extends State<DriverHome> with AutomaticKeepAliveClientMi
   @override
 void initState() {
   super.initState();
+  // Initialize providers here to safely access them in dispose() and listeners.
+  _locationProvider = Provider.of<LocationProvider>(context, listen: false);
+  _driverProvider = Provider.of<DriverProvider>(context, listen: false);
+
   _loadCustomMarker().then((_) { // Ensure marker is loaded, then initialize state
     if (mounted) {
       setState(() {
@@ -110,14 +118,12 @@ void initState() {
   });
   // Add listener for LocationProvider
   debugPrint("DriverHome: initState - Adding LocationProvider listener.");
-  final locationProvider = Provider.of<LocationProvider>(context, listen: false);
   _sheetController.addListener(_onSheetChanged);
-  locationProvider.addListener(_locationProviderListener);
+  _locationProvider.addListener(_locationProviderListener);
 
   // Listen to DriverProvider's pendingRideRequestDetails
   // to initiate route drawing when a new ride is offered.
-  final driverProvider = Provider.of<DriverProvider>(context, listen: false);
-  driverProvider.addListener(_onDriverProviderChange);
+  _driverProvider.addListener(_onDriverProviderChange);
 }
 
 @override
@@ -126,10 +132,8 @@ void dispose() {
   _mapController?.dispose();
   _sheetController.removeListener(_onSheetChanged);
   _sheetController.dispose();
-  final locationProvider = Provider.of<LocationProvider>(context, listen: false);
-  locationProvider.removeListener(_locationProviderListener);
-  final driverProvider = Provider.of<DriverProvider>(context, listen: false);
-  driverProvider.removeListener(_onDriverProviderChange);
+  _locationProvider.removeListener(_locationProviderListener);
+  _driverProvider.removeListener(_onDriverProviderChange);
   _activeRideSubscription?.cancel();
   _declineTimer?.cancel(); // Cancel timer on dispose
   super.dispose();
