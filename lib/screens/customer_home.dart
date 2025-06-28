@@ -2684,6 +2684,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
 
 @override
   void dispose() {
+    _mapController?.dispose();
     _sheetController.dispose();
     _destinationFocusNode.dispose();
     _pickupFocusNode.dispose();
