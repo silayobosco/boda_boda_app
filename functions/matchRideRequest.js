@@ -251,18 +251,18 @@ exports.matchRideRequest = onDocumentCreated("/rideRequests/{rideRequestId}", as
     const kijiwesSnapshot = await admin.firestore().collection("kijiwe").get();
     kijiwesSnapshot.forEach((doc) => {
       const kijiwe = doc.data();
-      // Ensure kijiwe has position and geoPoint
-      if (kijiwe.position && kijiwe.position.geoPoint &&
-          kijiwe.position.geoPoint.latitude && kijiwe.position.geoPoint.longitude) {
+      // Ensure kijiwe has position and geopoint (lowercase 'p' to match geoflutterfire3 standard)
+      if (kijiwe.position && kijiwe.position.geopoint &&
+          kijiwe.position.geopoint.latitude && kijiwe.position.geopoint.longitude) {
         const distance = calculateDistance(
             pickupGeoPoint.latitude,
             pickupGeoPoint.longitude,
-            kijiwe.position.geoPoint.latitude,
-            kijiwe.position.geoPoint.longitude,
+            kijiwe.position.geopoint.latitude,
+            kijiwe.position.geopoint.longitude,
         );
         kijiwesWithDistance.push({ id: doc.id, name: kijiwe.name, distance, docData: kijiwe });
       } else {
-        logger.warn(`Kijiwe ${doc.id} is missing valid position.geoPoint data.`);
+        logger.warn(`Kijiwe ${doc.id} is missing valid position.geopoint data.`);
       }
     });
   } catch (error) {
