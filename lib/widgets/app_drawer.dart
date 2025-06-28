@@ -106,9 +106,10 @@ class AppDrawer extends StatelessWidget {
             leading: const Icon(Icons.exit_to_app),
             title: const Text("Logout"),
             onTap: () async {
+              final navigator = Navigator.of(context); // Capture navigator before await
               await FirebaseAuth.instance.signOut();
-              Navigator.pushReplacement(
-                context,
+              if (!context.mounted) return; // Check if widget is still in the tree
+              navigator.pushReplacement( // Use the captured navigator
                 MaterialPageRoute(builder: (context) => const LoginScreen()),
               );
             },
@@ -188,31 +189,29 @@ class AppDrawer extends StatelessWidget {
           leading: const Icon(Icons.switch_account),
           title: Text(buttonTitle),
           onTap: () async {
-            if (Navigator.of(context).canPop()) Navigator.of(context).pop();
+            // Capture context-dependent objects before the async gap
+            final navigator = Navigator.of(context);
+            final scaffoldMessenger = ScaffoldMessenger.of(context);
+
+            if (navigator.canPop()) navigator.pop(); // Pop the drawer first
+
             final userDocRef = FirebaseFirestore.instance.collection('users').doc(currentUser.uid);
 
             try {
               if (isCurrentlyDriver) {
                 await userDocRef.update({'role': 'Customer'});
-                if (context.mounted) {
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(builder: (context) => const HomeScreen()),
-                  );
-                }
               } else {
                 await userDocRef.update({'role': 'Driver'});
-                if (context.mounted) {
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(builder: (context) => const HomeScreen()),
-                  );
-                }
               }
+              // After the await, check if the widget is still mounted before navigating
+              if (!context.mounted) return;
+              navigator.pushReplacement(
+                MaterialPageRoute(builder: (context) => const HomeScreen()),
+              );
             } catch (e) {
               debugPrint("Error switching role: $e");
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
+              if (context.mounted) { // Check mounted before showing SnackBar
+                scaffoldMessenger.showSnackBar(
                   SnackBar(content: Text('Failed to switch role: ${e.toString()}')),
                 );
               }
