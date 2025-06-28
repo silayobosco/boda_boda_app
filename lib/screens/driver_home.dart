@@ -314,7 +314,9 @@ void _measureRideRequestSheet() {
 
   @override
   Widget build(BuildContext context) {
-    super.build(context); // Add this line
+    super.build(context);
+    if (!mounted) return SizedBox.shrink(); // Return an empty widget if not mounted
+
     final driverProvider = Provider.of<DriverProvider>(context);
     final locationProvider = Provider.of<LocationProvider>(context);
     final theme = Theme.of(context); // Get the current theme
