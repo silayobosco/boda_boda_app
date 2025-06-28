@@ -1,4 +1,5 @@
 import 'package:boda_boda/models/Ride_Request_Model.dart';
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/user_model.dart'; // Import the UserModel class
 import 'package:latlong2/latlong.dart' as ll;
@@ -340,6 +341,8 @@ Stream<DocumentSnapshot> getKijiweQueueStream(String kijiweId) {
     final collectionRef = getKijiweCollectionRef();
     final geoPointCenter = GeoPoint(center.latitude, center.longitude);
 
+    // This stream can throw an error if any document in the result set has a null 'position.geopoint'.
+    // The error should be handled by the listener in the UI.
     return geo.collection(collectionRef: collectionRef).within(
           center: geo.point(latitude: geoPointCenter.latitude, longitude: geoPointCenter.longitude),
           radius: radiusInKm,
@@ -361,5 +364,21 @@ Stream<DocumentSnapshot> getKijiweQueueStream(String kijiweId) {
       return kijiweDoc.data()?['adminId'] as String?;
     }
     return null;
+  }
+
+  Future<List<Map<String, dynamic>>> getKijiweList() async {
+    try {
+      final snapshot = await _firestore.collection('kijiwe').get();
+      return snapshot.docs.map((doc) {
+        final data = doc.data();
+        return {
+          'id': doc.id,
+          'name': data['name'] ?? 'Unnamed Kijiwe',
+        };
+      }).toList();
+    } catch (e) {
+      debugPrint('Error fetching kijiwe list from service: $e');
+      rethrow;
+    }
   }
 }
