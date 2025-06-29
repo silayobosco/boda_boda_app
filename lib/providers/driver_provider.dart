@@ -2,9 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import '../screens/home_screen.dart'; 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:geoflutterfire3/geoflutterfire3.dart';  
 import 'package:cloud_functions/cloud_functions.dart'; 
 
 class DriverProvider extends ChangeNotifier {
@@ -150,136 +148,37 @@ class DriverProvider extends ChangeNotifier {
   }
 
   Future<void> registerAsDriver({
-  required BuildContext context,
-  required String userId,
-  required String vehicleType,
-  required String licenseNumber,
-  required final bool createNewKijiwe,
-  final String? newKijiweName,
-  final LatLng? newKijiweLocation,
-  final String? existingKijiweId,
-}) async {
-  setLoading(true);
-  try {
-    final firestore = FirebaseFirestore.instance;
-    final geo = GeoFlutterFire(); 
-    String kijiweIdToUse;
-    String kijiweNameToDisplay = "";
-
-    if (createNewKijiwe) {
-      if (newKijiweName == null || newKijiweName.trim().isEmpty || newKijiweLocation == null) {
-        throw ArgumentError("New Kijiwe name and location are required when creating a new Kijiwe.");
-      }
-
-      // Check for Kijiwe name uniqueness
-      final trimmedKijiweName = newKijiweName.trim();
-      final existingKijiweQuery = await firestore.collection('kijiwe').where('name', isEqualTo: trimmedKijiweName).limit(1).get();
-      if (existingKijiweQuery.docs.isNotEmpty) {
-        throw Exception("A Kijiwe with the name '$trimmedKijiweName' already exists. Please choose a different name or select the existing one.");
-      }
-
-      // Create GeoPoint for GeoFlutterFire
-      GeoFirePoint geoFirePoint = geo.point(latitude: newKijiweLocation.latitude, longitude: newKijiweLocation.longitude);
-
-      // Create the new Kijiwe
-      final newKijiweDocRef = firestore.collection('kijiwe').doc();
-      await newKijiweDocRef.set({
-        'name': trimmedKijiweName,
-        'position': geoFirePoint.data, // Store geohash and geopoint
-        'unionId': null, // As per your example structure
-        'adminId': userId, // The driver creating it becomes the admin
-        'permanentMembers': [userId], // Driver is the first permanent member
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-      kijiweIdToUse = newKijiweDocRef.id;
-      kijiweNameToDisplay = trimmedKijiweName;
-    } else {
-      if (existingKijiweId == null) {
-        throw ArgumentError("Existing Kijiwe ID is required when not creating a new Kijiwe.");
-      }
-      kijiweIdToUse = existingKijiweId;
-      // You might want to fetch the Kijiwe name here if needed for the success message,
-      // but for simplicity, we'll omit that for now.
-    }
-    final kijiweRef = firestore.collection('kijiwe').doc(kijiweIdToUse);
-
-    // 1. Prepare driverProfile data
-    // Driver is immediately 'approved'.
-    // 'isOnline' is set to true, so they will be added to the queue.
-    Map<String, dynamic> driverProfilePayload = {
-      'driverId': userId,
-      'vehicleType': vehicleType,
-      'licenseNumber': licenseNumber,
-      'kijiweId': kijiweIdToUse,
-      'registeredAt': FieldValue.serverTimestamp(),
-      'approved': true, // Driver is immediately 'approved'.
-      'isOnline': true, // Driver will be online and in queue immediately
-      'status': 'waitingForRide', // Initial status when registering and going online
-      // Initialize new counter fields
-      'completedRidesCount': 0,
-      'cancelledByDriverCount': 0,
-      'declinedByDriverCount': 0,
-      'sumOfRatingsReceived': 0,
-      'totalRatingsReceivedCount': 0,
-      'averageRating': 0.0, // Or null, depending on how you want to handle no ratings
-    };
-
-    // 2. Update user document: set role to 'Driver' and add/update driverProfile
-    await firestore.collection('users').doc(userId).update({
-      'role': 'Driver', // Capitalized as requested
-      'driverProfile': driverProfilePayload,
-    });
-
-    // Update provider's internal state immediately after successful registration
-    _currentKijiweId = kijiweIdToUse;
-    _isOnline = driverProfilePayload['isOnline'] ?? false;
-
-    // 3. Add driver to the selected kijiwe's permanent members list (if not already added during creation)
-    // FieldValue.arrayUnion is idempotent, so it's safe to call even if userId is already there.
-    if (!createNewKijiwe) { // Only needed if selecting an existing Kijiwe
-      await kijiweRef.update({
-        'permanentMembers': FieldValue.arrayUnion([userId]),
-      });
-    }
-
-    // 4. Add to kijiwe queue if 'isOnline' is true in their profile
-    // (We've set it to true in driverProfilePayload)
-    // The driver is added to an array field (e.g., 'ueues') in the Kijiwe document.
-    if (driverProfilePayload['isOnline'] == true) { // Queue is now an array of strings
-      await kijiweRef.update({
-        'queue': FieldValue.arrayUnion([userId])
-      });
-    }
-
-    if (context.mounted) {
-      String successMessage = "Registration successful! You are now a Driver.";
-      if (createNewKijiwe) {
-        successMessage += " Kijiwe '$kijiweNameToDisplay' created.";
-      }
-      if (driverProfilePayload['isOnline'] == true) {
-        successMessage += " You have been added to the Kijiwe queue.";
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(successMessage)),
+    required String userId,
+    required String vehicleType,
+    required String licenseNumber,
+    required final bool createNewKijiwe,
+    final String? newKijiweName,
+    final LatLng? newKijiweLocation,
+    final String? existingKijiweId,
+  }) async {
+    setLoading(true);
+    try {
+      final kijiweIdToUse = await _firestoreService.registerDriver(
+        userId: userId,
+        vehicleType: vehicleType,
+        licenseNumber: licenseNumber,
+        createNewKijiwe: createNewKijiwe,
+        newKijiweName: newKijiweName,
+        newKijiweLocation: newKijiweLocation,
+        existingKijiweId: existingKijiweId,
       );
-      // Navigate to HomeScreen after successful registration
-      // Using pushReplacement to prevent going back to the registration screen
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const HomeScreen()),
-      );
+
+      // Update provider's internal state immediately after successful registration
+      _currentKijiweId = kijiweIdToUse;
+      _isOnline = true; // The service registers the driver as online by default
+      await loadDriverData(); // Re-fetch profile data to update the local cache
+    } catch (e) {
+      debugPrint('DriverProvider: Registration failed, rethrowing... $e');
+      rethrow; // Rethrow the exception for the UI to handle
+    } finally {
+      setLoading(false);
     }
-  } catch (e) {
-    debugPrint('Driver registration failed: $e');
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Registration failed: ${e.toString()}')),
-      );
-    }
-  } finally {
-    setLoading(false);
   }
-}
 
   // Method to set new pending ride details from FCM
   void setNewPendingRide(Map<String, dynamic> rideData) {
