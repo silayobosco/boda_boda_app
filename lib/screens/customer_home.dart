@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:boda_boda/models/Ride_Request_Model.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:boda_boda/providers/ride_request_provider.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -40,7 +41,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
   // Search and Suggestions
   List<Map<String, dynamic>> _destinationSuggestions = [];
   List<Map<String, dynamic>> _pickupSuggestions = [];
-  final String _googlePlacesApiKey = 'AIzaSyCkKD8FP-r9bqi5O-sOjtuksT-0Dr9dgeg';
+  final String _googlePlacesApiKey = dotenv.env['GOOGLE_MAPS_API_KEY']!;
   final List<String> _searchHistory = [];
   
   // UI State Variables
@@ -78,8 +79,10 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
   StreamSubscription? _driverLocationSubscription;
   BitmapDescriptor? _driverIcon; // For the driver's marker
   bool _isDriverIconLoaded = false;
-  //@override
-  // Scheduling limits - @override was incorrect here
+  StreamSubscription? _kijiweSubscription;
+  BitmapDescriptor? _kijiweIcon;
+  final Set<Marker> _kijiweMarkers = {};
+  // Scheduling limits
   int _maxSchedulingDaysAhead = 30; // Default
   int _minSchedulingMinutesAhead = 5; // Default
   double? _estimatedFare; // Declare _estimatedFare
@@ -87,66 +90,72 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
   final TextEditingController _customerNoteController = TextEditingController(); // For the initial note
   String? _processedCompletedRideId; // Flag to prevent re-processing a completed ride
 
+  bool _kijiweFetchInitiated = false; // Flag to ensure kijiwe fetch happens once per lifecycle
+  // To safely access providers in dispose() and listeners
+  late final LocationProvider _locationProvider;
+
   @override
   bool get wantKeepAlive => true;
 
   @override
   void initState() {
     super.initState();
-    debugPrint("CustomerHome: initState - ENTERED"); // New log
-    _loadDriverMarkerIcon();
-    // _initializePickupLocation(); // We will call a new setup method later
+    _locationProvider = Provider.of<LocationProvider>(context, listen: false);
+    _locationProvider.addListener(_onLocationUpdated);
+
     _setupFocusListeners();
     _sheetController.addListener(_onSheetChanged);
     _loadSearchHistory(); 
     _fetchSchedulingLimits();
-    debugPrint("CustomerHome: initState - Calling _fetchFareConfig()..."); // New log
     _fetchFareConfig(); 
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _setupInitialLocationAndMap(); // Call the new setup method here
-      if (_destinationController.text.isEmpty && mounted) { // Check mounted
-        if (mounted) { // Redundant check, but safe
-          setState(() {
-            _editingDestination = true;
-          });
-        }
-      }
+      _setupInitialMapState(); // Call the new setup method here
     });
   }
 
-  Future<void> _setupInitialLocationAndMap() async {
+  @override
+  void reassemble() {
+    super.reassemble();
+    _kijiweFetchInitiated = false;
+  }
+
+  // New listener function to react to location updates
+  void _onLocationUpdated() {
+    final newLocation = _locationProvider.currentLocation;
+
+    // Check if we have a location and haven't fetched kijiwes in this session yet.
+    // This is more robust against hot reloads where _pickupLocation might persist.
+    if (!_kijiweFetchInitiated && newLocation != null) {
+      _kijiweFetchInitiated = true; // Set flag to prevent re-fetching on every minor location update
+      if (mounted) {
+        if (_pickupLocation == null) {
+          // This is the initial setup. Set the pickup location automatically.
+          setState(() {
+            _pickupLocation = newLocation;
+            _updateGooglePickupMarker(LatLng(newLocation.latitude, newLocation.longitude));
+            // Immediately set destination to editing mode.
+            _editingDestination = true;
+          });
+          _reverseGeocode(newLocation, _pickupController);
+        }
+        _fetchAndDisplayNearbyKijiwes();
+      }
+    } 
+  }
+
+  // Simplified initial setup
+  Future<void> _setupInitialMapState() async {
     if (!mounted) return;
-    final locationProvider = Provider.of<LocationProvider>(context, listen: false);
+    await _loadMarkerIcons(); // Ensure icons are loaded, then initialize state
 
     // Ensure location provider attempts to get a location
-    await locationProvider.updateLocation();
+    await _locationProvider.updateLocation();
 
-    if (!mounted) return; // Re-check mounted state after await
-
-    final currentLocation = locationProvider.currentLocation;
-    if (currentLocation != null) {
-      _pickupLocation = currentLocation; // ll.LatLng
-      _updateGooglePickupMarker(LatLng(currentLocation.latitude, currentLocation.longitude)); // gmf.LatLng
-      await _reverseGeocode(_pickupLocation!, _pickupController);
-
-      // Center map if controller is ready
-      if (_mapController != null) {
-        _mapController!.animateCamera(
-          CameraUpdate.newLatLngZoom(
-            LatLng(currentLocation.latitude, currentLocation.longitude),
-            15, // Default zoom
-          ),
-        );
-      }
-      _adjustMapForExpandedSheet(); // This will use the new _pickupLocation
-      _checkRouteReady(); // In case pickup was the last piece for route readiness
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not get current location. Please check permissions and try again.')),
-        );
-      }
+    // If location is already available when this runs, the listener won't fire.
+    // So, we manually trigger the logic if location is already present.
+    if (_locationProvider.currentLocation != null) {
+      _onLocationUpdated();
     }
   }
 
@@ -189,6 +198,45 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
     debugPrint("CustomerHome: _fetchFareConfig - EXITED function.");
   }
 
+  // Helper to parse distance and duration strings into numeric values.
+  (double, double) _parseRouteDistanceAndDuration() {
+    if (_selectedRouteDistance == null || _selectedRouteDuration == null) {
+      return (0.0, 0.0);
+    }
+
+    // Parse distance
+    double distanceKm = 0;
+    final distanceMatch = RegExp(r'([\d\.]+)').firstMatch(_selectedRouteDistance!);
+    if (distanceMatch != null) {
+      double numericValue = double.tryParse(distanceMatch.group(1) ?? '0') ?? 0;
+      if (_selectedRouteDistance!.toLowerCase().contains("km")) {
+        distanceKm = numericValue;
+      } else if (_selectedRouteDistance!.toLowerCase().contains("m")) {
+        distanceKm = numericValue / 1000.0;
+      } else {
+        distanceKm = numericValue;
+      }
+    }
+
+    // Parse duration
+    double durationMinutes = 0;
+    final hourMatch = RegExp(r'(\d+)\s*hr').firstMatch(_selectedRouteDuration!);
+    if (hourMatch != null) {
+      durationMinutes += (double.tryParse(hourMatch.group(1) ?? '0') ?? 0) * 60;
+    }
+    final minMatch = RegExp(r'(\d+)\s*min').firstMatch(_selectedRouteDuration!);
+    if (minMatch != null) {
+      durationMinutes += double.tryParse(minMatch.group(1) ?? '0') ?? 0;
+    }
+    if (durationMinutes == 0 && _selectedRouteDuration!.contains("min")) {
+      final simpleMinMatch = RegExp(r'([\d\.]+)').firstMatch(_selectedRouteDuration!);
+      if (simpleMinMatch != null) {
+        durationMinutes = double.tryParse(simpleMinMatch.group(1) ?? '0') ?? 0;
+      }
+    }
+    return (distanceKm, durationMinutes);
+  }
+
   Future<void> _fetchSchedulingLimits() async {
     try {
       final doc = await FirebaseFirestore.instance
@@ -210,68 +258,128 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
   }
   
   void _calculateEstimatedFare() {
-    // debugPrint("CustomerHome: _calculateEstimatedFare called. FareConfig: $_fareConfig, Distance: $_selectedRouteDistance, Duration: $_selectedRouteDuration");
     if (!mounted || _fareConfig == null || _selectedRouteDistance == null || _selectedRouteDuration == null) {
-      final bool wasFareNull = _estimatedFare == null;
-      _estimatedFare = null;
-      debugPrint("CustomerHome: Conditions for fare calculation not met. "
-                 "Mounted: $mounted, FareConfig Null: ${_fareConfig == null} (Current Config: $_fareConfig), "
-                 "Distance Null: ${_selectedRouteDistance == null} (Value: $_selectedRouteDistance), "
-                 "Duration Null: ${_selectedRouteDuration == null} (Value: $_selectedRouteDuration). "
-                 "Estimated fare set to null.");
-      if (mounted && !wasFareNull) setState(() {}); // Update UI only if fare changed to null
+      final bool fareChanged = _estimatedFare != null;
+      if (fareChanged) {
+        setState(() => _estimatedFare = null);
+      }
       return;
     }
-    
-    double distanceKm = 0;
-    if (_selectedRouteDistance != null) {
-      final valueMatch = RegExp(r'([\d\.]+)').firstMatch(_selectedRouteDistance!);
-      if (valueMatch != null) {
-        double numericValue = double.tryParse(valueMatch.group(1) ?? '0') ?? 0;
-        if (_selectedRouteDistance!.toLowerCase().contains("km")) {
-          distanceKm = numericValue;
-        } else if (_selectedRouteDistance!.toLowerCase().contains("m")) {
-          distanceKm = numericValue / 1000.0; // Convert meters to kilometers
-        } else {
-          distanceKm = numericValue; // Assume km if no unit, or handle error appropriately
-        }
-      }
-    }
-    double durationMinutes = 0;
-    final hourMatch = RegExp(r'(\d+)\s*hr').firstMatch(_selectedRouteDuration!);
-    if (hourMatch != null) durationMinutes += (double.tryParse(hourMatch.group(1) ?? '0') ?? 0) * 60;
-    final minMatch = RegExp(r'(\d+)\s*min').firstMatch(_selectedRouteDuration!);
-    if (minMatch != null) durationMinutes += double.tryParse(minMatch.group(1) ?? '0') ?? 0;
-    if (durationMinutes == 0 && _selectedRouteDuration!.contains("min")) {
-        final simpleMinMatch = RegExp(r'([\d\.]+)').firstMatch(_selectedRouteDuration!);
-        if (simpleMinMatch != null) {
-          durationMinutes = double.tryParse(simpleMinMatch.group(1) ?? '0') ?? 0;
-        }
-    }
+
+    final (distanceKm, durationMinutes) = _parseRouteDistanceAndDuration();
+
     final double baseFare = (_fareConfig!['startingFare'] as num?)?.toDouble() ?? 0.0;
     final double perKmRate = (_fareConfig!['farePerKilometer'] as num?)?.toDouble() ?? 0.0;
-    // Assuming farePerMinuteDriving is the correct key for per minute rate
     final double perMinRate = (_fareConfig!['farePerMinuteDriving'] as num?)?.toDouble() ?? 0.0;
-    final double minFare = (_fareConfig!['minimumFare'] as num?)?.toDouble() ?? 0.0;    double calculatedFare = baseFare + (distanceKm * perKmRate) + (durationMinutes * perMinRate);
-    calculatedFare = calculatedFare > minFare ? calculatedFare : minFare;    final double roundingInc = (_fareConfig!['roundingIncrement'] as num?)?.toDouble() ?? 0.0;
+    final double minFare = (_fareConfig!['minimumFare'] as num?)?.toDouble() ?? 0.0;
+    double calculatedFare = baseFare + (distanceKm * perKmRate) + (durationMinutes * perMinRate);
+    calculatedFare = calculatedFare > minFare ? calculatedFare : minFare;
+    final double roundingInc = (_fareConfig!['roundingIncrement'] as num?)?.toDouble() ?? 0.0;
     if (roundingInc > 0) calculatedFare = (calculatedFare / roundingInc).ceil() * roundingInc;
-    if (_estimatedFare != calculatedFare) { // Only update state if fare actually changed
-      _estimatedFare = calculatedFare;
-      if (mounted) setState(() {});
+
+    if (_estimatedFare != calculatedFare) {
+      setState(() => _estimatedFare = calculatedFare);
     }
     debugPrint("CustomerHome: Parsed Distance for fare: ${distanceKm}km, Parsed Duration: ${durationMinutes}min. Calculated Fare: $_estimatedFare");
   }
 
-  Future<void> _loadDriverMarkerIcon() async {
+  Future<void> _loadMarkerIcons() async {
     try {
       _driverIcon = await BitmapDescriptor.fromAssetImage(
         const ImageConfiguration(size: Size(48, 48)), // Adjust size as needed
         'assets/boda_marker.png', // Use your specific driver icon
       );
       if (mounted) setState(() => _isDriverIconLoaded = true);
+
+      _kijiweIcon = await BitmapDescriptor.fromAssetImage(
+        const ImageConfiguration(size: Size(48, 48)), // Smaller size for kijiwe
+        'assets/kijiwe_marker.png',
+      );
+      debugPrint("CustomerHome: Kijiwe marker icon loaded successfully.");
+      // No separate loaded flag for kijiwe icon, assume it loads or fails with driver icon
     } catch (e) {
-      debugPrint("Error loading driver marker icon: $e");
+      debugPrint("Error loading marker icons: $e");
     }
+  }
+
+  Future<void> _fetchAndDisplayNearbyKijiwes() async {
+    // =======================================================================
+    print("=======================================================================");
+    print("CustomerHome: _fetchAndDisplayNearbyKijiwes - ENTERED");
+
+    if (_pickupLocation == null) {
+      print("CustomerHome: EXITING _fetchAndDisplayNearbyKijiwes because _pickupLocation is null.");
+      print("=======================================================================");
+      return;
+    }
+    if (_kijiweIcon == null) {
+      print("CustomerHome: EXITING _fetchAndDisplayNearbyKijiwes because _kijiweIcon is null.");
+      print("=======================================================================");
+      return;
+    }
+    print("CustomerHome: Fetching nearby kijiwes around $_pickupLocation...");
+
+    _kijiweSubscription?.cancel(); // Cancel any existing listener
+    final firestoreService = Provider.of<FirestoreService>(context, listen: false);
+
+    print("CustomerHome: Subscribing to getNearbyKijiwes stream...");
+    _kijiweSubscription = firestoreService.getNearbyKijiwes(_pickupLocation!, 3.0).listen(
+      (kijiweDocs) {
+        if (!mounted) {
+          print("CustomerHome: Stream emitted but widget is not mounted. Ignoring.");
+          return;
+        }
+        print("=======================================================================");
+        print("CustomerHome: SUCCESS - Received ${kijiweDocs.length} kijiwe documents from Firestore.");
+        final Set<Marker> newMarkers = {};
+        for (var doc in kijiweDocs) {
+          final data = doc.data() as Map<String, dynamic>?; // Cast to nullable map
+
+          // Defensive check for the nested GeoPoint to prevent crashes from malformed data.
+          final positionField = data?['position'];
+          if (positionField is Map) {
+            final geoPointField = positionField['geopoint'];
+            if (geoPointField is GeoPoint) {
+              final kijiweName = data?['name'] as String? ?? 'Kijiwe';
+              print("  - Found Kijiwe: '$kijiweName' at ${geoPointField.latitude}, ${geoPointField.longitude}");
+
+              newMarkers.add(
+                Marker(
+                  markerId: MarkerId('kijiwe_${doc.id}'),
+                  position: LatLng(geoPointField.latitude, geoPointField.longitude),
+                  icon: _kijiweIcon!,
+                  infoWindow: InfoWindow(title: kijiweName),
+                  alpha: 0.8,
+                  zIndex: 1,
+                ),
+              );
+            } else {
+              print("CustomerHome: Skipping kijiwe document '${doc.id}' because 'position.geopoint' is not a valid GeoPoint. Value: $geoPointField");
+            }
+          } else {
+            print("CustomerHome: Skipping kijiwe document '${doc.id}' due to missing or invalid 'position.geopoint' field.");
+          }
+        }
+        setState(() {
+          _kijiweMarkers.clear();
+          _kijiweMarkers.addAll(newMarkers);
+          print("CustomerHome: Updated map with ${newMarkers.length} kijiwe markers.");
+          print("=======================================================================");
+        });
+      },
+      onError: (error) {
+        print("=======================================================================");
+        if (mounted && error.toString().contains("type 'Null' is not a subtype of type 'GeoPoint'")) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Error loading nearby hubs. Some location data may be invalid.')),
+          );
+        }
+        print("=======================================================================");
+      },
+      onDone: () {
+        print("CustomerHome: getNearbyKijiwes stream is DONE.");
+      },
+    );
   }
 
   void _startEditing(String field, {bool requestFocus = true}) {
@@ -575,12 +683,13 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
       setState(() {
         _pickupLocation = llTappedLatLng;
         _updateGooglePickupMarker(tappedLatLng);
-        _reverseGeocode(_pickupLocation!, _pickupController);
         _selectingPickup = false;
         _editingPickup = false;
+        _editingDestination = true; // Set destination to editing mode
         _pickupFocusNode.unfocus();
         _collapseSheet();
       });
+      _reverseGeocode(_pickupLocation!, _pickupController); // Can be outside setState
     } else if (_editingStopIndex != null) {
       setState(() {
         _stops[_editingStopIndex!].location = llTappedLatLng;
@@ -783,7 +892,15 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                   zIndex: 10, // Ensure driver marker is prominent
                 ),
               );
-               _mapController?.animateCamera(CameraUpdate.newLatLng(driverLatLng));
+              // Zoom to show both driver and pickup location
+              if (_pickupLocation != null) {
+                final LatLng pickupLatLng = LatLng(_pickupLocation!.latitude, _pickupLocation!.longitude);
+                final bounds = MapUtils.boundsFromLatLngList([driverLatLng, pickupLatLng]);
+                _mapController?.animateCamera(CameraUpdate.newLatLngBounds(bounds, 100)); // 100 is padding
+              } else {
+                // Fallback to just centering on the driver if pickup location is somehow null
+                _mapController?.animateCamera(CameraUpdate.newLatLng(driverLatLng));
+              }
             });
           }
         }
@@ -1509,9 +1626,12 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
       _isFindingDriver = false;
       _stopListeningToActiveRide(); // Cancel the active ride subscription
       _stopListeningToDriverLocation();
+
+      // Reset the flag to allow initial location setup to run again.
+      _kijiweFetchInitiated = false;
     });
     // Re-initialize pickup location and collapse sheet to default
-    _setupInitialLocationAndMap();
+      _setupInitialMapState(); // Call the new setup method here
   }
 
   Widget _buildLocationField({
@@ -1596,7 +1716,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
               });
             },
             onTap: _handleMapTap,
-            markers: _markers,
+            markers: {..._markers, ..._kijiweMarkers},
             polylines: _polylines,
             zoomControlsEnabled: false, // Disable default zoom controls
             myLocationEnabled: true,
@@ -1609,7 +1729,8 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
           // updated by our new _listenToActiveRide subscription.
           _buildRouteSheet(key: const ValueKey('main_sheet')),
 
-          // Custom Map Controls (Recenter and Zoom)
+      // Custom Map Controls (Recenter and Zoom) - only show when not in an active ride
+      if (_activeRideRequestDetails == null)
           Positioned(
             bottom: MediaQuery.of(context).size.height * _currentSheetSize + 20, // Position above the sheet
             right: 16,
@@ -1617,7 +1738,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
               children: [
                 // Recenter Button
                 FloatingActionButton.small(
-                  heroTag: 'customer_recenter_button', // Unique heroTag
+              heroTag: 'customer_recenter_button',
                   onPressed: _centerMapOnCurrentLocation,
                   backgroundColor: Theme.of(context).colorScheme.surface,
                   foregroundColor: Theme.of(context).colorScheme.onSurface,
@@ -1626,7 +1747,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                 const SizedBox(height: 16),
                 // Zoom Buttons
                 FloatingActionButton.small(
-                  heroTag: 'customer_zoom_in_button',
+              heroTag: 'customer_zoom_in_button', // Unique heroTag
                   onPressed: () => _mapController?.animateCamera(CameraUpdate.zoomIn()),
                   backgroundColor: Theme.of(context).colorScheme.surface,
                   foregroundColor: Theme.of(context).colorScheme.onSurface,
@@ -1634,7 +1755,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                 ),
                 const SizedBox(height: 2),
                 FloatingActionButton.small(
-                  heroTag: 'customer_zoom_out_button',
+              heroTag: 'customer_zoom_out_button', // Unique heroTag
                   onPressed: () => _mapController?.animateCamera(CameraUpdate.zoomOut()),
                   backgroundColor: Theme.of(context).colorScheme.surface,
                   foregroundColor: Theme.of(context).colorScheme.onSurface,
@@ -2685,12 +2806,14 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
 @override
   void dispose() {
     _mapController?.dispose();
+    _locationProvider.removeListener(_onLocationUpdated);
     _sheetController.dispose();
     _destinationFocusNode.dispose();
     _pickupFocusNode.dispose();
     _customerNoteController.dispose(); // Dispose the new controller
     _stopFocusNode.dispose();
     _driverLocationSubscription?.cancel();
+    _kijiweSubscription?.cancel();
     _stopListeningToActiveRide(); // Ensure subscription is cancelled on dispose
     for (var stop in _stops) { // Dispose resources for each stop
       stop.dispose();
