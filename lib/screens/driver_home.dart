@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert'; // Added for jsonDecode
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '/utils/map_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart' as gmf; // Hide LatLng to avoid conflict with latlong2
@@ -31,6 +32,7 @@ class _DriverHomeState extends State<DriverHome> with AutomaticKeepAliveClientMi
   // bool _isOnline = false; // Will use DriverProvider.isOnline directly
   // bool _hasActiveRide = false; // This will be determined by _activeRideDetails != null
   RideRequestModel? _activeRideDetails; // Changed from Map<String, dynamic> to RideRequestModel
+  gmf.Marker? _currentKijiweMarker;
   double? _currentHeading;
   gmf.BitmapDescriptor? _bodaIcon; // Define _carIcon
   ll.LatLng? _lastPosition; // Define _lastPosition using latlong2
@@ -44,6 +46,7 @@ class _DriverHomeState extends State<DriverHome> with AutomaticKeepAliveClientMi
   List<gmf.LatLng> _driverToPickupRoutePoints = []; // Points for driver to customer's pickup
   List<gmf.LatLng> _entireActiveRidePoints = []; // Points for the complete journey: Driver -> Cust.Pickup -> Cust.Dest
   StreamSubscription? _activeRideSubscription; // To listen to the active ride document
+  StreamSubscription? _kijiweSubscription;
   bool _isLoadingRoute = false;
   // String _currentRouteType = ''; // No longer needed, specific variables will be used
 
@@ -54,9 +57,9 @@ class _DriverHomeState extends State<DriverHome> with AutomaticKeepAliveClientMi
   String? _driverToPickupDuration;
   String? _mainRideDistance;
   String? _mainRideDuration;
-  String? _pendingRideCustomerName; // To store fetched customer name
+  String? _pendingRideCustomerName;
   String? _currentlyDisplayedProposedRideId; // To track the ID of the ride for which a proposed route is shown
-  final String _googlePlacesApiKey = 'AIzaSyCkKD8FP-r9bqi5O-sOjtuksT-0Dr9dgeg'; // TODO: Move to a config file
+  final String _googlePlacesApiKey = dotenv.env['GOOGLE_MAPS_API_KEY']!;
   
   final DraggableScrollableController _sheetController = DraggableScrollableController();
   double _currentSheetSize = 0.0; // For map padding
@@ -135,6 +138,7 @@ void dispose() {
   _locationProvider.removeListener(_locationProviderListener);
   _driverProvider.removeListener(_onDriverProviderChange);
   _activeRideSubscription?.cancel();
+  _kijiweSubscription?.cancel();
   _declineTimer?.cancel(); // Cancel timer on dispose
   super.dispose();
   debugPrint("DriverHome: dispose() completed.");
@@ -295,11 +299,16 @@ void _measureRideRequestSheet() {
         const ImageConfiguration(size: Size(48, 48)),
         'assets/boda_marker.png',
       );
+      _kijiweIcon = await gmf.BitmapDescriptor.fromAssetImage(
+        const ImageConfiguration(size: Size(48, 48)),
+        'assets/home_kijiwe_marker.png',
+      );
     } catch (e) { // This is correct
       debugPrint("Error loading custom marker: $e");
       // _bodaIcon will remain null, default marker will be used by _buildDriverMarker
     }
   }
+  gmf.BitmapDescriptor? _kijiweIcon;
   
 
   Future<void> _initializeDriverStateAndLocation() async {
@@ -308,6 +317,11 @@ void _measureRideRequestSheet() {
 
     // Load persisted driver data first
     await driverProvider.loadDriverData();
+
+    // After loading, check for Kijiwe ID and start listening
+    if (driverProvider.currentKijiweId != null) {
+      _listenToCurrentKijiwe(driverProvider.currentKijiweId!);
+    }
 
     await locationProvider.updateLocation();
     if (locationProvider.currentLocation != null && _mapController != null) {
@@ -976,23 +990,33 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
   }
 
   Set<gmf.Marker> _buildDriverMarker(LocationProvider locationProvider) {
-    if (locationProvider.currentLocation == null || !_isIconLoaded) return _rideSpecificMarkers; // Only show ride markers if driver location/icon not ready
+    final Set<gmf.Marker> markers = {};
 
-    return {
-      gmf.Marker(
-        markerId: gmf.MarkerId('driver'), // Use const if it's always the same
-        position: gmf.LatLng( // This is google_maps_flutter.LatLng
+    // Add driver marker
+    if (locationProvider.currentLocation != null && _isIconLoaded) {
+      markers.add(gmf.Marker(
+        markerId: const gmf.MarkerId('driver'),
+        position: gmf.LatLng(
           locationProvider.currentLocation!.latitude,
           locationProvider.currentLocation!.longitude,
         ),
         icon: _bodaIcon ?? gmf.BitmapDescriptor.defaultMarker,
-        rotation: _currentHeading ?? 0.0, // Ensure it's a double
+        rotation: _currentHeading ?? 0.0,
         anchor: const Offset(0.5, 0.5),
         flat: true,
         zIndex: 1000,
-      ),
-      ..._rideSpecificMarkers, // Add markers for the current ride context
-    };
+      ));
+    }
+
+    // Add ride-specific markers (pickup, dropoff, stops)
+    markers.addAll(_rideSpecificMarkers);
+
+    // Add the current Kijiwe marker if it exists
+    if (_currentKijiweMarker != null) {
+      markers.add(_currentKijiweMarker!);
+    }
+
+    return markers;
   }
   Future<void> _centerMapOnDriver() async {
     final locationProvider = Provider.of<LocationProvider>(context, listen: false); // Listen: false is correct here
@@ -2070,6 +2094,31 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
         Text(label, style: theme.textTheme.bodySmall),
       ],
     );
+  }
+
+  void _listenToCurrentKijiwe(String kijiweId) {
+    _kijiweSubscription?.cancel();
+    final firestoreService = FirestoreService();
+    _kijiweSubscription = firestoreService.getKijiweQueueStream(kijiweId).listen((doc) {
+      if (doc.exists && doc.data() != null) {
+        final data = doc.data() as Map<String, dynamic>;
+        final position = data['position']?['geopoint'] as GeoPoint?;
+        final name = data['name'] as String?;
+        if (position != null && name != null && _kijiweIcon != null) {
+          if (mounted) {
+            setState(() {
+              _currentKijiweMarker = gmf.Marker(
+                markerId: const gmf.MarkerId('current_kijiwe'),
+                position: gmf.LatLng(position.latitude, position.longitude),
+                icon: _kijiweIcon!,
+                infoWindow: gmf.InfoWindow(title: 'Home Kijiwe: $name'),
+                zIndex: 1,
+              );
+            });
+          }
+        }
+      }
+    });
   }
 
 
