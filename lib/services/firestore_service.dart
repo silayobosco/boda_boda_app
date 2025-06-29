@@ -381,4 +381,70 @@ Stream<DocumentSnapshot> getKijiweQueueStream(String kijiweId) {
       rethrow;
     }
   }
+
+  Future<String> registerDriver({
+    required String userId,
+    required String vehicleType,
+    required String licenseNumber,
+    required bool createNewKijiwe,
+    String? newKijiweName,
+    gmf.LatLng? newKijiweLocation,
+    String? existingKijiweId,
+  }) async {
+    final geo = GeoFlutterFire();
+    String kijiweIdToUse;
+
+    WriteBatch batch = _firestore.batch();
+
+    if (createNewKijiwe) {
+      if (newKijiweName == null || newKijiweName.trim().isEmpty || newKijiweLocation == null) {
+        throw ArgumentError("New Kijiwe name and location are required.");
+      }
+
+      final trimmedKijiweName = newKijiweName.trim();
+      final existingKijiweQuery = await _firestore.collection('kijiwe').where('name', isEqualTo: trimmedKijiweName).limit(1).get();
+      if (existingKijiweQuery.docs.isNotEmpty) {
+        throw Exception("A Kijiwe with the name '$trimmedKijiweName' already exists.");
+      }
+
+      GeoFirePoint geoFirePoint = geo.point(latitude: newKijiweLocation.latitude, longitude: newKijiweLocation.longitude);
+      final newKijiweDocRef = _firestore.collection('kijiwe').doc();
+      batch.set(newKijiweDocRef, {
+        'name': trimmedKijiweName,
+        'position': geoFirePoint.data,
+        'unionId': null,
+        'adminId': userId,
+        'permanentMembers': [userId],
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+      kijiweIdToUse = newKijiweDocRef.id;
+    } else {
+      if (existingKijiweId == null) {
+        throw ArgumentError("Existing Kijiwe ID is required.");
+      }
+      kijiweIdToUse = existingKijiweId;
+      final kijiweRef = _firestore.collection('kijiwe').doc(kijiweIdToUse);
+      batch.update(kijiweRef, {
+        'permanentMembers': FieldValue.arrayUnion([userId]),
+      });
+    }
+
+    final driverProfilePayload = {
+      'driverId': userId, 'vehicleType': vehicleType, 'licenseNumber': licenseNumber, 'kijiweId': kijiweIdToUse,
+      'registeredAt': FieldValue.serverTimestamp(), 'approved': true, 'isOnline': true, 'status': 'waitingForRide',
+      'completedRidesCount': 0, 'cancelledByDriverCount': 0, 'declinedByDriverCount': 0,
+      'sumOfRatingsReceived': 0, 'totalRatingsReceivedCount': 0, 'averageRating': 0.0,
+    };
+
+    final userRef = _firestore.collection('users').doc(userId);
+    batch.update(userRef, {'role': 'Driver', 'driverProfile': driverProfilePayload});
+
+    if (driverProfilePayload['isOnline'] == true) {
+      final kijiweRef = _firestore.collection('kijiwe').doc(kijiweIdToUse);
+      batch.update(kijiweRef, {'queue': FieldValue.arrayUnion([userId])});
+    }
+
+    await batch.commit();
+    return kijiweIdToUse;
+  }
 }
