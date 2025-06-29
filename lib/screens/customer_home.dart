@@ -17,7 +17,8 @@ import '../models/user_model.dart'; // For Driver's UserModel
 import '../utils/ui_utils.dart'; // Import ui_utils
 import '../utils/map_utils.dart'; // Import the new map utility
 import '../services/firestore_service.dart';
-import 'chat_screen.dart'; // Import the ChatScreen
+import 'chat_screen.dart';
+import 'kijiwe_profile_screen.dart'; // Import KijiweProfileScreen
 import 'scheduled_rides_list_widget.dart'; // Import ScheduledRidesListWidget
 import 'rides_screen.dart'; // Import RidesScreen for ride history
 
@@ -29,6 +30,7 @@ class CustomerHome extends StatefulWidget {
 }
 
 class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClientMixin {
+  static const double _kijiweSearchRadiusKm = 10.0; // Increased radius
   // Map and Location Variables
   GoogleMapController? _mapController;
   ll.LatLng? _pickupLocation;
@@ -320,10 +322,10 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
     print("CustomerHome: Fetching nearby kijiwes around $_pickupLocation...");
 
     _kijiweSubscription?.cancel(); // Cancel any existing listener
-    final firestoreService = Provider.of<FirestoreService>(context, listen: false);
+    final firestoreService = Provider.of<FirestoreService>(context, listen: false); // This is correct
 
     print("CustomerHome: Subscribing to getNearbyKijiwes stream...");
-    _kijiweSubscription = firestoreService.getNearbyKijiwes(_pickupLocation!, 3.0).listen(
+    _kijiweSubscription = firestoreService.getNearbyKijiwes(_pickupLocation!, _kijiweSearchRadiusKm).listen(
       (kijiweDocs) {
         if (!mounted) {
           print("CustomerHome: Stream emitted but widget is not mounted. Ignoring.");
@@ -340,15 +342,18 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
           if (positionField is Map) {
             final geoPointField = positionField['geopoint'];
             if (geoPointField is GeoPoint) {
+              final kijiweId = doc.id;
+              final kijiweLocation = LatLng(geoPointField.latitude, geoPointField.longitude);
               final kijiweName = data?['name'] as String? ?? 'Kijiwe';
               print("  - Found Kijiwe: '$kijiweName' at ${geoPointField.latitude}, ${geoPointField.longitude}");
 
               newMarkers.add(
                 Marker(
                   markerId: MarkerId('kijiwe_${doc.id}'),
-                  position: LatLng(geoPointField.latitude, geoPointField.longitude),
+                  position: kijiweLocation,
                   icon: _kijiweIcon!,
-                  infoWindow: InfoWindow(title: kijiweName),
+                  infoWindow: InfoWindow(title: kijiweName, snippet: 'Tap for options'),
+                  onTap: () => _showKijiweOptionsDialog(kijiweName, kijiweLocation, kijiweId),
                   alpha: 0.8,
                   zIndex: 1,
                 ),
@@ -380,6 +385,65 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
         print("CustomerHome: getNearbyKijiwes stream is DONE.");
       },
     );
+  }
+
+  void _showKijiweOptionsDialog(String kijiweName, LatLng kijiweLocation, String kijiweId) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text(kijiweName),
+          content: const Text('What would you like to do?'),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('View Profile'),
+              onPressed: () {
+                Navigator.of(context).pop(); // Close the dialog
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => KijiweProfileScreen(kijiweId: kijiweId),
+                  ),
+                );
+              },
+            ),
+            TextButton(
+              child: const Text('Set as Pickup'),
+              onPressed: () {
+                Navigator.of(context).pop(); // Close the dialog
+                _setKijiweAsLocation(kijiweName, kijiweLocation, isPickup: true);
+              },
+            ),
+            TextButton(
+              child: const Text('Set as Destination'),
+              onPressed: () {
+                Navigator.of(context).pop(); // Close the dialog
+                _setKijiweAsLocation(kijiweName, kijiweLocation, isPickup: false);
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _setKijiweAsLocation(String name, LatLng location, {required bool isPickup}) {
+    final llLocation = ll.LatLng(location.latitude, location.longitude);
+    setState(() {
+      if (isPickup) {
+        _pickupLocation = llLocation;
+        _pickupController.text = name;
+        _updateGooglePickupMarker(location);
+      } else {
+        _dropOffLocation = llLocation;
+        _destinationController.text = name;
+        _updateGoogleDropOffMarker(location);
+      }
+      _updateSearchHistory(name); // Add Kijiwe to search history
+    });
+    _drawRoute(); // Redraw the route with the new location
+    _checkRouteReady();
+    _collapseSheet();
   }
 
   void _startEditing(String field, {bool requestFocus = true}) {
