@@ -7,7 +7,8 @@ import '../utils/ui_utils.dart';
 import 'package:intl/intl.dart';
 
 class ChatScreen extends StatefulWidget {
-  final String rideRequestId;
+  final String? rideRequestId;
+  final String? directChatId;
   final String recipientId; // UID of the other user (customer or driver)
   final String recipientName;
   final bool isChatActive;
@@ -20,7 +21,16 @@ class ChatScreen extends StatefulWidget {
     required this.recipientName,
     this.isChatActive = true,
     this.canContactAdmin = false,
-  });
+  }) : directChatId = null;
+
+  const ChatScreen.direct({
+    super.key,
+    required this.directChatId,
+    required this.recipientId,
+    required this.recipientName,
+  })  : rideRequestId = null,
+        isChatActive = true,
+        canContactAdmin = false;
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -30,6 +40,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final FirestoreService _firestoreService = FirestoreService();
+  late final DocumentReference _chatDocRef;
   String? _currentUserId;
   String? _currentUserRole;
 
@@ -43,6 +54,16 @@ class _ChatScreenState extends State<ChatScreen> {
       debugPrint("ChatScreen: CRITICAL - Current user is null. Chat will not function.");
     } else {
       _fetchCurrentUserRole();
+    }
+
+    if (widget.rideRequestId != null) {
+      _chatDocRef = FirebaseFirestore.instance
+          .collection('rideChats')
+          .doc(widget.rideRequestId);
+    } else {
+      _chatDocRef = FirebaseFirestore.instance
+          .collection('directChats')
+          .doc(widget.directChatId);
     }
     // TODO: Implement logic to mark messages as read when screen is opened
   }
@@ -89,10 +110,7 @@ class _ChatScreenState extends State<ChatScreen> {
     _messageController.clear();
 
     try {
-      await FirebaseFirestore.instance
-          .collection('rideChats')
-          .doc(widget.rideRequestId)
-          .collection('messages')
+      await _chatDocRef.collection('messages')
           .add({
         'senderId': _currentUserId,
         'senderRole': _currentUserRole,
@@ -144,10 +162,7 @@ class _ChatScreenState extends State<ChatScreen> {
         children: [
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('rideChats')
-                  .doc(widget.rideRequestId)
-                  .collection('messages')
+              stream: _chatDocRef.collection('messages')
                   .orderBy('timestamp', descending: true)
                   .snapshots(),
               builder: (context, snapshot) {
