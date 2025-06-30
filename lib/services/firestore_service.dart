@@ -1,5 +1,7 @@
 import 'package:boda_boda/models/Ride_Request_Model.dart';
 import 'dart:async';
+import 'dart:io';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/user_model.dart'; // Import the UserModel class
 import 'package:latlong2/latlong.dart' as ll;
@@ -53,6 +55,33 @@ class FirestoreService {
       await _firestore.collection('users').doc(uid).delete();
     } catch (e) {
       print("Error deleting user: $e");
+      rethrow;
+    }
+  }
+
+  Future<String> uploadProfileImage(String userId, File imageFile) async {
+    try {
+      final storageRef = FirebaseStorage.instance
+          .ref()
+          .child('profile_images')
+          .child('$userId.jpg');
+
+      await storageRef.putFile(imageFile);
+      final imageUrl = await storageRef.getDownloadURL();
+      return imageUrl;
+    } catch (e) {
+      debugPrint("Error uploading profile image: $e");
+      rethrow;
+    }
+  }
+
+  Future<void> updateUserProfileImageUrl(String userId, String imageUrl) async {
+    try {
+      await _firestore.collection('users').doc(userId).update({
+        'profileImageUrl': imageUrl,
+      });
+    } catch (e) {
+      debugPrint("Error updating profile image URL: $e");
       rethrow;
     }
   }
@@ -390,6 +419,7 @@ Stream<DocumentSnapshot> getKijiweQueueStream(String kijiweId) {
     String? newKijiweName,
     gmf.LatLng? newKijiweLocation,
     String? existingKijiweId,
+    String? profileImageUrl,
   }) async {
     final geo = GeoFlutterFire();
     String kijiweIdToUse;
@@ -437,7 +467,12 @@ Stream<DocumentSnapshot> getKijiweQueueStream(String kijiweId) {
     };
 
     final userRef = _firestore.collection('users').doc(userId);
-    batch.update(userRef, {'role': 'Driver', 'driverProfile': driverProfilePayload});
+    final userUpdatePayload = {'role': 'Driver', 'driverProfile': driverProfilePayload};
+    if (profileImageUrl != null) {
+      userUpdatePayload['profileImageUrl'] = profileImageUrl;
+    }
+
+    batch.update(userRef, userUpdatePayload);
 
     if (driverProfilePayload['isOnline'] == true) {
       final kijiweRef = _firestore.collection('kijiwe').doc(kijiweIdToUse);
