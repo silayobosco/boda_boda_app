@@ -1,12 +1,15 @@
+import 'dart:io';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/driver_provider.dart';
 import '../providers/location_provider.dart';
 import 'map_picker_screen.dart';
+import '../models/user_model.dart';
 import '../services/firestore_service.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../utils/ui_utils.dart';
+import '../widgets/profile_image_picker.dart';
 import 'home_screen.dart';
 
 class DriverRegistrationScreen extends StatefulWidget {
@@ -21,10 +24,12 @@ class _DriverRegistrationScreenState extends State<DriverRegistrationScreen> {
   final _vehicleTypeController = TextEditingController();
   final _licenseNumberController = TextEditingController();
   final _newKijiweNameController = TextEditingController();
+  File? _pickedImageFile;
   
   late Future<List<Map<String, dynamic>>> _kijiweListFuture;
   late final FirestoreService _firestoreService;
 
+  UserModel? _currentUserModel;
   String? _selectedKijiweId;
   LatLng? _selectedLocation;
 
@@ -36,6 +41,19 @@ class _DriverRegistrationScreenState extends State<DriverRegistrationScreen> {
     // Get service instance from Provider to follow best practices
     _firestoreService = Provider.of<FirestoreService>(context, listen: false);
     _kijiweListFuture = _firestoreService.getKijiweList();
+    _fetchCurrentUser();
+  }
+
+  Future<void> _fetchCurrentUser() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      final userModel = await _firestoreService.getUser(user.uid);
+      if (mounted) {
+        setState(() {
+          _currentUserModel = userModel;
+        });
+      }
+    }
   }
 
   Future<void> _selectLocationOnMap() async {
@@ -119,6 +137,11 @@ class _DriverRegistrationScreenState extends State<DriverRegistrationScreen> {
 
     final driverProvider = Provider.of<DriverProvider>(context, listen: false);
     try {
+      String? imageUrl;
+      if (_pickedImageFile != null) {
+        imageUrl = await _firestoreService.uploadProfileImage(uid, _pickedImageFile!);
+      }
+
       await driverProvider.registerAsDriver(
         userId: uid,
         vehicleType: _vehicleTypeController.text.trim(),
@@ -127,6 +150,7 @@ class _DriverRegistrationScreenState extends State<DriverRegistrationScreen> {
         newKijiweName: _isCreatingKijiwe ? _newKijiweNameController.text.trim() : null,
         newKijiweLocation: _isCreatingKijiwe ? _selectedLocation : null,
         existingKijiweId: !_isCreatingKijiwe ? _selectedKijiweId : null,
+        profileImageUrl: imageUrl,
       );
       if (!mounted) return;
       Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (context) => const HomeScreen()));
@@ -174,6 +198,15 @@ class _DriverRegistrationScreenState extends State<DriverRegistrationScreen> {
                     key: _formKey,
                     child: ListView(
                       children: [
+                        verticalSpaceMedium,
+                        ProfileImagePicker(
+                          initialImageUrl: _currentUserModel?.profileImageUrl,
+                          onImagePicked: (pickedImage) {
+                            setState(() {
+                              _pickedImageFile = pickedImage;
+                            });
+                          },
+                        ),
                         verticalSpaceMedium,
                         Text('Your Details', style: theme.textTheme.titleLarge),
                         verticalSpaceSmall,
