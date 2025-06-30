@@ -6,11 +6,11 @@ import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart'; // Import shared_preferences
 import 'package:firebase_storage/firebase_storage.dart' as firebase_storage;
 import 'package:geocoding/geocoding.dart'; // Import geocoding
-//import 'package:cached_network_image/cached_network_image.dart'; // Import cached_network_image
 import 'package:intl/intl.dart'; // Import intl for date formatting
 import '../services/user_service.dart';
 import '../models/user_model.dart';
 import '../utils/ui_utils.dart'; // Import appTextStyle, appInputDecoration, primaryColor, hintTextColor
+import '../widgets/profile_image_picker.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -28,7 +28,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final List<String> _genders = [
     'Male',
     'Female',
-    'Other',
+//'Other',
   ]; // Define valid gender options
   final UserService _userService = UserService();
 
@@ -223,28 +223,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return await ref.getDownloadURL();
   }
 
-  Future<void> _pickImage() async {
-    final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
-    if (pickedFile != null) {
-      setState(() {
-        _imageFile = File(pickedFile.path);
-      });
-
-      try {
-        String imageUrl = await _uploadImage(_auth.currentUser!.uid);
-        await _updateField("photoURL", imageUrl);
-        setState(() {
-          _photoURL = imageUrl; // Update only after successful upload
-        });
-        print("photoURL: $_photoURL");
-      } catch (e) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("Failed to upload image: $e")));
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -282,36 +260,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
-                              GestureDetector(
-                                onTap:
-                                    _isEditing
-                                        ? _pickImage
-                                        : null, // Allow image picking only in edit mode
-                                child: CircleAvatar(
-                                  radius: 60,
-                                  backgroundColor:
-                                      Colors
-                                          .grey[300], // Fallback background color
-                                  backgroundImage:
-                                      _photoURL != null && _photoURL!.isNotEmpty
-                                          ? NetworkImage(_photoURL!)
-                                              as ImageProvider
-                                          : const AssetImage("assets/icon.png"),
-                                  onBackgroundImageError: (_, __) {
+                              ProfileImagePicker(
+                                initialImageUrl: _photoURL,
+                                enabled: _isEditing, // Only allow picking when editing
+                                onImagePicked: (pickedImage) async {
+                                  setState(() {
+                                    _imageFile = pickedImage;
+                                  });
+                                  try {
+                                    String imageUrl = await _uploadImage(_auth.currentUser!.uid);
+                                    await _updateField("profileImageUrl", imageUrl);
                                     setState(() {
-                                      _photoURL =
-                                          null; // Reset photoURL to trigger default avatar
+                                      _photoURL = imageUrl;
                                     });
-                                  },
-                                  child:
-                                      (_photoURL == null || _photoURL!.isEmpty)
-                                          ? const Icon(
-                                            Icons.person,
-                                            size: 60,
-                                            color: Colors.white,
-                                          )
-                                          : null, // Show an icon if no image is available
-                                ),
+                                  } catch (e) {
+                                    if (mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(content: Text("Failed to upload image: $e")),
+                                      );
+                                    }
+                                  }
+                                },
                               ),
                               const SizedBox(height: 16),
                               Text(
