@@ -1,10 +1,14 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../services/firestore_service.dart';
 import '../utils/ui_utils.dart';
 import '../utils/validation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../models/user_model.dart';
+import '../widgets/profile_image_picker.dart';
 
 class AdditionalInfoScreen extends StatefulWidget {
   final String userUid;
@@ -17,11 +21,14 @@ class AdditionalInfoScreen extends StatefulWidget {
 
 class _AdditionalInfoScreenState extends State<AdditionalInfoScreen> {
   final _formKey = GlobalKey<FormState>();
+  final FirestoreService _firestoreService = FirestoreService();
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _dobController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController =
       TextEditingController();
+  File? _pickedImageFile;
+  UserModel? _currentUserModel;
   String? _selectedGender;
   bool _obscureConfirmPassword = true;
 
@@ -29,6 +36,18 @@ class _AdditionalInfoScreenState extends State<AdditionalInfoScreen> {
   void initState() {
     super.initState();
     _phoneController.text = "+255";
+    _fetchCurrentUser();
+  }
+
+  Future<void> _fetchCurrentUser() async {
+    // No need to check for mounted here as this is initState
+    final userModel = await _firestoreService.getUser(widget.userUid);
+    // Check mounted before calling setState
+    if (mounted) {
+      setState(() {
+        _currentUserModel = userModel;
+      });
+    }
   }
 
   // Function to save additional information to Firestore
@@ -51,6 +70,11 @@ class _AdditionalInfoScreenState extends State<AdditionalInfoScreen> {
           'gender': _selectedGender,
           'location': GeoPoint(position.latitude, position.longitude),
         };
+
+        if (_pickedImageFile != null) {
+          final imageUrl = await _firestoreService.uploadProfileImage(widget.userUid, _pickedImageFile!);
+          userData['profileImageUrl'] = imageUrl;
+        }
 
         // Update the user's password in Firebase Authentication
         if (_passwordController.text.isNotEmpty) {
@@ -135,6 +159,13 @@ class _AdditionalInfoScreenState extends State<AdditionalInfoScreen> {
             child: SingleChildScrollView(
               child: Column(
                 children: [
+                  ProfileImagePicker(
+                    initialImageUrl: _currentUserModel?.profileImageUrl,
+                    onImagePicked: (pickedImage) {
+                      _pickedImageFile = pickedImage;
+                    },
+                  ),
+                  verticalSpaceMedium,
                   TextFormField(
                     controller: _phoneController,
                     keyboardType: TextInputType.phone,
