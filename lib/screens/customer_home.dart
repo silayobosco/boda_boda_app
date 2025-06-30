@@ -1760,34 +1760,42 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
       resizeToAvoidBottomInset: true,
       body: Stack(
         children: [
-          // Use a key to preserve map state
-          GoogleMap(
-            mapType: MapType.normal,
-            initialCameraPosition: CameraPosition(
-              target: locationProvider.currentLocation != null
-                  ? LatLng(
-                      locationProvider.currentLocation!.latitude,
-                      locationProvider.currentLocation!.longitude,
-                    )
-                  : const LatLng(0, 0),
-              zoom: 15,
+          if (locationProvider.currentLocation == null)
+            const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(),
+                  verticalSpaceMedium,
+                  Text('Fetching your location...'),
+                ],
+              ),
+            )
+          else
+            GoogleMap(
+              mapType: MapType.normal,
+              initialCameraPosition: CameraPosition(
+                target: LatLng(
+                  locationProvider.currentLocation!.latitude,
+                  locationProvider.currentLocation!.longitude,
+                ),
+                zoom: 15, // Start with a more zoomed-in view
+              ),
+              onMapCreated: (controller) {
+                _mapController = controller;
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  _adjustMapForExpandedSheet();
+                });
+              },
+              onTap: _handleMapTap,
+              markers: {..._markers, ..._kijiweMarkers},
+              polylines: _polylines,
+              zoomControlsEnabled: false,
+              myLocationEnabled: true,
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).size.height * _currentSheetSize,
+              ),
             ),
-            onMapCreated: (controller) {
-              _mapController = controller;
-              // No need to call _adjustMapForExpandedSheet here, it's called by _onSheetChanged
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                _adjustMapForExpandedSheet();
-              });
-            },
-            onTap: _handleMapTap,
-            markers: {..._markers, ..._kijiweMarkers},
-            polylines: _polylines,
-            zoomControlsEnabled: false, // Disable default zoom controls
-            myLocationEnabled: true,
-            padding: EdgeInsets.only( // Map padding to avoid overlap with sheet
-              bottom: MediaQuery.of(context).size.height * _currentSheetSize,
-            ),
-          ),
           // The DraggableScrollableSheet is now built directly, using the state
           // variables (_activeRideRequestDetails, _isFindingDriver) that are
           // updated by our new _listenToActiveRide subscription.
