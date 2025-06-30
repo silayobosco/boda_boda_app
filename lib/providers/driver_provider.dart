@@ -155,6 +155,7 @@ class DriverProvider extends ChangeNotifier {
     final String? newKijiweName,
     final LatLng? newKijiweLocation,
     final String? existingKijiweId,
+    final String? profileImageUrl,
   }) async {
     setLoading(true);
     try {
@@ -166,6 +167,7 @@ class DriverProvider extends ChangeNotifier {
         newKijiweName: newKijiweName,
         newKijiweLocation: newKijiweLocation,
         existingKijiweId: existingKijiweId,
+        profileImageUrl: profileImageUrl,
       );
 
       // Update provider's internal state immediately after successful registration
