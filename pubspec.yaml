@@ -43,6 +43,7 @@ dependencies:
   google_sign_in: ^6.1.5 # Google Sign In package 6.1.5
   intl: ^0.20.2
   image_picker: ^1.1.2
+  image_cropper: ^9.1.0
   cupertino_icons: ^1.0.8
   geolocator: ^14.0.0
   permission_handler: ^12.0.0+1 
@@ -62,7 +63,8 @@ dependencies:
   flutter_local_notifications: ^19.2.1
   flutter_firebase_chat_core: ^1.6.8
   cloud_functions: ^5.5.1
-  firebase_app_check: ^0.3.2+6
+  firebase_app_check: ^0.3.2
+  flutter_dotenv: ^5.2.1
 
 dev_dependencies:
   build_runner: ^2.4.0
@@ -93,6 +95,7 @@ flutter:
     - assets/boda_marker.png
     - assets/kijiwe_marker.png
     - assets/home_kijiwe_marker.png
+    - .env
    
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
