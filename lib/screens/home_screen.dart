@@ -53,9 +53,10 @@ class _HomeScreenState extends State<HomeScreen> {
   ];
   final List<Widget> _adminScreens = const [ // Make the list itself const
     AdminHome(key: PageStorageKey('AdminHome')),
-    Text("Admin Dashboard Screen", key: PageStorageKey('AdminDashboard')),
-    Text("Admin Screen", key: PageStorageKey('AdminScreenContent')), // Changed key to be more specific
-    Text("Admin Account Screen", key: PageStorageKey('AdminAccount')),
+    // Placeholder for a future 'Reports' screen
+    Center(child: Text("Reports Screen (Coming Soon)", key: PageStorageKey('AdminReports'))),
+    // Placeholder for a future 'Admin Settings' screen
+    Center(child: Text("Admin Settings Screen (Coming Soon)", key: PageStorageKey('AdminSettings'))),
   ];
 
   late final NotificationProvider _notificationProvider; // Add NotificationProvider instance
@@ -178,21 +179,14 @@ class _HomeScreenState extends State<HomeScreen> {
     switch (role) {
       case 'Admin':
         return [
+          const BottomNavigationBarItem(icon: Icon(Icons.dashboard_customize_outlined), label: 'Panel'),
           const BottomNavigationBarItem(
-            icon: Icon(Icons.dashboard),
-            label: 'Home',
+            icon: Icon(Icons.bar_chart_outlined),
+            label: 'Reports',
           ),
           const BottomNavigationBarItem(
-            icon: Icon(Icons.settings),
-            label: 'Dashboard',
-          ),
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.admin_panel_settings),
-            label: 'Admin',
-          ),
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.account_circle),
-            label: 'Admin',
+            icon: Icon(Icons.settings_outlined),
+            label: 'Settings',
           ),
         ];
       case 'Driver':
