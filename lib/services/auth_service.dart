@@ -162,7 +162,7 @@ class AuthService {
           'uid': user.uid,
           'name': user.displayName,
           'email': user.email,
-          'photoURL': user.photoURL,
+          'profileImageUrl': user.photoURL, // Use 'profileImageUrl' to match UserModel
           'role': 'Customer', // set default role to customer
           'phoneNumber': null,
           'dob': null,
