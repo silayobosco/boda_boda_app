@@ -1987,10 +1987,40 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                           // Title (Your Route)
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), // Use spacing constants?
-                            child: Text(
-                              'Your route',
-                              // Use theme text style
-                              style: Theme.of(context).textTheme.titleLarge,
+                            child: Row(
+                              children: [
+                                Text(
+                                  'Your route',
+                                  style: Theme.of(context).textTheme.titleLarge,
+                                ),
+                                const Spacer(),
+                                // Swap button (only show if both pickup and destination are set)
+                                if (_pickupLocation != null && _dropOffLocation != null)
+                                  IconButton(
+                                    icon: const Icon(Icons.swap_vert, size: 24),
+                                    tooltip: 'Swap locations',
+                                    onPressed: _swapLocations,
+                                  ),
+                                // Add Stop button (only show if pickup and destination are set)
+                                if (_pickupLocation != null && _dropOffLocation != null) 
+                                  IconButton(
+                                    icon: const Icon(Icons.add_location_alt_outlined),
+                                    tooltip: 'Add Stop',
+                                    onPressed: _addStop,
+                                  ),
+                                // Expand/Collapse toggle
+                                IconButton(
+                                  icon: Icon(_isSheetExpanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_up),
+                                  tooltip: _isSheetExpanded ? 'Collapse Sheet' : 'Expand Sheet',
+                                  onPressed: () {
+                                    if (_isSheetExpanded) {
+                                      _collapseSheet();
+                                    } else {
+                                      _expandSheet();
+                                    }
+                                  },
+                                ),
+                              ],
                             ),
                           ),
                           
@@ -2056,8 +2086,18 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                                       onMapIconTap: () { setState(() { _selectingPickup = true; _editingPickup = true; }); _collapseSheet(); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tap on map to select pickup location'))); },
                                     ),
                                   ),
-                                  IconButton(icon: const Icon(Icons.add_location_alt_outlined), onPressed: _addStop, tooltip: 'Add Stop'),
-                                ],
+                                // X button to clear pickup
+                                IconButton(
+                                  icon: const Icon(Icons.clear),
+                                  tooltip: 'Clear Pickup',
+                                  onPressed: () {
+                                      _clearPickup();
+                                      setState(() {
+                                        _editingPickup = true;
+                                        _pickupFocusNode.requestFocus();
+                                      });
+                                    },
+                                  ),                                ],
                               ),
                             ),
                           if (_editingPickup) // Suggestions list for pickup
@@ -2134,10 +2174,16 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                                 ),
                                 if (_pickupLocation != null && _dropOffLocation != null) // Show swap button if both are set
                                   IconButton(
-                                    icon: const Icon(Icons.swap_vert, size: 24),
-                                    onPressed: _swapLocations,
-                                    tooltip: 'Swap locations',
-                                  ),
+                                    icon: const Icon(Icons.clear),
+                                    tooltip: 'Clear Destination',
+                                    onPressed: () {
+                                        _clearDestination();
+                                        setState(() {
+                                          _editingDestination = true;
+                                          _destinationFocusNode.requestFocus();
+                                        });
+                                      },                                 
+                              ),
                               ],
                             ),
                           ),
