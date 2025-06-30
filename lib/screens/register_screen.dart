@@ -1,12 +1,15 @@
- import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:io';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../services/firestore_service.dart';
 import '../services/user_service.dart';
 import '../utils/ui_utils.dart';
 import '../utils/validation.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../models/user_model.dart';
+import '../widgets/profile_image_picker.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -19,6 +22,7 @@ class _RegisterScreenState extends State<RegisterScreen>
     with SingleTickerProviderStateMixin {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final UserService _userService = UserService();
+  final FirestoreService _firestoreService = FirestoreService();
 
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
@@ -33,6 +37,7 @@ class _RegisterScreenState extends State<RegisterScreen>
   String? _selectedGender;
   late AnimationController _animationController;
   late Animation<double> _animation;
+  File? _pickedImageFile;
 
   final _formKey = GlobalKey<FormState>();
 
@@ -84,6 +89,14 @@ class _RegisterScreenState extends State<RegisterScreen>
       String dob = _dobController.text.trim();
       String gender = _selectedGender ?? "";
 
+      String? imageUrl;
+      if (_pickedImageFile != null) {
+        // Temporarily create a dummy user to get UID for storage path
+        final tempUser = await _auth.createUserWithEmailAndPassword(email: email, password: password);
+        imageUrl = await _firestoreService.uploadProfileImage(tempUser.user!.uid, _pickedImageFile!);
+        await tempUser.user!.delete(); // Delete temp user, will be recreated
+      }
+
       UserCredential userCredential = await _auth
           .createUserWithEmailAndPassword(email: email, password: password);
 
@@ -103,7 +116,7 @@ class _RegisterScreenState extends State<RegisterScreen>
           gender: gender,
           location: GeoPoint(position.latitude, position.longitude),
           role: "Customer",
-          profileImageUrl: null,
+          profileImageUrl: imageUrl,
         );
 
 
@@ -143,6 +156,12 @@ class _RegisterScreenState extends State<RegisterScreen>
                 key: _formKey,
                 child: Column(
                   children: [
+                    ProfileImagePicker(
+                      onImagePicked: (pickedImage) {
+                        _pickedImageFile = pickedImage;
+                      },
+                    ),
+                    verticalSpaceMedium,
                     _buildTextField(
                       controller: _nameController,
                       labelText: "Full Name",
