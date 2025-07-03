@@ -47,8 +47,7 @@ class DriverAccountScreen extends StatelessWidget {
               () {
             Navigator.push(
                 context,
-                MaterialPageRoute(
-                    builder: (context) => const HelpAndSupportScreen()));
+                MaterialPageRoute(builder: (context) => const HelpAndSupportScreen(userRole: 'Driver')));
           }),
           _buildAccountOption(context, Icons.info_outline, 'About Us', () {
             Navigator.push(

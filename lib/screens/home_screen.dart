@@ -429,7 +429,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildMainScreen(String role) {
     final List<Widget> currentScreenList = _getCurrentScreenList(role);
     return Scaffold(
-      drawer: const AppDrawer(),
+      drawer: AppDrawer(userRole: role),
       body: IndexedStack( // Use IndexedStack to preserve state of screens
         index: _selectedIndex,
         children: currentScreenList,

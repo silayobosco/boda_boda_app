@@ -44,8 +44,7 @@ class CustomerAccountScreen extends StatelessWidget {
               () {
             Navigator.push(
                 context,
-                MaterialPageRoute(
-                    builder: (context) => const HelpAndSupportScreen()));
+                MaterialPageRoute(builder: (context) => const HelpAndSupportScreen(userRole: 'Customer')));
           }),
           _buildAccountOption(context, Icons.info_outline, 'About Us', () {
             Navigator.push(

@@ -10,7 +10,9 @@ import '../screens/driver_registration_screen.dart';
 import '../screens/chat_list_screen.dart'; // Import ChatListScreen
 
 class AppDrawer extends StatelessWidget {
-  const AppDrawer({super.key});
+  final String userRole;
+
+  const AppDrawer({super.key, required this.userRole});
 
   @override
   Widget build(BuildContext context) {
@@ -111,7 +113,7 @@ class AppDrawer extends StatelessWidget {
               Navigator.of(context).pop(); // Close drawer
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => const HelpAndSupportScreen()),
+                MaterialPageRoute(builder: (context) => HelpAndSupportScreen(userRole: userRole)),
               );
             },
           ),
