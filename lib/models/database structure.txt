@@ -39,6 +39,13 @@
         - sumOfRatingsReceived: Number // Sum of ratings given by drivers to this customer
         - totalRatingsReceivedCount: Number
         - averageRating: Number // Calculated: sumOfRatingsReceived / totalRatingsReceivedCount
+        - savedPlaces: Array of Maps [
+            {
+                'label': String, // e.g., "Home", "Work"
+                'address': String, // Human-readable address
+                'location': GeoPoint
+            }
+        ]
     - driverProfile: Map  //  Optional - Only present if role includes "Driver" or "Both"
         - approved: Boolean  // Whether they've been approved as a driver by an admin
         - vehicleType: String
