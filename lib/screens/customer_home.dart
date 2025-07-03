@@ -583,6 +583,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
   }
 
   void _onSheetChanged() {
+    if (!mounted) return;
     setState(() {
       _currentSheetSize = _sheetController.size;
       _isSheetExpanded = _sheetController.size > 0.6;
@@ -1025,6 +1026,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
 
   Future<void> _handleDestinationSelected(Map<String, dynamic> suggestion) async {
     final placeDetails = await _getPlaceDetails(suggestion['place_id']);
+    if (!mounted) return;
     if (placeDetails != null) {
       final latLng = ll.LatLng(placeDetails['latitude'], placeDetails['longitude']);
       final address = suggestion['description'] ?? '';
@@ -1054,6 +1056,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
   // Handle pickup, drop-off, and stop selection
   Future<void> _handlePickupSelected(Map<String, dynamic> suggestion) async {
   final placeDetails = await _getPlaceDetails(suggestion['place_id']);
+  if (!mounted) return;
   if (placeDetails != null) {
     final latLng = ll.LatLng(placeDetails['latitude'], placeDetails['longitude']);
     final address = suggestion['description'] ?? '';
@@ -1083,6 +1086,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
 
   Future<void> _handleStopSelected(int index, Map<String, dynamic> suggestion) async {
   final placeDetails = await _getPlaceDetails(suggestion['place_id']);
+  if (!mounted) return;
   if (placeDetails != null) {
     final latLng = ll.LatLng(placeDetails['latitude'], placeDetails['longitude']);
     final address = suggestion['description'] ?? '';
@@ -2081,7 +2085,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                                       isEditing: _editingPickup,
                                       focusNode: _pickupFocusNode,
                                       onTapWhenNotEditing: () => _startEditing('pickup'),
-                                      onChanged: (value) async { if (value.isNotEmpty) { final suggestions = await _getGooglePlacesSuggestions(value); setState(() => _pickupSuggestions = suggestions); } else { setState(() => _pickupSuggestions = []); } },
+                                      onChanged: (value) async { if (value.isNotEmpty) { final suggestions = await _getGooglePlacesSuggestions(value); if (mounted) setState(() => _pickupSuggestions = suggestions); } else { if (mounted) setState(() => _pickupSuggestions = []); } },
                                       onClear: _clearPickup,
                                       onMapIconTap: () { setState(() { _selectingPickup = true; _editingPickup = true; }); _collapseSheet(); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tap on map to select pickup location'))); },
                                     ),
@@ -2167,7 +2171,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                                     isEditing: _editingDestination,
                                     focusNode: _destinationFocusNode,
                                     onTapWhenNotEditing: () => _startEditing('destination'),
-                                    onChanged: (value) async { if (value.isNotEmpty) { final suggestions = await _getGooglePlacesSuggestions(value); setState(() => _destinationSuggestions = suggestions); } else { setState(() => _destinationSuggestions = []); } },
+                                    onChanged: (value) async { if (value.isNotEmpty) { final suggestions = await _getGooglePlacesSuggestions(value); if (mounted) setState(() => _destinationSuggestions = suggestions); } else { if (mounted) setState(() => _destinationSuggestions = []); } },
                                     onClear: _clearDestination,
                                     onMapIconTap: () { setState(() => _editingDestination = true); _collapseSheet(); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tap on map to select destination'))); },
                                   ),
@@ -2617,7 +2621,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                     isEditing: isEditing,
                     focusNode: stop.focusNode, // Use stop's own focus node
                     onTapWhenNotEditing: () => _startEditing('stop_$index'),
-                    onChanged: (value) async { if (value.isNotEmpty) { final suggestions = await _getGooglePlacesSuggestions(value); setState(() => _stopSuggestions = suggestions); } else { setState(() => _stopSuggestions = []); } },
+                    onChanged: (value) async { if (value.isNotEmpty) { final suggestions = await _getGooglePlacesSuggestions(value); if (mounted) setState(() => _stopSuggestions = suggestions); } else { if (mounted) setState(() => _stopSuggestions = []); } },
                     onClear: () => _clearStop(index),
                     onMapIconTap: () { setState(() { _editingStopIndex = index; _selectingPickup = false; _editingPickup = false; _editingDestination = false; }); _collapseSheet(); ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Tap on map to select location for Stop ${index + 1}'))); },
                   ),

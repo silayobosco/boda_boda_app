@@ -50,13 +50,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final authService = Provider.of<AuthService>(context, listen: false);
     _currentUserId = authService.currentUser?.uid;
 
-    if (_currentUserId == null) {
-      debugPrint("ChatScreen: CRITICAL - Current user is null. Chat will not function.");
-    } else {
-      _fetchCurrentUserRole();
-      _markMessagesAsRead(); // Mark messages as read when entering the screen
-    }
-
+    // Initialize _chatDocRef first, as other methods in initState depend on it.
     if (widget.rideRequestId != null) {
       _chatDocRef = FirebaseFirestore.instance
           .collection('rideChats')
@@ -65,6 +59,13 @@ class _ChatScreenState extends State<ChatScreen> {
       _chatDocRef = FirebaseFirestore.instance
           .collection('directChats')
           .doc(widget.directChatId);
+    }
+
+    if (_currentUserId == null) {
+      debugPrint("ChatScreen: CRITICAL - Current user is null. Chat will not function.");
+    } else {
+      _fetchCurrentUserRole();
+      _markMessagesAsRead(); // Mark messages as read when entering the screen
     }
   }
 
