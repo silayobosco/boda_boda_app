@@ -305,6 +305,40 @@ class RideRequestProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> pauseScheduledRide(String rideId) async {
+    final HttpsCallable callable = _functions.httpsCallable('manageScheduledRide');
+    try {
+      final response = await callable.call(<String, dynamic>{'action': 'pause', 'rideId': rideId});
+      debugPrint("Pause scheduled ride result: ${response.data}");
+    } catch (e) {
+      debugPrint('Error pausing scheduled ride: $e');
+      throw Exception('Failed to pause scheduled ride: ${e.toString()}');
+    }
+  }
+
+  Future<void> unpauseScheduledRide(String rideId) async {
+    final HttpsCallable callable = _functions.httpsCallable('manageScheduledRide');
+    try {
+      final response = await callable.call(<String, dynamic>{'action': 'unpause', 'rideId': rideId});
+      debugPrint("Unpause scheduled ride result: ${response.data}");
+    } catch (e) {
+      debugPrint('Error unpausing scheduled ride: $e');
+      throw Exception('Failed to unpause scheduled ride: ${e.toString()}');
+    }
+  }
+
+  Future<void> stopScheduledRecurrence(String rideId) async {
+    final HttpsCallable callable = _functions.httpsCallable('manageScheduledRide');
+    try {
+      final response = await callable.call(<String, dynamic>{'action': 'stopRecurrence', 'rideId': rideId});
+      debugPrint("Stop scheduled recurrence result: ${response.data}");
+      // No notifyListeners needed, UI will update via Firestore stream
+    } catch (e) {
+      debugPrint('Error stopping scheduled recurrence: $e');
+      throw Exception('Failed to stop recurring ride: ${e.toString()}');
+    }
+  }
+
   // The rateUser method is now split.
   // Driver rating Customer is handled by DriverProvider via Cloud Function.
   Future<void> rateUser({

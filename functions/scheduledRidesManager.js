@@ -98,6 +98,28 @@ exports.manageScheduledRide = onCall(async (request) => {
       // If it's a recurring ride master, you might want to delete generated instances.
       // This would require querying for instances linked to this masterId.
       return { success: true, message: "Scheduled ride deleted successfully." };
+    } else if (action === "pause") {
+      if (rideDoc.data().status !== "scheduled") {
+        throw new HttpsError("failed-precondition", "Only an active scheduled ride can be paused.");
+      }
+      await scheduledRideRef.update({ status: "paused" });
+      logger.log(`Ride ${rideId} has been paused by user ${uid}.`);
+      return { success: true, message: "Ride paused successfully." };
+    } else if (action === "unpause") {
+      if (rideDoc.data().status !== "paused") {
+        throw new HttpsError("failed-precondition", "Only a paused ride can be unpaused.");
+      }
+      await scheduledRideRef.update({ status: "scheduled" });
+      logger.log(`Ride ${rideId} has been unpaused by user ${uid}.`);
+      return { success: true, message: "Ride unpaused successfully." };
+    } else if (action === "stopRecurrence") {
+      if (rideDoc.data().isRecurring !== true) {
+        throw new HttpsError("failed-precondition", "This action is only for recurring rides.");
+      }
+      // Change status to 'stopped' to prevent future instance generation
+      await scheduledRideRef.update({ status: "stopped" });
+      logger.log(`Recurring ride ${rideId} has been stopped by user ${uid}.`);
+      return { success: true, message: "Recurring ride stopped successfully." };
     } else {
       logger.error("manageScheduledRide: Invalid action specified.", { uid, action });
       throw new HttpsError("invalid-argument", "Invalid action specified.");
