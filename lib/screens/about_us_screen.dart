@@ -18,7 +18,7 @@ class AboutUsScreen extends StatelessWidget {
           children: [
             Center(
               child: Image.asset(
-                'assets/boda_marker.png', // Assuming you have a logo here
+                'assets/icon.png', // Assuming you have a logo here
                 height: 100,
               ),
             ),
