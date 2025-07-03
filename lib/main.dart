@@ -1,5 +1,4 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
-//import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart'; // Keep for StreamBuilder
@@ -18,10 +17,26 @@ import 'services/auth_service.dart';
 import 'providers/driver_provider.dart';
 import 'services/firestore_service.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter_localization/flutter_localization.dart';
+import 'localization/locales.dart';
 
 @pragma('vm:entry-point') // Required for release mode on Android
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  await Firebase.initializeApp(); // Ensure Firebase is initialized
+  // Initialize services for the background isolate
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await FlutterLocalization.instance.ensureInitialized();
+
+  // Initialize localization for the background isolate as well.
+  // This is crucial because the background handler runs in a separate context.
+  final FlutterLocalization localization = FlutterLocalization.instance;
+  localization.init(
+    mapLocales: [
+      const MapLocale('en', AppLocale.EN),
+      const MapLocale('sw', AppLocale.SW),
+    ],
+    initLanguageCode: 'en', // Use a default language for background tasks
+  );
+
   debugPrint("Handling a background message: ${message.messageId}");
   debugPrint('Message data: ${message.data}');
   // You can perform background tasks here, or save data to be picked up when the app opens.
@@ -60,6 +75,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: ".env");
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await FlutterLocalization.instance.ensureInitialized();
   //await FirebaseAppCheck.instance.activate(
     // For Android, use Play Integrity
     //androidProvider: AndroidProvider.playIntegrity,
@@ -93,14 +109,38 @@ void main() async {
 );
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  final FlutterLocalization localization = FlutterLocalization.instance;
+
+  @override
+  void initState() {
+    localization.init(
+      mapLocales: [
+        const MapLocale('en', AppLocale.EN),
+        const MapLocale('sw', AppLocale.SW),
+      ],
+      initLanguageCode: 'en',
+    );
+    localization.onTranslatedLanguage = (locale) {
+      setState(() {});
+    };
+    super.initState();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Consumer<ThemeProvider>(
       builder: (context, themeProvider, child) {
         return MaterialApp(
+          supportedLocales: localization.supportedLocales,
+          localizationsDelegates: localization.localizationsDelegates,
           debugShowCheckedModeBanner: false,
           title: 'Boda Boda App',
           theme: AppThemes.lightTheme,
