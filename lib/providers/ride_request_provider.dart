@@ -355,6 +355,16 @@ class RideRequestProvider extends ChangeNotifier {
     });
   }
 
+  // Stream a single scheduled ride
+  Stream<RideRequestModel?> getScheduledRideStream(String rideId) {
+    return _firestoreService.getScheduledRideDocumentStream(rideId).map((snapshot) {
+      if (snapshot.exists && snapshot.data() != null) {
+        return RideRequestModel.fromJson(snapshot.data() as Map<String, dynamic>, snapshot.id);
+      }
+      return null;
+    });
+  }
+
   // Method to get ride history based on role
   Stream<List<RideRequestModel>> getRideHistory(String userId, String role) {
     if (role == 'Customer') {

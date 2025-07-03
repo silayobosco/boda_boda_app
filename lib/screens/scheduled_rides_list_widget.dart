@@ -4,6 +4,7 @@ import '../models/Ride_Request_Model.dart'; // Assuming ScheduledRideModel or ad
 import '../providers/ride_request_provider.dart'; // To fetch scheduled rides
 import '../services/auth_service.dart'; // To get current user ID
 import '../utils/ui_utils.dart'; // For styles and spacing
+import 'scheduled_ride_details_screen.dart'; // Import the new details screen
 
 class ScheduledRidesListWidget extends StatelessWidget {
   // final String userId; // Consider passing userId
@@ -52,7 +53,12 @@ class ScheduledRidesListWidget extends StatelessWidget {
                 ),
                 subtitle: Text('To: ${ride.dropoffAddressName ?? 'Destination'}'),
                 onTap: () {
-                  // TODO: Navigate to Scheduled Ride Details or allow cancellation
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => ScheduledRideDetailsScreen(initialRide: ride),
+                    ),
+                  );
                 },
               ),
             );

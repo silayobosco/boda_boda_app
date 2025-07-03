@@ -142,6 +142,11 @@ Future<String> createRideRequest(RideRequestModel rideRequest) async {
     return _firestore.collection('rideRequests').doc(rideRequestId).snapshots();
   }
 
+  // Stream a single scheduled ride document
+  Stream<DocumentSnapshot> getScheduledRideDocumentStream(String rideId) {
+    return _firestore.collection('scheduledRides').doc(rideId).snapshots();
+  }
+
 
   Future<void> updateRideRequestStatus(String rideRequestId, String status, {String? driverId, String? kijiweId}) async {
     try {

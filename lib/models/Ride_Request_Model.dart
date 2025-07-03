@@ -35,7 +35,6 @@ class RideRequestModel {
   final String? driverVehicleType; // Added for consistency
   final double? driverAverageRating;
   final int? driverCompletedRidesCount;
-  final DateTime? scheduledDateTime; // Added for scheduled rides
   final String? customerNoteToDriver; // Note from customer to driver
   final double? estimatedDistanceKm; // New field for estimated distance
   final double? estimatedDurationMinutes; // New field for estimated duration
@@ -43,7 +42,20 @@ class RideRequestModel {
   final Map<String, dynamic>? fareConfigUsed; // New field to store fare config used for final fare
   final double? customerCalculatedEstimatedFare; // Customer's app calculated estimate
 
+  // Fields for scheduled rides
+  final String? title;
+  final DateTime? scheduledDateTime;
+  final bool? isRecurring;
+  final String? recurrenceType;
+  final List<String>? recurrenceDaysOfWeek;
+  final DateTime? recurrenceEndDate;
 
+  // Fields for actual ride data, if available
+  final double? actualDistanceKm;
+  final double? actualDrivingDurationMinutes;
+  final double? actualTotalWaitingTimeMinutes;
+
+  // Constructor
   RideRequestModel({
     this.id,
     required this.customerId,
@@ -74,76 +86,65 @@ class RideRequestModel {
     this.driverVehicleType,
     this.driverAverageRating,
     this.driverCompletedRidesCount,
-    this.scheduledDateTime,
     this.customerNoteToDriver,
     this.estimatedDistanceKm,
     this.estimatedDurationMinutes,
     this.estimatedFare,
     this.fareConfigUsed,
     this.customerCalculatedEstimatedFare,
+    this.actualDistanceKm,
+    this.actualDrivingDurationMinutes,
+    this.actualTotalWaitingTimeMinutes,
+    this.title,
+    this.scheduledDateTime,
+    this.isRecurring,
+    this.recurrenceType,
+    this.recurrenceDaysOfWeek,
+    this.recurrenceEndDate,
   });
 
-  factory RideRequestModel.fromJson(Map<String, dynamic> json, String rideRequestId) {
-    final estimatedFareFromJson = (json['estimatedFare'] as num?)?.toDouble();
-    final customerCalculatedFare = (json['customerCalculatedEstimatedFare'] as num?)?.toDouble();
-
-    DateTime? parsedScheduledDateTime;
-    if (json['scheduledDateTime'] is Timestamp) {
-      parsedScheduledDateTime = (json['scheduledDateTime'] as Timestamp).toDate();
-    } else if (json['scheduledDateTime'] is String) {
-      // Attempt to parse the string. This assumes ISO 8601 format.
-      // If your string format is different, adjust the parsing accordingly.
-      parsedScheduledDateTime = DateTime.tryParse(json['scheduledDateTime'] as String);
+  // Helper to convert Firestore Timestamp or String to DateTime
+  static DateTime? _toDateTime(dynamic value) {
+    if (value is Timestamp) {
+      return value.toDate();
+    } else if (value is String) {
+      return DateTime.tryParse(value);
     }
+    return null;
+  }
+
+  // Helper to convert Firestore GeoPoint to gmf.LatLng
+  static gmf.LatLng? _toLatLng(dynamic value) {
+    if (value is GeoPoint) {
+      return gmf.LatLng(value.latitude, value.longitude);
+    }
+    return null;
+  }
+
+  // Factory constructor to create an instance from JSON
+  factory RideRequestModel.fromJson(Map<String, dynamic> json, String rideRequestId) {
     return RideRequestModel(
       id: rideRequestId,
       customerId: json['customerId'] as String,
       driverId: json['driverId'] as String?,
-      pickup: json['pickup'] is GeoPoint
-          ? gmf.LatLng(
-              (json['pickup'] as GeoPoint).latitude,
-              (json['pickup'] as GeoPoint).longitude,
-            )
-          : const gmf.LatLng(0, 0), // Default or error handling for missing pickup
-      dropoff: json['dropoff'] is GeoPoint
-          ? gmf.LatLng(
-              (json['dropoff'] as GeoPoint).latitude,
-              (json['dropoff'] as GeoPoint).longitude,
-            )
-          : const gmf.LatLng(0, 0), // Default or error handling for missing dropoff
-      stops: (json['stops'] as List<dynamic>?) 
-              ?.map((stopDataElement) { // Renamed to avoid conflict
-                if (stopDataElement is Map<String, dynamic>) {
-                  final stopMap = stopDataElement; // Safe cast
-                  final locationData = stopMap['location']; // This is GeoPoint?
-                  gmf.LatLng stopLocation;
-
-                  if (locationData is GeoPoint) {
-                    stopLocation = gmf.LatLng(locationData.latitude, locationData.longitude);
-                  } else {
-                    // If location is null or not a GeoPoint, use a default.
-                    stopLocation = const gmf.LatLng(0, 0); // Default placeholder
-                    if (locationData != null) {
-                      debugPrint("RideRequestModel.fromJson: Stop location was not a GeoPoint, using default. Data: $locationData");
-                    }
-                  }
-                  return {
-                    'name': stopMap['name'] as String? ?? 'Unnamed Stop', // Handle if name is unexpectedly null
-                    'location': stopLocation, // gmf.LatLng, non-null
-                    'addressName': stopMap['addressName'] as String?,
-                  };
-                }
-                return null; // If stopDataElement is not a map, return null for this element
-              })
-              .whereType<Map<String, dynamic>>() // Filter out any nulls returned above
-              .toList() ??
-          [],
+      pickup: _toLatLng(json['pickup']) ?? const gmf.LatLng(0, 0),
+      dropoff: _toLatLng(json['dropoff']) ?? const gmf.LatLng(0, 0),
+      stops: (json['stops'] as List<dynamic>?)
+          ?.map((stop) {
+            final stopMap = stop as Map<String, dynamic>;
+            return {
+              'name': stopMap['name'] as String? ?? 'Stop',
+              'location': _toLatLng(stopMap['location']) ?? const gmf.LatLng(0, 0),
+              'addressName': stopMap['addressName'] as String?,
+            };
+          })
+          .toList() ?? [],
       status: json['status'] as String? ?? 'unknown', // Provide default for status
-      requestTime: (json['requestTime'] as Timestamp?)?.toDate(),
+      requestTime: _toDateTime(json['requestTime']),
       kijiweId: json['kijiweId'] as String?,
       fare: (json['fare'] as num?)?.toDouble(),
-      acceptedTime: (json['acceptedTime'] as Timestamp?)?.toDate(),
-      completedTime: (json['completedTime'] as Timestamp?)?.toDate(),
+      acceptedTime: _toDateTime(json['acceptedTime']),
+      completedTime: _toDateTime(json['completedTime']),
       customerName: json['customerName'] as String?,
       customerProfileImageUrl: json['customerProfileImageUrl'] as String?,
       driverName: json['driverName'] as String?,
@@ -151,6 +152,7 @@ class RideRequestModel {
       pickupAddressName: json['pickupAddressName'] as String?,
       dropoffAddressName: json['dropoffAddressName'] as String?,
       customerDetails: json['customerDetails'] as String?,
+      customerNoteToDriver: json['customerNoteToDriver'] as String?,
       customerRatingToDriver: (json['customerRatingToDriver'] as num?)?.toDouble(),
       customerCommentToDriver: json['customerCommentToDriver'] as String?,
       driverRatingToCustomer: (json['driverRatingToCustomer'] as num?)?.toDouble(),
@@ -161,62 +163,79 @@ class RideRequestModel {
       driverVehicleType: json['driverVehicleType'] as String?,
       driverAverageRating: (json['driverAverageRating'] as num?)?.toDouble(),
       driverCompletedRidesCount: (json['driverCompletedRidesCount'] as num?)?.toInt(),
-      customerNoteToDriver: json['customerNoteToDriver'] as String?,
-      scheduledDateTime: parsedScheduledDateTime,
       estimatedDistanceKm: (json['estimatedDistanceKm'] as num?)?.toDouble(),
-      estimatedFare: estimatedFareFromJson ?? customerCalculatedFare, // Use the main one, fallback to customer's
-      fareConfigUsed: json['fareConfigUsed'] != null ? Map<String, dynamic>.from(json['fareConfigUsed'] as Map) : null, // Read fareConfigUsed
-      customerCalculatedEstimatedFare: (json['customerCalculatedEstimatedFare'] as num?)?.toDouble(),
       estimatedDurationMinutes: (json['estimatedDurationMinutes'] as num?)?.toDouble(),
+      customerCalculatedEstimatedFare: (json['customerCalculatedEstimatedFare'] as num?)?.toDouble(),
+      estimatedFare: (json['estimatedFare'] as num?)?.toDouble(),
+      actualDistanceKm: (json['actualDistanceKm'] as num?)?.toDouble(),
+      actualDrivingDurationMinutes: (json['actualDrivingDurationMinutes'] as num?)?.toDouble(),
+      actualTotalWaitingTimeMinutes: (json['actualTotalWaitingTimeMinutes'] as num?)?.toDouble(),
+      title: json['title'] as String?,
+      scheduledDateTime: _toDateTime(json['scheduledDateTime']),
+      isRecurring: json['isRecurring'] as bool?,
+      recurrenceType: json['recurrenceType'] as String?,
+      recurrenceDaysOfWeek: (json['recurrenceDaysOfWeek'] as List<dynamic>?)?.map((day) => day as String).toList(),
+      recurrenceEndDate: _toDateTime(json['recurrenceEndDate']),
+      fareConfigUsed: json['fareConfigUsed'] != null ? Map<String, dynamic>.from(json['fareConfigUsed'] as Map) : null, // Read fareConfigUsed
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
       'customerId': customerId,
-      'driverId': driverId,
-      'kijiweId': kijiweId,
+      if (driverId != null) 'driverId': driverId,
+      if (kijiweId != null) 'kijiweId': kijiweId,
       'pickup': GeoPoint(pickup.latitude, pickup.longitude),
       'dropoff': GeoPoint(dropoff.latitude, dropoff.longitude),
       'stops': stops
           .map((stop) => {
                 'name': stop['name'],
-                'location': GeoPoint((stop['location'] as gmf.LatLng).latitude, (stop['location'] as gmf.LatLng).longitude),
+                'location': GeoPoint((stop['location'] as gmf.LatLng).latitude,
+                    (stop['location'] as gmf.LatLng).longitude),
                 'addressName': stop['addressName'], // Include addressName
               })
           .toList(),
       'status': status,
       'requestTime': requestTime != null ? Timestamp.fromDate(requestTime!) : FieldValue.serverTimestamp(),
-      'fare': fare,
-      'acceptedTime': acceptedTime != null ? Timestamp.fromDate(acceptedTime!) : null,
-      'completedTime': completedTime != null ? Timestamp.fromDate(completedTime!) : null,
-      'customerName': customerName,
-      'customerProfileImageUrl': customerProfileImageUrl,
-      'driverName': driverName,
-      'driverProfileImageUrl': driverProfileImageUrl,
-      'pickupAddressName': pickupAddressName,
-      'dropoffAddressName': dropoffAddressName,
-      'customerRatingToDriver': customerRatingToDriver,
-      'customerCommentToDriver': customerCommentToDriver,
-      'driverRatingToCustomer': driverRatingToCustomer,
-      'driverCommentToCustomer': driverCommentToCustomer,
-      'customerDetails': customerDetails,
-      'driverGender': driverGender,
-      'driverAgeGroup': driverAgeGroup,
-      'driverLicenseNumber': driverLicenseNumber,
-      'driverVehicleType': driverVehicleType,
-      'driverAverageRating': driverAverageRating,
-      'driverCompletedRidesCount': driverCompletedRidesCount,
-      'customerNoteToDriver': customerNoteToDriver,
-      'scheduledDateTime': scheduledDateTime != null ? Timestamp.fromDate(scheduledDateTime!) : null, // Save scheduledDateTime
-      'estimatedDistanceKm': estimatedDistanceKm,
-      'estimatedDurationMinutes': estimatedDurationMinutes,
-      'estimatedFare': estimatedFare, // Save estimated fare (if needed, though primarily for FCM)
-      'fareConfigUsed': fareConfigUsed, // Save fareConfigUsed
-      'customerCalculatedEstimatedFare': customerCalculatedEstimatedFare,
+      if (fare != null) 'fare': fare,
+      if (acceptedTime != null) 'acceptedTime': Timestamp.fromDate(acceptedTime!),
+      if (completedTime != null) 'completedTime': Timestamp.fromDate(completedTime!),
+      if (customerName != null) 'customerName': customerName,
+      if (customerProfileImageUrl != null) 'customerProfileImageUrl': customerProfileImageUrl,
+      if (driverName != null) 'driverName': driverName,
+      if (driverProfileImageUrl != null) 'driverProfileImageUrl': driverProfileImageUrl,
+      if (pickupAddressName != null) 'pickupAddressName': pickupAddressName,
+      if (dropoffAddressName != null) 'dropoffAddressName': dropoffAddressName,
+      if (customerRatingToDriver != null) 'customerRatingToDriver': customerRatingToDriver,
+      if (customerCommentToDriver != null) 'customerCommentToDriver': customerCommentToDriver,
+      if (driverRatingToCustomer != null) 'driverRatingToCustomer': driverRatingToCustomer,
+      if (driverCommentToCustomer != null) 'driverCommentToCustomer': driverCommentToCustomer,
+      if (customerDetails != null) 'customerDetails': customerDetails,
+      if (driverGender != null) 'driverGender': driverGender,
+      if (driverAgeGroup != null) 'driverAgeGroup': driverAgeGroup,
+      if (driverLicenseNumber != null) 'driverLicenseNumber': driverLicenseNumber,
+      if (driverVehicleType != null) 'driverVehicleType': driverVehicleType,
+      if (driverAverageRating != null) 'driverAverageRating': driverAverageRating,
+      if (driverCompletedRidesCount != null) 'driverCompletedRidesCount': driverCompletedRidesCount,
+      if (customerNoteToDriver != null) 'customerNoteToDriver': customerNoteToDriver,
+      if (estimatedDistanceKm != null) 'estimatedDistanceKm': estimatedDistanceKm,
+      if (estimatedDurationMinutes != null) 'estimatedDurationMinutes': estimatedDurationMinutes,
+      if (estimatedFare != null) 'estimatedFare': estimatedFare,
+      if (customerCalculatedEstimatedFare != null) 'customerCalculatedEstimatedFare': customerCalculatedEstimatedFare,
+      if (actualDistanceKm != null) 'actualDistanceKm': actualDistanceKm,
+      if (actualDrivingDurationMinutes != null) 'actualDrivingDurationMinutes': actualDrivingDurationMinutes,
+      if (actualTotalWaitingTimeMinutes != null) 'actualTotalWaitingTimeMinutes': actualTotalWaitingTimeMinutes,
+      if (title != null) 'title': title,
+      if (scheduledDateTime != null) 'scheduledDateTime': Timestamp.fromDate(scheduledDateTime!),
+      if (isRecurring != null) 'isRecurring': isRecurring,
+      if (recurrenceType != null) 'recurrenceType': recurrenceType,
+      if (recurrenceDaysOfWeek != null) 'recurrenceDaysOfWeek': recurrenceDaysOfWeek,
+      if (recurrenceEndDate != null) 'recurrenceEndDate': Timestamp.fromDate(recurrenceEndDate!),
+      if (fareConfigUsed != null) 'fareConfigUsed': fareConfigUsed
     };
   }
 
+  // Method to copy the instance with optional new values for some fields
   RideRequestModel copyWith({
     String? id, // Renamed parameter for clarity and consistency
     String? customerId,
@@ -254,6 +273,14 @@ class RideRequestModel {
     Map<String, dynamic>? fareConfigUsed,
     double? customerCalculatedEstimatedFare,
     double? estimatedDurationMinutes,
+    double? actualDistanceKm,
+    double? actualDrivingDurationMinutes,
+    double? actualTotalWaitingTimeMinutes,
+    String? title,
+    bool? isRecurring,
+    String? recurrenceType,
+    List<String>? recurrenceDaysOfWeek,
+    DateTime? recurrenceEndDate,
   }) {
     return RideRequestModel(
       // Corrected logic: use the provided 'id' parameter if not null, otherwise use current instance's 'id'.
@@ -293,21 +320,35 @@ class RideRequestModel {
       customerCalculatedEstimatedFare: customerCalculatedEstimatedFare ?? this.customerCalculatedEstimatedFare,
       estimatedDistanceKm: estimatedDistanceKm ?? this.estimatedDistanceKm,
       estimatedDurationMinutes: estimatedDurationMinutes ?? this.estimatedDurationMinutes,
+      actualDistanceKm: actualDistanceKm ?? this.actualDistanceKm,
+      actualDrivingDurationMinutes: actualDrivingDurationMinutes ?? this.actualDrivingDurationMinutes,
+      actualTotalWaitingTimeMinutes: actualTotalWaitingTimeMinutes ?? this.actualTotalWaitingTimeMinutes,
+      title: title ?? this.title,
+      isRecurring: isRecurring ?? this.isRecurring,
+      recurrenceType: recurrenceType ?? this.recurrenceType,
+      recurrenceDaysOfWeek: recurrenceDaysOfWeek ?? this.recurrenceDaysOfWeek,
+      recurrenceEndDate: recurrenceEndDate ?? this.recurrenceEndDate,
     );
   }
 
   @override
   String toString() {
     return 'RideRequestModel(id: $id, customerId: $customerId, driverId: $driverId, '
-        'kijiweId: $kijiweId, scheduledDateTime: $scheduledDateTime, pickup: $pickup, dropoff: $dropoff, stops: $stops, '
+        'pickup: $pickup, dropoff: $dropoff, stops: $stops, '
         'status: $status, requestTime: $requestTime, fare: $fare, '
         'acceptedTime: $acceptedTime, completedTime: $completedTime, '
-        'customerName: $customerName, pickupAddressName: $pickupAddressName, driverName: $driverName, customerProfileImageUrl: $customerProfileImageUrl, '
-        'driverProfileImageUrl: $driverProfileImageUrl, dropoffAddressName: $dropoffAddressName, customerNoteToDriver: $customerNoteToDriver, '
+        'customerName: $customerName, pickupAddressName: $pickupAddressName, dropoffAddressName: $dropoffAddressName, '
+        'driverName: $driverName, customerProfileImageUrl: $customerProfileImageUrl, driverProfileImageUrl: $driverProfileImageUrl, '
+        'customerNoteToDriver: $customerNoteToDriver, '
         'customerRatingToDriver: $customerRatingToDriver, customerCommentToDriver: $customerCommentToDriver, '
-        'driverRatingToCustomer: $driverRatingToCustomer, driverCommentToCustomer: $driverCommentToCustomer, customerDetails: $customerDetails, driverVehicleType: $driverVehicleType, ' 
-        'driverGender: $driverGender, driverAgeGroup: $driverAgeGroup, driverLicenseNumber: $driverLicenseNumber, driverAverageRating: $driverAverageRating, driverCompletedRidesCount: $driverCompletedRidesCount, ' 
-        'estimatedDistanceKm: $estimatedDistanceKm, estimatedDurationMinutes: $estimatedDurationMinutes, estimatedFare: $estimatedFare, fareConfigUsed: $fareConfigUsed, customerCalculatedEstimatedFare: $customerCalculatedEstimatedFare)';
+        'driverRatingToCustomer: $driverRatingToCustomer, driverCommentToCustomer: $driverCommentToCustomer, '
+        'customerDetails: $customerDetails, driverVehicleType: $driverVehicleType, driverGender: $driverGender, '
+        'driverAgeGroup: $driverAgeGroup, driverLicenseNumber: $driverLicenseNumber, driverAverageRating: $driverAverageRating, '
+        'driverCompletedRidesCount: $driverCompletedRidesCount, estimatedDistanceKm: $estimatedDistanceKm, '
+        'estimatedDurationMinutes: $estimatedDurationMinutes, estimatedFare: $estimatedFare, customerCalculatedEstimatedFare: $customerCalculatedEstimatedFare, '
+        'actualDistanceKm: $actualDistanceKm, actualDrivingDurationMinutes: $actualDrivingDurationMinutes, actualTotalWaitingTimeMinutes: $actualTotalWaitingTimeMinutes, '
+        'title: $title, scheduledDateTime: $scheduledDateTime, isRecurring: $isRecurring, recurrenceType: $recurrenceType, '
+        'recurrenceDaysOfWeek: $recurrenceDaysOfWeek, recurrenceEndDate: $recurrenceEndDate, fareConfigUsed: $fareConfigUsed)';
   }
 }
 
