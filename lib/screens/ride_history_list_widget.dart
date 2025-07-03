@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../models/Ride_Request_Model.dart'; // Assuming RideHistoryModel is part of this or a separate model
+import 'package:intl/intl.dart';
+import '../models/Ride_Request_Model.dart';
 import '../providers/ride_request_provider.dart'; // To fetch ride history
 import '../services/auth_service.dart'; // To get current user ID
 import '../utils/ui_utils.dart'; // For styles and spacing
+import 'ride_history_details_screen.dart'; // Import the details screen
 
 class RideHistoryListWidget extends StatelessWidget {
   final String role;
@@ -34,36 +36,24 @@ class RideHistoryListWidget extends StatelessWidget {
           return Center(child: Text('No ride history found.', style: theme.textTheme.bodyMedium));
         }
 
-        final rides = snapshot.data!;
+        final rideHistory = snapshot.data!;
 
         return ListView.builder(
-          padding: const EdgeInsets.all(8.0), // Use ui_utils spacing if preferred
-          itemCount: rides.length,
+          padding: const EdgeInsets.all(8.0),
+          itemCount: rideHistory.length,
           itemBuilder: (context, index) {
-            final ride = rides[index];
+            final ride = rideHistory[index];
             return Card(
               elevation: 2,
               margin: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), // From ui_utils.appBoxDecoration
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               child: ListTile(
-                leading: Icon(
-                  role == 'Customer' ? Icons.person_pin_circle_outlined : Icons.drive_eta_outlined,
-                  color: theme.colorScheme.primary,
-                ),
-                title: Text(
-                  'To: ${ride.dropoffAddressName ?? 'Destination'}',
-                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-                ),
-                subtitle: Text(
-                  'From: ${ride.pickupAddressName ?? 'Pickup'}\nDate: ${ride.requestTime?.toLocal().toString().substring(0, 16) ?? 'N/A'} - Status: ${ride.status}',
-                  style: theme.textTheme.bodySmall,
-                ),
-                trailing: Text(
-                  ride.fare != null ? '\$${ride.fare!.toStringAsFixed(2)}' : 'N/A',
-                  style: appTextStyle(color: successColor, fontWeight: FontWeight.bold),
-                ),
+                leading: _buildStatusIcon(ride.status, theme),
+                title: Text('To: ${ride.dropoffAddressName ?? 'Destination'}', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                subtitle: Text('On: ${ride.completedTime != null ? DateFormat.yMMMd().add_jm().format(ride.completedTime!) : DateFormat.yMMMd().add_jm().format(ride.requestTime!)}'),
+                trailing: Text('TZS ${ride.fare?.toStringAsFixed(0) ?? 'N/A'}', style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold)),
                 onTap: () {
-                  // TODO: Navigate to Ride Details Screen
+                  Navigator.push(context, MaterialPageRoute(builder: (context) => RideHistoryDetailsScreen(ride: ride)));
                 },
               ),
             );
@@ -71,5 +61,25 @@ class RideHistoryListWidget extends StatelessWidget {
         );
       },
     );
+  }
+
+  Widget _buildStatusIcon(String status, ThemeData theme) {
+    IconData iconData;
+    Color color;
+    switch (status) {
+      case 'completed':
+        iconData = Icons.check_circle;
+        color = successColor;
+        break;
+      case 'cancelled_by_customer':
+      case 'cancelled_by_driver':
+        iconData = Icons.cancel;
+        color = errorColor;
+        break;
+      default:
+        iconData = Icons.history;
+        color = theme.hintColor;
+    }
+    return Icon(iconData, color: color);
   }
 }
