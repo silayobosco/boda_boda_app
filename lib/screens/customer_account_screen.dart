@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import '../utils/ui_utils.dart'; // For spacing and styles
+import 'about_us_screen.dart';
+import 'help_and_support_screen.dart';
+import 'saved_places_screen.dart';
 
 class CustomerAccountScreen extends StatelessWidget {
   const CustomerAccountScreen({super.key});
@@ -20,7 +23,12 @@ class CustomerAccountScreen extends StatelessWidget {
             // TODO: Navigate to Payment Methods
           }),
           _buildAccountOption(context, Icons.place, 'Saved Places', () {
-            // TODO: Navigate to Saved Places
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const SavedPlacesScreen(),
+              ),
+            );
           }),
           verticalSpaceMedium,
           _buildSectionTitle(context, 'Preferences'),
@@ -32,11 +40,20 @@ class CustomerAccountScreen extends StatelessWidget {
           }),
           verticalSpaceMedium,
           _buildSectionTitle(context, 'Support & Legal'),
-          _buildAccountOption(context, Icons.help_outline, 'Help & Support', () {
-            // TODO: Navigate to Help & Support
+          _buildAccountOption(context, Icons.help_outline, 'Help & Support',
+              () {
+            Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (context) => const HelpAndSupportScreen()));
           }),
           _buildAccountOption(context, Icons.info_outline, 'About Us', () {
-            // TODO: Navigate to About Us
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const AboutUsScreen(),
+              ),
+            );
           }),
           _buildAccountOption(context, Icons.gavel, 'Legal & Privacy', () {
             // TODO: Navigate to Legal & Privacy

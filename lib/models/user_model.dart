@@ -11,8 +11,9 @@ class UserModel {
   final String? email;
   final String? role;
   final String? fcmToken;
-  final Map<String, dynamic>? driverDetails; // Maps to 'driverProfile' in Firestore
-  final Map<String, dynamic>? customerProfile; // New
+  final Map<String, dynamic>? driverDetails;
+  final Map<String, dynamic>? customerProfile;
+  final double? driverAverageRating; // <-- Add this line
 
   UserModel({
     this.uid,
@@ -25,8 +26,9 @@ class UserModel {
     this.email,
     this.role,
     this.fcmToken,
-    this.driverDetails, 
+    this.driverDetails,
     this.customerProfile,
+    this.driverAverageRating, // <-- Add this line
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -61,12 +63,13 @@ class UserModel {
       email: json['email'] as String?,
       role: json['role'] as String?,
       fcmToken: json['fcmToken'] as String?,
-      // In Firestore, driver details are under 'driverProfile'
-      driverDetails: json['driverProfile'] != null 
+      driverDetails: json['driverProfile'] != null
           ? Map<String, dynamic>.from(json['driverProfile'] as Map)
           : null,
-      customerProfile: json['customerProfile'] != null ? Map<String, dynamic>.from(json['customerProfile'] as Map)
+      customerProfile: json['customerProfile'] != null
+          ? Map<String, dynamic>.from(json['customerProfile'] as Map)
           : null,
+      driverAverageRating: (json['driverAverageRating'] as num?)?.toDouble(), // <-- Add this line
     );
   }
 
@@ -89,10 +92,13 @@ class UserModel {
       data['fcmToken'] = fcmToken;
     }
     if (driverDetails != null) {
-      data['driverProfile'] = driverDetails; // Save as 'driverProfile' in Firestore
+      data['driverProfile'] = driverDetails;
     }
     if (customerProfile != null) {
       data['customerProfile'] = customerProfile;
+    }
+    if (driverAverageRating != null) {
+      data['driverAverageRating'] = driverAverageRating; // <-- Add this line
     }
     return data;
   }
@@ -110,6 +116,7 @@ class UserModel {
     String? fcmToken,
     Map<String, dynamic>? driverDetails,
     Map<String, dynamic>? customerProfile,
+    double? driverAverageRating, // <-- Add this line
   }) {
     return UserModel(
       uid: uid ?? this.uid,
@@ -124,6 +131,7 @@ class UserModel {
       fcmToken: fcmToken ?? this.fcmToken,
       driverDetails: driverDetails ?? this.driverDetails,
       customerProfile: customerProfile ?? this.customerProfile,
+      driverAverageRating: driverAverageRating ?? this.driverAverageRating, // <-- Add this line
     );
   }
 
@@ -131,6 +139,6 @@ class UserModel {
   String toString() {
     return 'UserModel(uid: $uid, name: $name, phoneNumber: $phoneNumber, dob: $dob, '
         'gender: $gender, location: $location, profileImageUrl: $profileImageUrl, '
-        'email: $email, role: $role, fcmToken: $fcmToken, driverDetails: $driverDetails, customerProfile: $customerProfile)';
+        'email: $email, role: $role, fcmToken: $fcmToken, driverDetails: $driverDetails, customerProfile: $customerProfile, driverAverageRating: $driverAverageRating)';
   }
 }

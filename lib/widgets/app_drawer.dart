@@ -4,6 +4,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../screens/home_screen.dart';
 import '../screens/profile_screen.dart';
 import '../screens/login_screen.dart';
+import '../screens/about_us_screen.dart';
+import '../screens/help_and_support_screen.dart';
 import '../screens/driver_registration_screen.dart';
 import '../screens/chat_list_screen.dart'; // Import ChatListScreen
 
@@ -100,6 +102,28 @@ class AppDrawer extends StatelessWidget {
             title: const Text("Settings"),
             onTap: () {
               Navigator.pushNamed(context, '/settings');
+            },
+          ),
+          ListTile(
+            leading: Icon(Icons.support_agent_outlined, color: theme.colorScheme.secondary),
+            title: Text('Help & Support', style: theme.textTheme.titleMedium),
+            onTap: () {
+              Navigator.of(context).pop(); // Close drawer
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const HelpAndSupportScreen()),
+              );
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.info_outline),
+            title: const Text("About Us"),
+            onTap: () {
+              Navigator.of(context).pop(); // Close drawer
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const AboutUsScreen()),
+              );
             },
           ),
           ListTile(

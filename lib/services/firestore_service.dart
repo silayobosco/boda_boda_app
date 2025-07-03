@@ -75,6 +75,29 @@ class FirestoreService {
     }
   }
 
+  Future<void> updateUserSavedPlaces(String userId, List<Map<String, dynamic>> savedPlaces) async {
+    try {
+      // Convert any LatLng objects to GeoPoints before saving.
+      final placesToSave = savedPlaces.map((place) {
+        if (place['location'] is gmf.LatLng) {
+          final gmf.LatLng loc = place['location'];
+          return {
+            ...place,
+            'location': GeoPoint(loc.latitude, loc.longitude),
+          };
+        }
+        return place; // Assume it's already a GeoPoint or null
+      }).toList();
+
+      await _firestore.collection('users').doc(userId).update({
+        'customerProfile.savedPlaces': placesToSave,
+      });
+    } catch (e) {
+      debugPrint("Error updating saved places: $e");
+      rethrow;
+    }
+  }
+
   Future<void> updateUserProfileImageUrl(String userId, String imageUrl) async {
     try {
       await _firestore.collection('users').doc(userId).update({
@@ -458,7 +481,7 @@ Stream<DocumentSnapshot> getKijiweQueueStream(String kijiweId) {
         'permanentMembers': FieldValue.arrayUnion([userId]),
       });
     }
-
+    //
     final driverProfilePayload = {
       'driverId': userId, 'vehicleType': vehicleType, 'licenseNumber': licenseNumber, 'kijiweId': kijiweIdToUse,
       'registeredAt': FieldValue.serverTimestamp(), 'approved': true, 'isOnline': true, 'status': 'waitingForRide',

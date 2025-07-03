@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../utils/ui_utils.dart'; // For spacing and styles
+import 'about_us_screen.dart';
+import 'help_and_support_screen.dart';
 
 class DriverAccountScreen extends StatelessWidget {
   const DriverAccountScreen({super.key});
@@ -41,11 +43,18 @@ class DriverAccountScreen extends StatelessWidget {
           }),
           verticalSpaceMedium,
           _buildSectionTitle(context, 'Support & Legal'),
-          _buildAccountOption(context, Icons.support_agent, 'Help & Support', () {
-            // TODO: Navigate to Help & Support
+          _buildAccountOption(context, Icons.support_agent, 'Help & Support',
+              () {
+            Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (context) => const HelpAndSupportScreen()));
           }),
           _buildAccountOption(context, Icons.info_outline, 'About Us', () {
-            // TODO: Navigate to About Us
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const AboutUsScreen()),
+            );
           }),
           _buildAccountOption(context, Icons.gavel, 'Legal & Privacy', () {
             // TODO: Navigate to Legal & Privacy

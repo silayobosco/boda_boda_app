@@ -3,7 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'customer_home.dart';
 import 'driver_home.dart';
-import 'admin_home.dart';
+import 'admin/admin_home.dart';
 import 'additional_info_screen.dart';
 
 class HomeScreen extends StatefulWidget {

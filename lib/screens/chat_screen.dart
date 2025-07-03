@@ -54,6 +54,7 @@ class _ChatScreenState extends State<ChatScreen> {
       debugPrint("ChatScreen: CRITICAL - Current user is null. Chat will not function.");
     } else {
       _fetchCurrentUserRole();
+      _markMessagesAsRead(); // Mark messages as read when entering the screen
     }
 
     if (widget.rideRequestId != null) {
@@ -65,7 +66,6 @@ class _ChatScreenState extends State<ChatScreen> {
           .collection('directChats')
           .doc(widget.directChatId);
     }
-    // TODO: Implement logic to mark messages as read when screen is opened
   }
 
   @override
@@ -136,6 +136,35 @@ class _ChatScreenState extends State<ChatScreen> {
           SnackBar(content: Text('Failed to send message. Please check permissions and try again.')),
         );
       }
+    }
+  }
+
+  Future<void> _markMessagesAsRead() async {
+    if (_currentUserId == null) return;
+
+    // Query for unread messages from the other user
+    final querySnapshot = await _chatDocRef
+        .collection('messages')
+        .where('senderId', isNotEqualTo: _currentUserId)
+        .where('isRead', isEqualTo: false)
+        .get();
+
+    if (querySnapshot.docs.isEmpty) {
+      // No unread messages to mark.
+      return;
+    }
+
+    // Use a batch to update all documents at once for efficiency
+    final batch = FirebaseFirestore.instance.batch();
+    for (final doc in querySnapshot.docs) {
+      batch.update(doc.reference, {'isRead': true});
+    }
+
+    try {
+      await batch.commit();
+      debugPrint("ChatScreen: Marked ${querySnapshot.docs.length} messages as read.");
+    } catch (e) {
+      debugPrint("ChatScreen: Error marking messages as read: $e");
     }
   }
 
@@ -271,11 +300,27 @@ class _ChatScreenState extends State<ChatScreen> {
                   ),
                 ),
               Text(text, style: TextStyle(color: textColor, fontSize: 16)),
-              if (displayTime.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4.0),
-                  child: Text(displayTime, style: TextStyle(fontSize: 10, color: textColor.withOpacity(0.7))),
-                ),
+              if (displayTime.isNotEmpty) // Show time and read receipt
+                Align(
+                  alignment: Alignment.bottomRight,
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 4.0),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(displayTime, style: TextStyle(fontSize: 10, color: textColor.withOpacity(0.7))),
+                        if (isMe) ...[
+                          horizontalSpaceSmall,
+                          Icon(
+                            messageData['isRead'] == true ? Icons.done_all : Icons.done,
+                            size: 16,
+                            color: messageData['isRead'] == true ? accentColor : textColor.withOpacity(0.7),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                )
             ],
           ),
       ),

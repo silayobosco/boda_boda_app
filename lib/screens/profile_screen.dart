@@ -260,36 +260,61 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
-                              ProfileImagePicker(
-                                initialImageUrl: _photoURL,
-                                enabled: _isEditing, // Only allow picking when editing
-                                onImagePicked: (pickedImage) async {
-                                  setState(() {
-                                    _imageFile = pickedImage;
-                                  });
-                                  try {
-                                    String imageUrl = await _uploadImage(_auth.currentUser!.uid);
-                                    await _updateField("profileImageUrl", imageUrl);
+                              if (!_isEditing)
+                              CircleAvatar(
+                                radius: 60,
+                                backgroundImage: _photoURL != null && _photoURL!.isNotEmpty
+                                    ? NetworkImage(_photoURL!)
+                                    : const AssetImage("assets/icon.png") as ImageProvider,
+                                child: (_photoURL == null || _photoURL!.isEmpty)
+                                    ? const Icon(Icons.person, size: 60, color: Colors.white)
+                                    : null,
+                              )
+                              else
+                                ProfileImagePicker(
+                                  initialImageUrl: _photoURL,
+                                  enabled: _isEditing, // Only allow picking when editing
+                                  onImagePicked: (pickedImage) async {
                                     setState(() {
-                                      _photoURL = imageUrl;
+                                      _imageFile = pickedImage;
                                     });
-                                  } catch (e) {
-                                    if (mounted) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(content: Text("Failed to upload image: $e")),
-                                      );
+                                    try {
+                                      String imageUrl = await _uploadImage(_auth.currentUser!.uid);
+                                      await _updateField("profileImageUrl", imageUrl);
+                                      setState(() {
+                                        _photoURL = imageUrl;
+                                      });
+                                    } catch (e) {
+                                      if (mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(content: Text("Failed to upload image: $e")),
+                                        );
+                                      }
                                     }
-                                  }
-                                },
-                              ),
-                              const SizedBox(height: 16),
-                              Text(
-                                " ${_role ?? "N/A"}",
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
+                                  },
                                 ),
-                                textAlign: TextAlign.center,
+                              const SizedBox(height: 16),
+                              // Ratings and Role Row
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  // Display rating (replace with your actual rating value and widget)
+                                  const SizedBox(width: 12),
+                                  Text(
+                                    " ${_role ?? "N/A"}",
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  const Icon(Icons.star, color: Colors.amber, size: 20),
+                                  Text(
+                                    _userModel?.driverAverageRating?.toStringAsFixed(1) ?? "N/A",
+                                    style: const TextStyle(fontWeight: FontWeight.bold),
+                                  ),
+                                ],
                               ),
                             ],
                           ),
