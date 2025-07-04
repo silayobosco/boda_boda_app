@@ -136,14 +136,26 @@ class _RideHistoryDetailsScreenState extends State<RideHistoryDetailsScreen> {
                   _buildDetailItem(theme, Icons.payments_outlined, 'Final Fare', 'TZS ${ride.fare?.toStringAsFixed(0) ?? 'N/A'}'),
                   verticalSpaceMedium,
                   _buildSectionHeader(theme, isDriver ? 'Customer Info' : 'Driver Info'),
-                  ListTile(
-                    leading: CircleAvatar(
-                      backgroundImage: NetworkImage(isDriver ? ride.customerProfileImageUrl ?? '' : ride.driverProfileImageUrl ?? ''),
-                      child: (isDriver ? ride.customerProfileImageUrl : ride.driverProfileImageUrl) == null ? const Icon(Icons.person) : null,
-                    ),
-                    title: Text(isDriver ? ride.customerName ?? 'Customer' : ride.driverName ?? 'Driver'),
-                    subtitle: Text(isDriver ? ride.customerDetails ?? '' : 'Vehicle: ${ride.driverVehicleType ?? 'N/A'}'),
-                  ),
+                  Builder(builder: (context) {
+                    String subtitleText;
+                    if (isDriver) {
+                      subtitleText = ride.customerDetails ?? 'No customer details available.';
+                    } else {
+                      List<String> driverDetails = [];
+                      if (ride.driverVehicleType != null && ride.driverVehicleType!.isNotEmpty) driverDetails.add('Vehicle: ${ride.driverVehicleType}');
+                      if (ride.driverLicenseNumber != null && ride.driverLicenseNumber!.isNotEmpty) driverDetails.add('Plate: ${ride.driverLicenseNumber}');
+                      if (ride.driverGender != null && ride.driverGender != "Unknown" && ride.driverAgeGroup != null && ride.driverAgeGroup != "Unknown") driverDetails.add('${ride.driverGender}, ${ride.driverAgeGroup}');
+                      subtitleText = driverDetails.isNotEmpty ? driverDetails.join(' • ') : 'No driver details available.';
+                    }
+                    return ListTile(
+                      leading: CircleAvatar(
+                        backgroundImage: NetworkImage(isDriver ? ride.customerProfileImageUrl ?? '' : ride.driverProfileImageUrl ?? ''),
+                        child: (isDriver ? ride.customerProfileImageUrl : ride.driverProfileImageUrl) == null ? const Icon(Icons.person) : null,
+                      ),
+                      title: Text(isDriver ? ride.customerName ?? 'Customer' : ride.driverName ?? 'Driver'),
+                      subtitle: Text(subtitleText),
+                    );
+                  }),
                   verticalSpaceLarge,
                   SizedBox(
                     width: double.infinity,
