@@ -6,11 +6,13 @@ import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart'; // Import shared_preferences
 import 'package:firebase_storage/firebase_storage.dart' as firebase_storage;
 import 'package:geocoding/geocoding.dart'; // Import geocoding
+import 'package:flutter_localization/flutter_localization.dart';
 import 'package:intl/intl.dart'; // Import intl for date formatting
 import '../services/user_service.dart';
 import '../models/user_model.dart';
 import '../utils/ui_utils.dart'; // Import appTextStyle, appInputDecoration, primaryColor, hintTextColor
 import '../widgets/profile_image_picker.dart';
+import '../localization/locales.dart'; // Import for localization
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -227,7 +229,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Profile"),
+        title: Text(AppLocale.profile.getString(context)), // Use localized string
         backgroundColor: primaryColor,
         actions: [
           IconButton(
@@ -285,7 +287,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                         _photoURL = imageUrl;
                                       });
                                     } catch (e) {
-                                      if (mounted) {
+                                      if (mounted) {  
                                         ScaffoldMessenger.of(context).showSnackBar(
                                           SnackBar(content: Text("Failed to upload image: $e")),
                                         );
@@ -322,48 +324,48 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         const Divider(),
                         // Editable Fields
                         _buildEditableField(
-                          "Name",
+                          AppLocale.full_name,
                           _name ?? "N/A",
                           Icons.person,
-                          _nameController,
+                          _nameController,  
                           (value) => _updateField("name", value),
                         ),
                         _buildEditableField(
-                          "Phone",
-                          _phone ?? "N/A",
+                          AppLocale.phone_number,
+                          _phone ?? "N/A",  
                           Icons.phone,
                           _phoneController,
                           (value) => _updateField("phoneNumber", value),
                           keyboardType: TextInputType.phone,
                         ),
                         _buildEditableField(
-                          "Email",
-                          _email ?? "N/A",
+                          AppLocale.email,
+                          _email ?? "N/A",  
                           Icons.email,
-                          _emailController,
+                          _emailController,  
                           (value) => _updateField("email", value),
                         ),
                         _buildEditableDropdownField(
-                          "Gender",
-                          _gender ?? "N/A",
+                          AppLocale.gender,
+                          _gender ?? "N/A",  
                           Icons.transgender,
                           (value) => _updateField("gender", value),
                         ),
                         _buildEditableDateField(
-                          "Date of Birth",
-                          _dob ?? DateTime(2000, 1, 1),
-                          Icons.calendar_today,
+                          AppLocale.date_of_birth,
+                          _dob ?? DateTime(2000, 1, 1),  
+                          Icons.calendar_today,  
                           (value) =>
                               _updateField("dob", value.toIso8601String()),
                         ),
                         _buildNonEditableField(
-                          "Location",
+                          AppLocale.location,
                           _locationAddress ?? "Fetching location...",
                           Icons.location_on,
                         ),
                       ],
                     ),
-                  ),
+                  ),  
                 ),
               ),
     );
@@ -385,14 +387,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 controller: controller,
                 keyboardType: keyboardType,
                 decoration: appInputDecoration(
-                  labelText: label,
-                  hintText: "Enter $label",
+                  labelText: label.getString(context),
+                  hintText: "${AppLocale.enter.getString(context)} ${label.getString(context)}",
                 ),
               )
-              : Text(
-                "$label: ${controller.text}",
-                style:
-                    Theme.of(
+              : Text(  
+                "${label.getString(context)}: ${controller.text}",
+                style: Theme.of(
                       context,
                     ).textTheme.bodyLarge, // Use bodyLarge for larger text
               ),
@@ -412,7 +413,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ? TextField(
                 readOnly: true,
                 decoration: InputDecoration(
-                  labelText: label,
+                  labelText: label.getString(context),
                   border: OutlineInputBorder(),
                 ),
                 onTap: () async {
@@ -428,7 +429,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 },
               )
               : Text(
-                "$label: ${DateFormat.yMd().format(value)}", // Use intl's DateFormat
+                "${label.getString(context)}: ${DateFormat.yMd().format(value)}",
                 style:
                     Theme.of(
                       context,
@@ -447,21 +448,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
       leading: Icon(icon, color: hintTextColor),
       title:
           _isEditing
-              ? DropdownButtonFormField<String>(
-                value: _genders.contains(value) ? value : null,
-                decoration: InputDecoration(
-                  labelText: label,
-                  border: OutlineInputBorder(),
-                ),
-                hint: Text(
-                  "Select $label",
-                  style: appTextStyle(color: hintTextColor),
+            ? DropdownButtonFormField<String>(
+              value: _genders.contains(value) ? value : null,
+              decoration: InputDecoration(
+                labelText: label.getString(context),
+                border: OutlineInputBorder(),
+              ),
+              hint: Text(
+                "${AppLocale.select.getString(context)} ${label.getString(context)}",
+                style: appTextStyle(color: hintTextColor),
                 ),
                 items:
-                    _genders.map((String gender) {
+                    _genders.map((String genderValue) {
+                      String localizedGender;
+                      if (genderValue == 'Male') {
+                        localizedGender = AppLocale.male.getString(context);
+                      } else if (genderValue == 'Female') {
+                        localizedGender = AppLocale.female.getString(context);
+                      } else {
+                        localizedGender = genderValue;
+                      }
                       return DropdownMenuItem<String>(
-                        value: gender,
-                        child: Text(gender),
+                        value: genderValue,
+                        child: Text(localizedGender),
                       );
                     }).toList(),
                 onChanged: (String? newValue) {
@@ -470,8 +479,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   }
                 },
               )
-              : Text(
-                "$label: ${value ?? "N/A"}",
+            : Text(  
+                "${label.getString(context)}: ${value ?? "N/A"}",
                 style:
                     Theme.of(
                       context,
@@ -484,11 +493,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return ListTile(
       leading: Icon(icon, color: hintTextColor),
       title: Text(
-        "$label: $value",
-        style:
-            Theme.of(
-              context,
-            ).textTheme.bodyLarge, // Use bodyLarge for larger text
+        "${label.getString(context)}: $value",
+        style: Theme.of(context).textTheme.bodyLarge, // Use bodyLarge for larger text
       ),
     );
   }
@@ -497,5 +503,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
     // Save changes logic here
     // You can call `_updateField` for each field if needed
     print("Changes saved!");
+  }
+
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _phoneController.dispose();
+    _locationController.dispose();
+    _emailController.dispose();
+    super.dispose();
   }
 }

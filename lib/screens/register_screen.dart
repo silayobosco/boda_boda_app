@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localization/flutter_localization.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/firestore_service.dart';
@@ -9,6 +10,7 @@ import '../utils/ui_utils.dart';
 import '../utils/validation.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../models/user_model.dart';
+import '../localization/locales.dart';
 import '../widgets/profile_image_picker.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -69,7 +71,7 @@ class _RegisterScreenState extends State<RegisterScreen>
     if (status.isDenied || status.isPermanentlyDenied) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Location permission is required.")),
+          SnackBar(content: Text(AppLocale.location_permission_required.getString(context))),
         );
       }
       throw Exception("Location permission denied");
@@ -124,8 +126,8 @@ class _RegisterScreenState extends State<RegisterScreen>
 
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Registration successful! Please login."),
+          SnackBar(
+            content: Text(AppLocale.registration_successful.getString(context)),
           ),
         );
         Navigator.pushReplacementNamed(context, '/login');
@@ -134,7 +136,7 @@ class _RegisterScreenState extends State<RegisterScreen>
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text("Registration Failed: $e")));
+      ).showSnackBar(SnackBar(content: Text('${AppLocale.registration_failed.getString(context)}$e')));
     }
   }
 
@@ -146,7 +148,7 @@ class _RegisterScreenState extends State<RegisterScreen>
         return false;
       },
       child: Scaffold(
-        appBar: AppBar(title: const Text("Register")),
+        appBar: AppBar(title: Text(AppLocale.register.getString(context))),
         body: FadeTransition(
           opacity: _animation,
           child: Padding(
@@ -164,19 +166,19 @@ class _RegisterScreenState extends State<RegisterScreen>
                     verticalSpaceMedium,
                     _buildTextField(
                       controller: _nameController,
-                      labelText: "Full Name",
-                      hintText: "Full Name",
+                      labelText: AppLocale.full_name.getString(context),
+                      hintText: AppLocale.full_name.getString(context),
                       validator:
                           (value) =>
                               value == null || value.isEmpty
-                                  ? 'Please enter your full name'
+                                  ? AppLocale.please_enter_full_name.getString(context)
                                   : null,
                     ),
                     verticalSpaceMedium,
                     _buildTextField(
                       controller: _emailController,
-                      labelText: "Email",
-                      hintText: "Email",
+                      labelText: AppLocale.email.getString(context),
+                      hintText: AppLocale.email.getString(context),
                       validator:
                           (value) =>
                               Validation.validateEmailPhoneNida(email: value),
@@ -184,7 +186,7 @@ class _RegisterScreenState extends State<RegisterScreen>
                     verticalSpaceMedium,
                     _buildPasswordField(
                       controller: _passwordController,
-                      labelText: "Password",
+                      labelText: AppLocale.password.getString(context),
                       obscureText: _obscurePassword,
                     ),
                     verticalSpaceMedium,
@@ -192,8 +194,8 @@ class _RegisterScreenState extends State<RegisterScreen>
                       controller: _confirmPasswordController,
                       obscureText: _obscureConfirmPassword,
                       decoration: InputDecoration(
-                        labelText: "Confirm Password",
-                        hintText: "Confirm Password",
+                        labelText: AppLocale.confirm_password.getString(context),
+                        hintText: AppLocale.confirm_password.getString(context),
                         border: const OutlineInputBorder(),
                         suffixIcon: GestureDetector(
                           onLongPress: () {
@@ -211,10 +213,10 @@ class _RegisterScreenState extends State<RegisterScreen>
                       ),
                       validator: (value) {
                         if (value == null || value.isEmpty) {
-                          return 'Please confirm your password';
+                          return AppLocale.please_confirm_password.getString(context);
                         }
                         if (value != _passwordController.text) {
-                          return 'Passwords do not match';
+                          return AppLocale.passwords_do_not_match.getString(context);
                         }
                         return null;
                       },
@@ -222,8 +224,8 @@ class _RegisterScreenState extends State<RegisterScreen>
                     verticalSpaceMedium,
                     _buildTextField(
                       controller: _phoneController,
-                      labelText: "Phone Number",
-                      hintText: "Phone Number",
+                      labelText: AppLocale.phone_number.getString(context),
+                      hintText: AppLocale.phone_number.getString(context),
                       keyboardType: TextInputType.phone,
                       validator:
                           (value) =>
@@ -232,8 +234,8 @@ class _RegisterScreenState extends State<RegisterScreen>
                     verticalSpaceMedium,
                     _buildDateField(
                       controller: _dobController,
-                      labelText: "Date of Birth",
-                      hintText: "YYYY-MM-DD",
+                      labelText: AppLocale.date_of_birth.getString(context),
+                      hintText: AppLocale.dob_hint.getString(context),
                     ),
                     verticalSpaceMedium,
                     DropdownButtonFormField<String>(
@@ -244,14 +246,18 @@ class _RegisterScreenState extends State<RegisterScreen>
                         });
                       },
                       decoration: appInputDecoration(
-                        labelText: "Gender",
-                        hintText: "Gender",
+                        labelText: AppLocale.gender.getString(context),
+                        hintText: AppLocale.gender.getString(context),
                       ),
                       items:
-                          const ["Male", "Female"].map((gender) {
+                          const ["Male", "Female"].map((genderValue) {
                             return DropdownMenuItem(
-                              value: gender,
-                              child: Text(gender),
+                              value: genderValue,
+                              child: Text(
+                                genderValue == "Male"
+                                ? AppLocale.male.getString(context)
+                                : AppLocale.female.getString(context)
+                              ),
                             );
                           }).toList(),
                     ),
@@ -260,7 +266,7 @@ class _RegisterScreenState extends State<RegisterScreen>
                       onPressed: register,
                       style: appButtonStyle(),
                       child: Text(
-                        "Register",
+                        AppLocale.register.getString(context),
                         style: appTextStyle(color: Colors.white),
                       ),
                     ),
@@ -270,7 +276,7 @@ class _RegisterScreenState extends State<RegisterScreen>
                         Navigator.pushReplacementNamed(context, '/login');
                       },
                       child: Text(
-                        "Already have an account? Login",
+                        AppLocale.already_have_account_login.getString(context),
                         style: appTextStyle(color: primaryColor),
                       ),
                     ),
@@ -343,7 +349,7 @@ class _RegisterScreenState extends State<RegisterScreen>
       },
       validator: (value) {
         if (value == null || value.isEmpty) {
-          return 'Please enter a date';
+          return AppLocale.please_enter_date.getString(context);
         }
         return null;
       },

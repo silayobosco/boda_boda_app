@@ -1,10 +1,12 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localization/flutter_localization.dart';
 import '../services/user_service.dart';
 import '../services/auth_service.dart';
 import '../utils/ui_utils.dart';
 import '../utils/validation.dart';
 import '../screens/home_screen.dart';
+import '../localization/locales.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -44,14 +46,14 @@ class _LoginScreenState extends State<LoginScreen> {
           } else {
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text("User role not found.")),
+                SnackBar(content: Text(AppLocale.user_role_not_found.getString(context))),
               );
             }
           }
         } else {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text("User document not found.")),
+              SnackBar(content: Text(AppLocale.user_document_not_found.getString(context))),
             );
           }
         }
@@ -59,7 +61,7 @@ class _LoginScreenState extends State<LoginScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Login Failed: $e")),
+          SnackBar(content: Text("${AppLocale.login_failed.getString(context)}$e")),
         );
       }
     }
@@ -81,11 +83,11 @@ class _LoginScreenState extends State<LoginScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text("Reset Password"),
+        title: Text(AppLocale.reset_password.getString(context)),
         content: TextField(
           controller: emailController,
           keyboardType: TextInputType.emailAddress,
-          decoration: const InputDecoration(labelText: "Enter your email"),
+          decoration: InputDecoration(labelText: AppLocale.enter_your_email.getString(context)),
         ),
         actions: [
           TextButton(
@@ -98,23 +100,23 @@ class _LoginScreenState extends State<LoginScreen> {
                   Navigator.of(context).pop();
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("Password reset email sent")),
+                      SnackBar(content: Text(AppLocale.password_reset_email_sent.getString(context))),
                     );
                   }
                 } else {
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("Email not registered.")),
+                      SnackBar(content: Text(AppLocale.email_not_registered.getString(context))),
                     );
                   }
                 }
               } catch (e) {
                 if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("${AppLocale.error_prefix.getString(context)}$e")));
                 }
               }
             },
-            child: const Text("Send"),
+            child: Text(AppLocale.send.getString(context)),
           ),
         ],
       ),
@@ -123,115 +125,157 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final localization = FlutterLocalization.instance;
     return Scaffold(
-      appBar: null,
-      body: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Center(
-          child: SingleChildScrollView(
-            child: Form(
-              key: _formKey,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    "Welcome",
-                    style: headingTextStyle(fontSize: 30),
-                  ),
-                  verticalSpaceMedium,
-                  Text(
-                    "Login to your account",
-                    style: appTextStyle(
-                        color: hintTextColor, fontWeight: FontWeight.bold),
-                  ),
-                  verticalSpaceLarge,
-                  TextFormField(
-                    controller: _emailController,
-                    decoration:
-                        appInputDecoration(hintText: "Email", labelText: "Email"),
-                    validator: (value) =>
-                        Validation.validateEmailPhoneNida(email: value),
-                  ),
-                  verticalSpaceMedium,
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        actions: [
+          TextButton.icon(
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: Text(AppLocale.selectLanguage.getString(context)),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      TextFormField(
-                        controller: _passwordController,
-                        obscureText: _obscurePassword,
-                        decoration: InputDecoration(
-                          hintText: "Password",
-                          labelText: "Password",
-                          border: const OutlineInputBorder(),
-                          suffixIcon: GestureDetector(
-                            onLongPress: () {
-                              setState(() {
-                                _obscurePassword = false;
-                              });
-                            },
-                            onLongPressUp: () {
-                              setState(() {
-                                _obscurePassword = true;
-                              });
-                            },
-                            child: const Icon(Icons.remove_red_eye),
-                          ),
-                        ),
-                        validator: (value) => value == null || value.isEmpty
-                            ? 'Please enter your password'
-                            : null,
+                      ListTile(
+                        title: Text(AppLocale.english.getString(context)),
+                        onTap: () {
+                          localization.translate('en');
+                          Navigator.pop(context);
+                        },
                       ),
-                      TextButton(
-                        onPressed: showResetPasswordDialog,
-                        style: TextButton.styleFrom(
-                          padding: EdgeInsets.zero,
-                          minimumSize: Size.zero,
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        ),
-                        child: Text(
-                          "Forgot Password?",
-                          style: TextStyle(
-                            color: primaryColor,
-                            fontSize: 12,
-                          ),
-                        ),
+                      ListTile(
+                        title: Text(AppLocale.swahili.getString(context)),
+                        onTap: () {
+                          localization.translate('sw');
+                          Navigator.pop(context);
+                        },
                       ),
                     ],
                   ),
-                  verticalSpaceLarge,
-                  ElevatedButton(
-                    onPressed: login,
-                    style: appButtonStyle(),
-                    child: Text("Login", style: appTextStyle(color: Colors.white)),
-                  ),
-                  verticalSpaceMedium,
-                  ElevatedButton.icon(
-                    onPressed: () async {
-                      await _authService.signInWithGoogle(context);
-                    },
-                    icon: Image.asset(
-                      'assets/google_logo.png',
-                      height: 24,
+                ),
+              );
+            },
+            icon: const Icon(Icons.language),
+            label: Text(localization.currentLocale!.languageCode.toUpperCase()),
+          ),
+        ],
+      ),
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24.0),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 400),
+            child: Form(
+                key: _formKey,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Image.asset('assets/icon.png', height: 80), // App Logo
+                    verticalSpaceMedium,
+                    Text(
+                      AppLocale.welcome.getString(context),
+                      textAlign: TextAlign.center,
+                      style: headingTextStyle(fontSize: 32),
                     ),
-                    label: const Text(
-                      "Sign in with Google",
-                      style: TextStyle(color: Colors.white),
+                    verticalSpaceSmall,
+                    Text(
+                      AppLocale.login_to_account.getString(context),
+                      textAlign: TextAlign.center,
+                      style: appTextStyle(
+                          color: hintTextColor, fontWeight: FontWeight.bold),
                     ),
-                    style: appButtonStyle(),
-                  ),
-                  const SizedBox(height: 50),
-                  TextButton(
-                    onPressed: () {
-                      Navigator.pushReplacementNamed(context, '/register');
-                    },
-                    child: Text(
-                      "Don't have an account? Register",
-                      style: appTextStyle(color: primaryColor),
+                    verticalSpaceLarge,
+                    TextFormField(
+                      controller: _emailController,
+                      decoration: appInputDecoration(
+                          labelText: AppLocale.email.getString(context)),
+                      validator: (value) =>
+                          Validation.validateEmailPhoneNida(email: value),
+                      keyboardType: TextInputType.emailAddress,
                     ),
-                  ),
-                ],
-              ),
-            ),
+                    verticalSpaceMedium,
+                    TextFormField(
+                      controller: _passwordController,
+                      obscureText: _obscurePassword,
+                      decoration: appInputDecoration(
+                        labelText: AppLocale.password.getString(context),
+                      ).copyWith(
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _obscurePassword
+                                ? Icons.visibility_off
+                                : Icons.visibility,
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _obscurePassword = !_obscurePassword;
+                            });
+                          },
+                        ),
+                      ),
+                      validator: (value) => value == null || value.isEmpty
+                          ? AppLocale.please_enter_password.getString(context)
+                          : null,
+                    ),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: showResetPasswordDialog,
+                        child: Text(AppLocale.forgot_password.getString(context)),
+                      ),
+                    ),
+                    verticalSpaceMedium,
+                    ElevatedButton(
+                      onPressed: login,
+                      style: appButtonStyle().copyWith(
+                          padding: MaterialStateProperty.all<EdgeInsets>(
+                              const EdgeInsets.symmetric(vertical: 16))),
+                      child: Text(AppLocale.login.getString(context),
+                          style: appTextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16)),
+                    ),
+                    verticalSpaceMedium,
+                    ElevatedButton.icon(
+                      onPressed: () async {
+                        await _authService.signInWithGoogle(context);
+                      },
+                      icon: Image.asset(
+                        'assets/google_logo.png',
+                        height: 22,
+                      ),
+                      label: Text(
+                        AppLocale.sign_in_with_google.getString(context),
+                        style: appTextStyle(
+                            color: Colors.black87, fontWeight: FontWeight.bold),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          side: BorderSide(color: Colors.grey.shade300),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 40),
+                    TextButton(
+                      onPressed: () {
+                        Navigator.pushReplacementNamed(context, '/register');
+                      },
+                      child: Text(
+                        AppLocale.dont_have_account_register.getString(context),
+                        style: appTextStyle(color: primaryColor),
+                      ),
+                    ),
+                  ],
+                )),
           ),
         ),
       ),

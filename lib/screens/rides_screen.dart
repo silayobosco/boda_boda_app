@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localization/flutter_localization.dart';
 //import 'package:provider/provider.dart';
 //import '../providers/auth_provider.dart'; // Assuming you have an AuthProvider or similar for user ID
 //import '../utils/ui_utils.dart'; // For spacing and styles
+import '../localization/locales.dart';
 import 'ride_history_list_widget.dart';
 import 'scheduled_rides_list_widget.dart';
 
@@ -43,14 +45,14 @@ class _RidesScreenState extends State<RidesScreen> with SingleTickerProviderStat
     if (_tabController == null) {
       // This case should ideally not be hit if role is always Customer or Driver
       return Scaffold(
-        appBar: AppBar(title: const Text('Rides')),
-        body: const Center(child: Text('Invalid role for rides screen.')),
+        appBar: AppBar(title: Text(AppLocale.myRides.getString(context))),
+        body: Center(child: Text(AppLocale.invalidRoleForRidesScreen.getString(context))),
       );
     }
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('My Rides'),
+        title: Text(AppLocale.myRides.getString(context)),
         centerTitle: true, // Add this line to center the title
         bottom: TabBar(
           controller: _tabController,
@@ -59,11 +61,11 @@ class _RidesScreenState extends State<RidesScreen> with SingleTickerProviderStat
           indicatorColor: theme.colorScheme.secondary, // From app_theme.dart (accentColor equivalent)
           tabs: widget.role == 'Customer'
               ? [
-                  const Tab(text: 'History'),
-                  const Tab(text: 'Scheduled'),
+                  Tab(text: AppLocale.history.getString(context)),
+                  Tab(text: AppLocale.scheduled.getString(context)),
                 ]
               : [
-                  const Tab(text: 'History'),
+                  Tab(text: AppLocale.history.getString(context)),
                 ],
         ),
       ),

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter_localization/flutter_localization.dart';
+import '../localization/locales.dart';
 import 'package:provider/provider.dart';
 import '../services/firestore_service.dart';
 import '../services/auth_service.dart';
@@ -103,7 +105,7 @@ class _ChatScreenState extends State<ChatScreen> {
       await _fetchCurrentUserRole();
       if (_currentUserRole == null) {
         debugPrint("ChatScreen: Cannot send message, user role is not available.");
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Could not send message. User role unknown.")));
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppLocale.couldNotSendMessageUserRoleUnknown.getString(context))));
         return;
       }
     }
@@ -134,7 +136,7 @@ class _ChatScreenState extends State<ChatScreen> {
       debugPrint("Error sending message: $e");
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to send message. Please check permissions and try again.')),
+          SnackBar(content: Text(AppLocale.failedToSendMessage.getString(context))),
         );
       }
     }
@@ -174,18 +176,18 @@ class _ChatScreenState extends State<ChatScreen> {
     final theme = Theme.of(context);
 
     if (_currentUserId == null) {
-      return Scaffold(appBar: AppBar(), body: const Center(child: Text("Error: User not authenticated.")));
+      return Scaffold(appBar: AppBar(), body: Center(child: Text(AppLocale.errorUserNotAuthenticated.getString(context))));
     }
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Chat with ${widget.recipientName}'),
+        title: Text(AppLocale.chatWithRecipient.getString(context).replaceFirst('{name}', widget.recipientName)),
         actions: [
           if (widget.canContactAdmin)
             IconButton(
               icon: const Icon(Icons.support_agent_outlined),
               onPressed: _contactKijiweAdmin,
-              tooltip: 'Contact Kijiwe Admin',
+              tooltip: AppLocale.contactKijiweAdmin.getString(context),
             ),
         ],      ),
       body: Column(
@@ -200,10 +202,10 @@ class _ChatScreenState extends State<ChatScreen> {
                   return const Center(child: CircularProgressIndicator());
                 }
                 if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                  return const Center(child: Text('No messages yet. Start the conversation!'));
+                  return Center(child: Text(AppLocale.noMessagesYet.getString(context)));
                 }
                 if (snapshot.hasError) {
-                  return Center(child: Text('Error: ${snapshot.error}'));
+                  return Center(child: Text('${AppLocale.errorPrefix.getString(context)}: ${snapshot.error}'));
                 }
 
                 final messages = snapshot.data!.docs;
@@ -231,7 +233,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   child: TextField(
                     controller: _messageController,
                     enabled: widget.isChatActive,
-                    decoration: appInputDecoration(hintText: widget.isChatActive ? 'Type a message...' : 'Chat is disabled for this ride.'),
+                    decoration: appInputDecoration(hintText: widget.isChatActive ? AppLocale.typeAMessage.getString(context) : AppLocale.chatIsDisabled.getString(context)),
                     onSubmitted: (_) => _sendMessage(),
                   ),
                 ),
@@ -264,7 +266,7 @@ class _ChatScreenState extends State<ChatScreen> {
       bubbleColor = theme.colorScheme.tertiaryContainer;
       textColor = theme.colorScheme.onTertiaryContainer;
       alignment = Alignment.centerLeft;
-      senderLabel = "Kijiwe Admin";
+      senderLabel = AppLocale.kijiweAdmin.getString(context);
     } else if (isMe) {
       bubbleColor = theme.colorScheme.primary;
       textColor = theme.colorScheme.onPrimary;
@@ -337,7 +339,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
     if (adminId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not find Kijiwe admin for this driver.')),
+        SnackBar(content: Text(AppLocale.couldNotFindKijiweAdmin.getString(context))),
       );
       return;
     }
@@ -347,14 +349,14 @@ class _ChatScreenState extends State<ChatScreen> {
     showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text("Message Kijiwe Admin"),
+        title: Text(AppLocale.messageKijiweAdmin.getString(context)),
         content: TextField(
           controller: messageController,
-          decoration: appInputDecoration(hintText: "Your message..."),
+          decoration: appInputDecoration(hintText: AppLocale.yourMessageHint.getString(context)),
           maxLines: 3,
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text("Cancel")),
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: Text(AppLocale.cancel.getString(context))),
           ElevatedButton(
             onPressed: () async {
               final text = messageController.text.trim();
@@ -371,7 +373,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 Navigator.pop(dialogContext);
               }
             },
-            child: const Text("Send"),
+            child: Text(AppLocale.send.getString(context)),
           ),
         ],
       ),

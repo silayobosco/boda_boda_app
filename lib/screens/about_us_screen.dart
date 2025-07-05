@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localization/flutter_localization.dart';
+import '../localization/locales.dart';
 import '../utils/ui_utils.dart'; // For consistent styling
 
 class AboutUsScreen extends StatelessWidget {
@@ -9,7 +11,7 @@ class AboutUsScreen extends StatelessWidget {
     final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('About Us'),
+        title: Text(AppLocale.aboutUs.getString(context)),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
@@ -25,34 +27,34 @@ class AboutUsScreen extends StatelessWidget {
             verticalSpaceMedium,
             Center(
               child: Text(
-                'Boda Boda App',
+                AppLocale.appName.getString(context),
                 style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
               ),
             ),
             Center(
               child: Text(
-                'Connecting Communities, One Ride at a Time.',
+                AppLocale.appTagline.getString(context),
                 style: theme.textTheme.titleMedium?.copyWith(color: theme.hintColor),
               ),
             ),
             verticalSpaceLarge,
-            _buildSectionTitle(theme, 'Our Story'),
+            _buildSectionTitle(theme, AppLocale.ourStory.getString(context)),
             verticalSpaceSmall,
             _buildParagraph(
               theme,
-              'Born from the vibrant streets of our city, the Boda Boda App was created to bridge the gap between local riders and the community they serve. We saw an opportunity to use technology to empower local boda boda drivers, providing them with a stable platform to connect with customers, while offering passengers a safe, reliable, and convenient way to travel.',
+              AppLocale.ourStoryParagraph.getString(context),
             ),
             verticalSpaceLarge,
-            _buildSectionTitle(theme, 'Our Mission'),
+            _buildSectionTitle(theme, AppLocale.ourMission.getString(context)),
             verticalSpaceSmall,
             _buildParagraph(
               theme,
-              'Our mission is to revolutionize urban transport by creating a seamless, community-focused ecosystem. We are committed to improving the livelihoods of our driver partners, ensuring passenger safety, and fostering a sense of trust and connection within the neighborhoods we operate in. We believe in fair fares, transparent operations, and building a sustainable business that benefits everyone.',
+              AppLocale.ourMissionParagraph.getString(context),
             ),
             verticalSpaceLarge,
-            _buildSectionTitle(theme, 'Contact Us'),
+            _buildSectionTitle(theme, AppLocale.contactUs.getString(context)),
             verticalSpaceSmall,
-            _buildContactInfo(theme, Icons.email_outlined, 'vijiwe@gmail.com'),
+            _buildContactInfo(theme, Icons.email_outlined, 'vijiweapp@gmail.com'),
             verticalSpaceSmall,
             _buildContactInfo(theme, Icons.phone_outlined, '+255 717 553 937'),
             verticalSpaceSmall,

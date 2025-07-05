@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_localization/flutter_localization.dart';
+import '../localization/locales.dart';
 import '../providers/location_provider.dart';
 
 class MapPickerScreen extends StatefulWidget {
@@ -32,7 +34,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
     final locationProvider = Provider.of<LocationProvider>(context, listen: false);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Pick Kijiwe Location'),
+        title: Text(AppLocale.pick_kijiwe_location.getString(context)),
         actions: [
           IconButton(
             icon: const Icon(Icons.check),
@@ -70,7 +72,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
                 ),
                 onPressed: () => Navigator.of(context).pop(_pickedLocation),
-                child: const Text('Confirm This Location'),
+                child: Text(AppLocale.confirm_this_location.getString(context)),
               ),
             ),
           ),

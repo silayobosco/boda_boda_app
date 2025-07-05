@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localization/flutter_localization.dart';
 import 'package:provider/provider.dart';
 import '../providers/driver_provider.dart';
 import '../providers/location_provider.dart';
@@ -9,6 +10,7 @@ import '../models/user_model.dart';
 import '../services/firestore_service.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../utils/ui_utils.dart';
+import '../localization/locales.dart';
 import '../widgets/profile_image_picker.dart';
 import 'home_screen.dart';
 
@@ -63,8 +65,8 @@ class _DriverRegistrationScreenState extends State<DriverRegistrationScreen> {
     bool permissionOK = await locationProvider.checkAndRequestLocationPermission();
     if (!permissionOK) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Location permission is required.')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(AppLocale.location_permission_required.getString(context))));
       }
       return;
     }
@@ -93,13 +95,13 @@ class _DriverRegistrationScreenState extends State<DriverRegistrationScreen> {
         }
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Could not get current location.')));
+            SnackBar(content: Text(AppLocale.could_not_get_current_location.getString(context))));
       }
     } catch (e) {
       debugPrint("Error getting location via provider: $e");
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Could not get current location: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('${AppLocale.could_not_get_current_location.getString(context)}: $e')));
       }
     }
   }
@@ -110,9 +112,9 @@ class _DriverRegistrationScreenState extends State<DriverRegistrationScreen> {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('User not logged in')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(AppLocale.user_not_logged_in.getString(context)),
+      ));
       return;
     }
 
@@ -120,17 +122,17 @@ class _DriverRegistrationScreenState extends State<DriverRegistrationScreen> {
     if (_isCreatingKijiwe) {
       if (_newKijiweNameController.text.trim().isEmpty || _selectedLocation == null) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please provide a name and pick a location for the new Kijiwe.')),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(AppLocale.provide_kijiwe_name_and_location.getString(context)),
+        ));
         return;
       }
     } else {
       if (_selectedKijiweId == null) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please select an existing Kijiwe.')),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(AppLocale.please_select_existing_kijiwe.getString(context)),  
+        ));
         return;
       }
     }
@@ -154,11 +156,13 @@ class _DriverRegistrationScreenState extends State<DriverRegistrationScreen> {
       );
       if (!mounted) return;
       Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (context) => const HomeScreen()));
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Registration successful!')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(AppLocale.registration_successful.getString(context))));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Registration failed: ${e.toString()}')),
+        SnackBar(
+            content: Text('${AppLocale.registration_failed.getString(context)}${e.toString()}')),
       );
     }
   }
@@ -176,7 +180,7 @@ class _DriverRegistrationScreenState extends State<DriverRegistrationScreen> {
     final driverProvider = Provider.of<DriverProvider>(context);
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Driver Registration')),
+      appBar: AppBar(title: Text(AppLocale.driver_registration.getString(context))),
       body: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16.0),
         child: driverProvider.isLoading
@@ -189,8 +193,9 @@ class _DriverRegistrationScreenState extends State<DriverRegistrationScreen> {
                   }
                   if (snapshot.hasError) {
                     return Center(
-                      child: Text(
-                          'Error loading Kijiwe locations: ${snapshot.error}'),
+                      child: Text(AppLocale.error_loading_kijiwe_locations
+                              .getString(context) +
+                          snapshot.error.toString()),
                     );
                   }
                   final kijiweList = snapshot.data ?? [];
@@ -208,36 +213,51 @@ class _DriverRegistrationScreenState extends State<DriverRegistrationScreen> {
                           },
                         ),
                         verticalSpaceMedium,
-                        Text('Your Details', style: theme.textTheme.titleLarge),
+                        Text(AppLocale.your_details.getString(context),
+                            style: theme.textTheme.titleLarge),
                         verticalSpaceSmall,
                         TextFormField(
                           controller: _vehicleTypeController,
-                          decoration: const InputDecoration(
-                            labelText: 'Vehicle Type',
-                            hintText: 'e.g., Boxer Boda, TVS King',
+                          decoration: InputDecoration(
+                            labelText: AppLocale.vehicle_type.getString(context),
+                            hintText:
+                                AppLocale.vehicle_type_hint.getString(context),
                           ),
-                          validator: (val) => val == null || val.isEmpty ? 'Required' : null,
+                          validator: (val) => val == null || val.isEmpty
+                              ? AppLocale.required_field.getString(context)
+                              : null,
                         ),
                         verticalSpaceMedium,
                         TextFormField(
                           controller: _licenseNumberController,
-                          decoration: const InputDecoration(labelText: 'License Plate Number'),
-                          validator: (val) => val == null || val.isEmpty ? 'Required' : null,
+                          decoration: InputDecoration(
+                              labelText: AppLocale.license_plate_number
+                                  .getString(context)),
+                          validator: (val) => val == null || val.isEmpty
+                              ? AppLocale.required_field.getString(context)
+                              : null,
                         ),
                         verticalSpaceLarge,
-                        Text('Your Kijiwe', style: theme.textTheme.titleLarge),
+                        Text(AppLocale.your_kijiwe.getString(context),
+                            style: theme.textTheme.titleLarge),
                         verticalSpaceSmall,
                         Text(
-                          'Every driver belongs to a Kijiwe. Join an existing one or create a new one for your area.',
+                          AppLocale.kijiwe_description_text.getString(context),
                           style: theme.textTheme.bodyMedium,
                         ),
                         verticalSpaceMedium,
                         SizedBox(
                           width: double.infinity,
                           child: SegmentedButton<bool>(
-                            segments: const <ButtonSegment<bool>>[
-                              ButtonSegment<bool>(value: false, label: Text('Join Existing'), icon: Icon(Icons.group_add_outlined)),
-                              ButtonSegment<bool>(value: true, label: Text('Create New'), icon: Icon(Icons.add_location_alt_outlined)),
+                            segments: <ButtonSegment<bool>>[
+                              ButtonSegment<bool>(
+                                  value: false,
+                                  label: Text(AppLocale.join_existing.getString(context)),
+                                  icon: const Icon(Icons.group_add_outlined)),
+                              ButtonSegment<bool>(
+                                  value: true,
+                                  label: Text(AppLocale.create_new.getString(context)),
+                                  icon: const Icon(Icons.add_location_alt_outlined)),
                             ],
                             selected: <bool>{_isCreatingKijiwe},
                             onSelectionChanged: (Set<bool> newSelection) {
@@ -274,7 +294,8 @@ class _DriverRegistrationScreenState extends State<DriverRegistrationScreen> {
                               padding: MaterialStateProperty.all(const EdgeInsets.symmetric(vertical: 16)),
                             ),
                             onPressed: _submit,
-                            child: const Text('Complete Registration'),
+                            child: Text(
+                                AppLocale.complete_registration.getString(context)),
                           ),
                         )
                       ],
@@ -296,13 +317,15 @@ class _DriverRegistrationScreenState extends State<DriverRegistrationScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Create a New Kijiwe', style: theme.textTheme.titleMedium),
+            Text(AppLocale.create_a_new_kijiwe.getString(context),
+                style: theme.textTheme.titleMedium),
             verticalSpaceMedium,
             TextFormField(
               controller: _newKijiweNameController,
-              decoration: const InputDecoration(labelText: 'New Kijiwe Name'),
+              decoration: InputDecoration(
+                  labelText: AppLocale.new_kijiwe_name.getString(context)),
               validator: (val) => _isCreatingKijiwe && (val == null || val.isEmpty)
-                  ? 'Kijiwe name is required'
+                  ? AppLocale.kijiwe_name_required.getString(context)
                   : null,
             ),
             verticalSpaceMedium,
@@ -311,7 +334,8 @@ class _DriverRegistrationScreenState extends State<DriverRegistrationScreen> {
               child: OutlinedButton.icon(
                 onPressed: _selectLocationOnMap,
                 icon: const Icon(Icons.map_outlined),
-                label: const Text("Pick Kijiwe Location on Map"),
+                label: Text(
+                    AppLocale.pick_kijiwe_location_on_map.getString(context)),
               ),
             ),
             if (_selectedLocation != null)
@@ -323,7 +347,7 @@ class _DriverRegistrationScreenState extends State<DriverRegistrationScreen> {
                     horizontalSpaceSmall,
                     Expanded(
                       child: Text(
-                        "Location set: ${_selectedLocation!.latitude.toStringAsFixed(4)}, ${_selectedLocation!.longitude.toStringAsFixed(4)}",
+                        "${AppLocale.location_set.getString(context)}: ${_selectedLocation!.latitude.toStringAsFixed(4)}, ${_selectedLocation!.longitude.toStringAsFixed(4)}",
                         style: theme.textTheme.bodyMedium,
                       ),
                     ),
@@ -346,14 +370,18 @@ class _DriverRegistrationScreenState extends State<DriverRegistrationScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Join an Existing Kijiwe', style: theme.textTheme.titleMedium),
+            Text(AppLocale.join_an_existing_kijiwe.getString(context),
+                style: theme.textTheme.titleMedium),
             verticalSpaceMedium,
             DropdownButtonFormField<String>(
               value: _selectedKijiweId,
               items: kijiweList.map((kijiwe) => DropdownMenuItem<String>(value: kijiwe['id'], child: Text(kijiwe['name']))).toList(),
               onChanged: (val) => setState(() => _selectedKijiweId = val),
-              decoration: const InputDecoration(labelText: 'Select Kijiwe'),
-              validator: (val) => !_isCreatingKijiwe && val == null ? 'Please select a Kijiwe' : null,
+              decoration: InputDecoration(
+                  labelText: AppLocale.select_kijiwe.getString(context)),
+              validator: (val) => !_isCreatingKijiwe && val == null
+                  ? AppLocale.please_select_kijiwe.getString(context)
+                  : null,
             ),
           ],
         ),

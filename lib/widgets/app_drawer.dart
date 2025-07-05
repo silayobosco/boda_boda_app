@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter_localization/flutter_localization.dart';
 import '../screens/home_screen.dart';
 import '../screens/profile_screen.dart';
 import '../screens/login_screen.dart';
@@ -8,6 +9,7 @@ import '../screens/about_us_screen.dart';
 import '../screens/help_and_support_screen.dart';
 import '../screens/driver_registration_screen.dart';
 import '../screens/chat_list_screen.dart'; // Import ChatListScreen
+import '../localization/locales.dart';
 
 class AppDrawer extends StatelessWidget {
   final String userRole;
@@ -23,19 +25,23 @@ class AppDrawer extends StatelessWidget {
       child: Column(
         children: [
           Container(
-            width: double.infinity, // Ensure the header spans the full width
-            color: Colors.blue, // Background color for the header
-            padding: const EdgeInsets.symmetric(vertical: 40),
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(16, 50, 16, 20), // Adjusted padding for status bar
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primary,
+            ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 CircleAvatar(
                   radius: 40, // Adjust the size of the profile picture
-                  backgroundImage: NetworkImage(
-                    user?.photoURL ?? "https://via.placeholder.com/150",
-                  ),
-                  backgroundColor:
-                      Colors.white, // Optional: Add a background color
+                  backgroundImage: user?.photoURL != null && user!.photoURL!.isNotEmpty
+                      ? NetworkImage(user.photoURL!)
+                      : null,
+                  backgroundColor: theme.colorScheme.onPrimary.withOpacity(0.2),
+                  child: user?.photoURL == null || user!.photoURL!.isEmpty
+                      ? Icon(Icons.person, size: 40, color: theme.colorScheme.onPrimary)
+                      : null,
                 ),
                 const SizedBox(height: 10), // Spacing between picture and name
                 FutureBuilder<DocumentSnapshot>(
@@ -46,27 +52,27 @@ class AppDrawer extends StatelessWidget {
                           .get(),
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Text(
-                        "Loading...",
-                        style: TextStyle(color: Colors.white),
+                      return Text(
+                        AppLocale.loading.getString(context),
+                        style: TextStyle(color: theme.colorScheme.onPrimary),
                       );
                     }
                     if (snapshot.hasError) {
-                      return const Text(
-                        "Error loading user data",
-                        style: TextStyle(color: Colors.white),
+                      return Text(
+                        AppLocale.errorLoadingUserData.getString(context),
+                        style: TextStyle(color: theme.colorScheme.onPrimary),
                       );
                     }
                     if (!snapshot.hasData || !snapshot.data!.exists) {
-                      return const Text(
-                        "Unknown User",
-                        style: TextStyle(color: Colors.white),
+                      return Text(
+                        AppLocale.unknownUser.getString(context),
+                        style: TextStyle(color: theme.colorScheme.onPrimary),
                       );
                     }
                     return Text(
                       snapshot.data!['name'] ?? "Unknown User",
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: theme.colorScheme.onPrimary,
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
                       ),
@@ -75,15 +81,15 @@ class AppDrawer extends StatelessWidget {
                 ),
                 const SizedBox(height: 5), // Spacing between name and email
                 Text(
-                  user?.email ?? "No email",
-                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                  user?.email ?? AppLocale.noEmail.getString(context),
+                  style: TextStyle(color: theme.colorScheme.onPrimary.withOpacity(0.8), fontSize: 14),
                 ),
               ],
             ),
           ),
           ListTile( // Move "Profile" and other links up, before the driver button
             leading: const Icon(Icons.person),
-            title: const Text("Profile"),
+            title: Text(AppLocale.profile.getString(context)),
             onTap: () {
               Navigator.push(
                 context,
@@ -92,8 +98,8 @@ class AppDrawer extends StatelessWidget {
             },
           ),
           ListTile(
-            leading: Icon(Icons.chat_bubble_outline, color: theme.colorScheme.secondary),
-            title: Text('Chats', style: theme.textTheme.titleMedium),
+            leading: const Icon(Icons.chat_bubble_outline),
+            title: Text(AppLocale.chats.getString(context)),
             onTap: () {
               Navigator.of(context).pop(); // Close drawer
               Navigator.of(context).push(MaterialPageRoute(builder: (context) => const ChatListScreen()));
@@ -101,14 +107,14 @@ class AppDrawer extends StatelessWidget {
           ),
           ListTile(
             leading: const Icon(Icons.settings),
-            title: const Text("Settings"),
+            title: Text(AppLocale.settings.getString(context)),
             onTap: () {
               Navigator.pushNamed(context, '/settings');
             },
           ),
           ListTile(
-            leading: Icon(Icons.support_agent_outlined, color: theme.colorScheme.secondary),
-            title: Text('Help & Support', style: theme.textTheme.titleMedium),
+            leading: const Icon(Icons.support_agent_outlined),
+            title: Text(AppLocale.helpSupport.getString(context)),
             onTap: () {
               Navigator.of(context).pop(); // Close drawer
               Navigator.push(
@@ -119,7 +125,7 @@ class AppDrawer extends StatelessWidget {
           ),
           ListTile(
             leading: const Icon(Icons.info_outline),
-            title: const Text("About Us"),
+            title: Text(AppLocale.aboutUs.getString(context)),
             onTap: () {
               Navigator.of(context).pop(); // Close drawer
               Navigator.push(
@@ -130,7 +136,7 @@ class AppDrawer extends StatelessWidget {
           ),
           ListTile(
             leading: const Icon(Icons.exit_to_app),
-            title: const Text("Logout"),
+            title: Text(AppLocale.logout.getString(context)),
             onTap: () async {
               final navigator = Navigator.of(context); // Capture navigator before await
               await FirebaseAuth.instance.signOut();
@@ -160,17 +166,17 @@ class AppDrawer extends StatelessWidget {
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const ListTile(
-            leading: Icon(Icons.hourglass_empty),
-            title: Text("Loading..."),
+            leading: SizedBox(height: 24, width: 24, child: CircularProgressIndicator(strokeWidth: 2)),
+            title: Text("Loading..."), // This is fine as it's temporary
             enabled: false,
           );
         }
 
         if (snapshot.hasError || !snapshot.hasData || !snapshot.data!.exists) {
           // If there's an error or no data, don't allow switching roles
-          return const ListTile(
-            leading: Icon(Icons.error_outline),
-            title: Text("Unable to load driver status"),
+          return ListTile(
+            leading: const Icon(Icons.error_outline),
+            title: Text(AppLocale.unableToLoadDriverStatus.getString(context)),
             enabled: false,
           );
         }
@@ -190,17 +196,17 @@ class AppDrawer extends StatelessWidget {
         final bool hasCompletedDriverProfile = driverProfile?['kijiweId'] != null && (driverProfile!['kijiweId'] as String).isNotEmpty;
 
         final String buttonTitle = isCurrentlyDriver
-            ? 'Switch to Customer'
+            ? AppLocale.switchToCustomer.getString(context)
             : hasCompletedDriverProfile
-                ? 'Switch to Driver'
-                : 'Become a Driver';
+                ? AppLocale.switchToDriver.getString(context)
+                : AppLocale.becomeADriver.getString(context);
 
         // Only show the button if the user has a completed driver profile or is already a driver
         if (!isCurrentlyDriver && !hasCompletedDriverProfile) {
           // Only allow registration, not switching, if not completed
           return ListTile(
             leading: const Icon(Icons.directions_bike),
-            title: const Text('Become a Driver'),
+            title: Text(AppLocale.becomeADriver.getString(context)),
             onTap: () {
               if (Navigator.of(context).canPop()) Navigator.of(context).pop();
               Navigator.push(
@@ -238,7 +244,7 @@ class AppDrawer extends StatelessWidget {
               debugPrint("Error switching role: $e");
               if (context.mounted) { // Check mounted before showing SnackBar
                 scaffoldMessenger.showSnackBar(
-                  SnackBar(content: Text('Failed to switch role: ${e.toString()}')),
+                  SnackBar(content: Text('${AppLocale.failedToSwitchRole.getString(context)}: ${e.toString()}')),
                 );
               }
             }

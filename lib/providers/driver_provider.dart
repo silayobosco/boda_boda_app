@@ -92,7 +92,15 @@ class DriverProvider extends ChangeNotifier {
       _currentKijiweId = null;
       _driverProfileData = null;
     } finally {
-      setLoading(false); // This will also call notifyListeners()
+      // Fetch daily earnings after loading driver data
+      try {
+        _dailyEarnings = await _firestoreService.getDriverDailyEarnings(userId);
+        debugPrint("DriverProvider: Fetched daily earnings: $_dailyEarnings");
+      } catch (e) {
+        debugPrint("DriverProvider: Error fetching daily earnings: $e");
+        _dailyEarnings = 0.0; // Reset on error
+      }
+          setLoading(false); // This will also call notifyListeners()
     }
   }
 
@@ -445,15 +453,6 @@ class DriverProvider extends ChangeNotifier {
       }
       throw Exception('Failed to cancel ride: ${e.toString()}');
     } finally {
-      // Fetch daily earnings after loading driver data
-      try {
-        _dailyEarnings = await _firestoreService.getDriverDailyEarnings(userId);
-        debugPrint("DriverProvider: Fetched daily earnings: $_dailyEarnings");
-      } catch (e) {
-        debugPrint("DriverProvider: Error fetching daily earnings: $e");
-        _dailyEarnings = 0.0; // Reset on error
-      }
-
       setLoading(false);
     }
   }

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter_localization/flutter_localization.dart';
+import '../localization/locales.dart';
 import '../utils/ui_utils.dart'; // For consistent styling
 
 class HelpAndSupportScreen extends StatelessWidget {
@@ -12,86 +14,89 @@ class HelpAndSupportScreen extends StatelessWidget {
     final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Help & Support'),
+        title: Text(AppLocale.help_and_support.getString(context)),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildSectionTitle(theme, 'Frequently Asked Questions'),
+            _buildSectionTitle(context, theme, AppLocale.faq),
             verticalSpaceMedium,
             // Conditionally display FAQs based on the user's role
             if (userRole == 'Driver')
-              ..._getDriverFaqs(theme)
+              ..._getDriverFaqs(context, theme)
             else
-              ..._getCustomerFaqs(theme),
+              ..._getCustomerFaqs(context, theme),
             verticalSpaceLarge,
-            _buildSectionTitle(theme, 'Contact Support'),
+            _buildSectionTitle(context, theme, AppLocale.contact_support),
             verticalSpaceMedium,
-            _buildContactInfo(theme, Icons.email_outlined, 'Email Support',
+            _buildContactInfo(context, theme, Icons.email_outlined, AppLocale.email_support,
                 'vijiweapp@gmail.com'),
             verticalSpaceSmall,
             _buildContactInfo(
-                theme, Icons.phone_outlined, 'Call Us', '+255 717 553 937'),
+                context, theme, Icons.phone_outlined, AppLocale.call_us, '+255 717 553 937'),
             verticalSpaceSmall,
-            _buildContactInfo(theme, Icons.chat_bubble_outline, 'Live Chat',
-                'Tap to start a chat with support.'),
+            _buildContactInfo(context, theme, Icons.chat_bubble_outline, AppLocale.live_chat,
+                AppLocale.live_chat_subtitle),
           ],
         ),
       ),
     );
   }
 
-  List<Widget> _getCustomerFaqs(ThemeData theme) {
+  List<Widget> _getCustomerFaqs(BuildContext context, ThemeData theme) {
     return [
       _buildFaqItem(
+        context: context,
         theme: theme,
-        question: 'How do I request a ride?',
-        answer:
-            'To request a ride, go to the home screen, enter your destination in the "Where to?" box, confirm your pickup location, and then tap "Confirm Route".',
+        questionKey: AppLocale.customer_faq1_q,
+        answerKey: AppLocale.customer_faq1_a,
       ),
       _buildFaqItem(
+        context: context,
         theme: theme,
-        question: 'How is the fare calculated?',
-        answer:
-            'Fares are calculated based on a base fare, the distance of the ride, and the estimated time it will take. You will see an estimated fare before you confirm your request.',
+        questionKey: AppLocale.customer_faq2_q,
+        answerKey: AppLocale.customer_faq2_a,
       ),
       _buildFaqItem(
+        context: context,
         theme: theme,
-        question: 'Can I schedule a ride in advance?',
-        answer:
-            'Yes! After setting your pickup and destination, you can tap the "Schedule" button to pick a future date and time for your ride.',
+        questionKey: AppLocale.customer_faq3_q,
+        answerKey: AppLocale.customer_faq3_a,
       ),
       _buildFaqItem(
+        context: context,
         theme: theme,
-        question: 'How do I become a driver?',
-        answer:
-            'From the side menu, you can select "Become a Driver" to start the registration process. You will need to provide your vehicle details and necessary documents.',
+        questionKey: AppLocale.customer_faq4_q,
+        answerKey: AppLocale.customer_faq4_a,
       ),
     ];
   }
 
-  List<Widget> _getDriverFaqs(ThemeData theme) {
+  List<Widget> _getDriverFaqs(BuildContext context, ThemeData theme) {
     return [
       _buildFaqItem(
+          context: context,
           theme: theme,
-          question: 'How do I go online to receive requests?',
-          answer: 'On the driver home screen, tap the "Go Online" button. You must be part of a Kijiwe to receive ride requests.'),
+          questionKey: AppLocale.driver_faq1_q,
+          answerKey: AppLocale.driver_faq1_a),
       _buildFaqItem(
+          context: context,
           theme: theme,
-          question: 'How are my earnings calculated?',
-          answer: 'Your earnings are the final fare minus the app\'s commission. You can view a detailed breakdown of your earnings for each ride in the "Earnings" section of your account.'),
+          questionKey: AppLocale.driver_faq2_q,
+          answerKey: AppLocale.driver_faq2_a),
       _buildFaqItem(
+          context: context,
           theme: theme,
-          question: 'What happens if I decline a ride request?',
-          answer: 'Declining a ride will make you unavailable for a short period. Frequent declines may affect your driver score. The request will be sent to the next available driver in the queue.'),
+          questionKey: AppLocale.driver_faq3_q,
+          answerKey: AppLocale.driver_faq3_a),
     ];
   }
 
-  Widget _buildSectionTitle(ThemeData theme, String title) {
+  Widget _buildSectionTitle(BuildContext context, ThemeData theme, String titleKey) {
     return Text(
-      title,
+      titleKey.getString(context),
       style: theme.textTheme.titleLarge?.copyWith(
         fontWeight: FontWeight.bold,
         color: theme.colorScheme.primary,
@@ -100,37 +105,44 @@ class HelpAndSupportScreen extends StatelessWidget {
   }
 
   Widget _buildFaqItem(
-      {required ThemeData theme,
-      required String question,
-      required String answer}) {
+      {required BuildContext context,
+      required ThemeData theme,
+      required String questionKey,
+      required String answerKey}) {
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       margin: const EdgeInsets.only(bottom: 12),
       child: ExpansionTile(
-        title: Text(question,
+        title: Text(questionKey.getString(context),
             style: theme.textTheme.titleMedium
                 ?.copyWith(fontWeight: FontWeight.w600)),
         childrenPadding: const EdgeInsets.all(16).copyWith(top: 0),
         children: [
-          Text(answer, style: theme.textTheme.bodyMedium?.copyWith(height: 1.5)),
+          Text(answerKey.getString(context), style: theme.textTheme.bodyMedium?.copyWith(height: 1.5)),
         ],
       ),
     );
   }
 
   Widget _buildContactInfo(
-      ThemeData theme, IconData icon, String title, String subtitle) {
+      BuildContext context, ThemeData theme, IconData icon, String titleKey, String subtitleValue) {
     return ListTile(
       leading: Icon(icon, color: theme.colorScheme.secondary),
-      title: Text(title, style: theme.textTheme.titleMedium),
-      subtitle: Text(subtitle, style: theme.textTheme.bodySmall),
+      title: Text(titleKey.getString(context), style: theme.textTheme.titleMedium),
+      subtitle: Text(
+        // Check if the subtitle is a key or a literal value
+        subtitleValue.contains('@') || subtitleValue.contains('+')
+            ? subtitleValue
+            : subtitleValue.getString(context),
+        style: theme.textTheme.bodySmall
+      ),
       onTap: () async {
         Uri? uri;
-        if (title.toLowerCase().contains('email')) {
-          uri = Uri.parse('mailto:$subtitle');
-        } else if (title.toLowerCase().contains('call')) {
-          uri = Uri.parse('tel:$subtitle');
+        if (titleKey == AppLocale.email_support) {
+          uri = Uri.parse('mailto:$subtitleValue');
+        } else if (titleKey == AppLocale.call_us) {
+          uri = Uri.parse('tel:$subtitleValue');
         }
         // Add live chat navigation later
 

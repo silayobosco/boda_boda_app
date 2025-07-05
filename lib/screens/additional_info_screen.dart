@@ -1,5 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_localization/flutter_localization.dart';
+import '../localization/locales.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/firestore_service.dart';
 import '../utils/ui_utils.dart';
@@ -104,8 +106,8 @@ class _AdditionalInfoScreenState extends State<AdditionalInfoScreen> {
       print("Error saving data: $e");
       if (mounted) {
         ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("Error saving data: $e")));
+          context, // This is correct
+        ).showSnackBar(SnackBar(content: Text("${AppLocale.error_saving_data.getString(context)}: $e")));
       }
     }
   }
@@ -134,7 +136,7 @@ class _AdditionalInfoScreenState extends State<AdditionalInfoScreen> {
       },
       validator: (value) {
         if (value == null || value.isEmpty) {
-          return 'Please enter a date';
+          return AppLocale.date_required.getString(context);
         }
         return null;
       },
@@ -146,12 +148,12 @@ class _AdditionalInfoScreenState extends State<AdditionalInfoScreen> {
     return WillPopScope(
       onWillPop: () async {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Please complete your profile.")),
+          SnackBar(content: Text(AppLocale.please_complete_profile.getString(context))),
         );
         return false;
       },
       child: Scaffold(
-        appBar: AppBar(title: const Text("Additional Info")),
+        appBar: AppBar(title: Text(AppLocale.additional_info.getString(context))),
         body: Padding(
           padding: const EdgeInsets.all(20.0),
           child: Form(
@@ -170,13 +172,13 @@ class _AdditionalInfoScreenState extends State<AdditionalInfoScreen> {
                     controller: _phoneController,
                     keyboardType: TextInputType.phone,
                     decoration: appInputDecoration(
-                      labelText: "Phone Number",
-                      hintText: "Phone Number",
+                      labelText: AppLocale.phone_number.getString(context),
+                      hintText: AppLocale.phone_number.getString(context),
                     ),
                     validator:
                         (value) =>
                             value == null || value.isEmpty
-                                ? 'Phone number is required'
+                                ? AppLocale.phone_number_required.getString(context)
                                 : Validation.validateEmailPhoneNida(
                                   phone: value,
                                 ),
@@ -185,8 +187,8 @@ class _AdditionalInfoScreenState extends State<AdditionalInfoScreen> {
                   // Replace the existing date picker logic with _buildDateField
                   _buildDateField(
                     controller: _dobController,
-                    labelText: "Date of Birth",
-                    hintText: "YYYY-MM-DD",
+                    labelText: AppLocale.date_of_birth.getString(context),
+                    hintText: AppLocale.dob_hint.getString(context),
                   ),
                   verticalSpaceMedium,
                   DropdownButtonFormField<String>(
@@ -197,38 +199,38 @@ class _AdditionalInfoScreenState extends State<AdditionalInfoScreen> {
                       });
                     },
                     decoration: appInputDecoration(
-                      labelText: "Gender",
-                      hintText: "Gender",
+                      labelText: AppLocale.gender.getString(context),
+                      hintText: AppLocale.gender.getString(context),
                     ),
                     items:
-                        const ["Male", "Female"].map((gender) {
+                        [AppLocale.male.getString(context), AppLocale.female.getString(context)].map((gender) {
                           return DropdownMenuItem(
                             value: gender,
                             child: Text(gender),
                           );
                         }).toList(),
                     validator:
-                        (value) => value == null ? 'Gender is required' : null,
+                        (value) => value == null ? AppLocale.gender_required.getString(context) : null,
                   ),
                   verticalSpaceMedium,
                   TextFormField(
                     controller: _passwordController,
-                    decoration: const InputDecoration(
-                      labelText: "Password",
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: AppLocale.password.getString(context),
+                      border: const OutlineInputBorder(),
                     ),
                     obscureText: true,
                     validator:
                         (value) =>
                             value == null || value.isEmpty
-                                ? 'Password is required'
+                                ? AppLocale.password_required.getString(context)
                                 : null,
                   ),
                   verticalSpaceMedium,
                   TextFormField(
                     controller: _confirmPasswordController,
                     decoration: InputDecoration(
-                      labelText: "Confirm Password",
+                      labelText: AppLocale.confirm_password.getString(context),
                       border: const OutlineInputBorder(),
                       suffixIcon: IconButton(
                         icon: Icon(
@@ -246,10 +248,10 @@ class _AdditionalInfoScreenState extends State<AdditionalInfoScreen> {
                     obscureText: _obscureConfirmPassword,
                     validator: (value) {
                       if (value == null || value.isEmpty) {
-                        return 'Confirm password is required';
+                        return AppLocale.confirm_password_required.getString(context);
                       }
                       if (value != _passwordController.text) {
-                        return 'Passwords do not match';
+                        return AppLocale.passwords_do_not_match.getString(context);
                       }
                       return null;
                     },
@@ -259,7 +261,7 @@ class _AdditionalInfoScreenState extends State<AdditionalInfoScreen> {
                     onPressed: _saveAdditionalInfo,
                     style: appButtonStyle(),
                     child: Text(
-                      "Save",
+                      AppLocale.save.getString(context),
                       style: appTextStyle(color: Colors.white),
                     ),
                   ),

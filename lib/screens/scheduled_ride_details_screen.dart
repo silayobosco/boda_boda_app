@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localization/flutter_localization.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart' as gmf;
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 
 import '../models/Ride_Request_Model.dart';
+import '../localization/locales.dart';
 import '../providers/ride_request_provider.dart';
 import '../utils/ui_utils.dart';
 import '../utils/map_utils.dart';
@@ -116,8 +118,8 @@ class _ScheduledRideDetailsScreenState extends State<ScheduledRideDetailsScreen>
         if (!snapshot.hasData) {
           // This can happen if the ride is deleted while the user is on this screen.
           return Scaffold(
-            appBar: AppBar(title: const Text("Ride Not Found")),
-            body: const Center(child: Text("This scheduled ride no longer exists.")),
+            appBar: AppBar(title: Text(AppLocale.ride_not_found.getString(context))),
+            body: Center(child: Text(AppLocale.ride_no_longer_exists.getString(context))),
           );
         }
 
@@ -176,6 +178,21 @@ class _ScheduledRideDetailsScreenState extends State<ScheduledRideDetailsScreen>
 
     setState(() => _isRouteLoading = false);
   }
+
+  String _getLocalizedStatus(BuildContext context, String status) {
+    switch (status) {
+      case 'scheduled':
+        return AppLocale.status_scheduled.getString(context);
+      case 'paused':
+        return AppLocale.status_paused.getString(context);
+      case 'stopped':
+        return AppLocale.status_stopped.getString(context);
+      default:
+        // Fallback for any other status that doesn't have a specific translation
+        return status.split(' ').map((str) => str.isNotEmpty ? '${str[0].toUpperCase()}${str.substring(1).toLowerCase()}' : '').join(' ');
+    }
+  }
+
   // Builds the main scaffold for the ride details screen
   // Displays the ride details, actions, and map with route
   Widget _buildDetailsScaffold(BuildContext context, RideRequestModel ride) {
@@ -184,13 +201,13 @@ class _ScheduledRideDetailsScreenState extends State<ScheduledRideDetailsScreen>
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(ride.title ?? 'Scheduled Ride'),
+        title: Text(ride.title ?? AppLocale.scheduled_ride.getString(context)),
         actions: [
           if (ride.isRecurring == true)
             // Action for recurring rides: Stop
             IconButton(
               icon: const Icon(Icons.stop_circle_outlined),
-              tooltip: 'Stop Recurrence',
+              tooltip: AppLocale.stop_recurrence.getString(context),
               onPressed: () => _showStopRecurrenceConfirmationDialog(context, ride.id!, rideProvider),
             )
           else ...[
@@ -198,12 +215,12 @@ class _ScheduledRideDetailsScreenState extends State<ScheduledRideDetailsScreen>
             if (ride.status == 'scheduled' || ride.status == 'paused')
               IconButton(
                 icon: Icon(ride.status == 'scheduled' ? Icons.pause_circle_outline : Icons.play_circle_outline),
-                tooltip: ride.status == 'scheduled' ? 'Pause Ride' : 'Resume Ride',
+                tooltip: ride.status == 'scheduled' ? AppLocale.pause_ride.getString(context) : AppLocale.resume_ride.getString(context),
                 onPressed: () => ride.status == 'scheduled' ? rideProvider.pauseScheduledRide(ride.id!) : rideProvider.unpauseScheduledRide(ride.id!),
               ),
             IconButton(
               icon: const Icon(Icons.delete_outline),
-              tooltip: 'Cancel Ride',
+              tooltip: AppLocale.cancel_ride_tooltip.getString(context),
               onPressed: () => _showCancelConfirmationDialog(context, ride.id!, rideProvider),
             ),
           ],
@@ -239,46 +256,46 @@ class _ScheduledRideDetailsScreenState extends State<ScheduledRideDetailsScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildSectionHeader(theme, 'Ride Summary'),
+                  _buildSectionHeader(theme, AppLocale.ride_summary.getString(context)),
                   // Status Chip
                   Padding(
                     padding: const EdgeInsets.only(bottom: 8.0),
                     child: Chip(
-                      label: Text('Status: ${ride.status.capitalize()}', style: TextStyle(color: ride.status == 'stopped' ? theme.colorScheme.onErrorContainer : theme.colorScheme.onSecondaryContainer)),
+                      label: Text('${AppLocale.status.getString(context)}: ${_getLocalizedStatus(context, ride.status)}', style: TextStyle(color: ride.status == 'stopped' ? theme.colorScheme.onErrorContainer : theme.colorScheme.onSecondaryContainer)),
                       backgroundColor: ride.status == 'paused' || ride.status == 'stopped' ? warningColor.withOpacity(0.3) : theme.colorScheme.secondaryContainer,
                       avatar: ride.status == 'paused' || ride.status == 'stopped' ? Icon(Icons.pause, color: theme.colorScheme.onSecondaryContainer) : null,
                     ),
                   ),
-                  _buildDetailItem(theme, Icons.schedule, 'Scheduled Time', DateFormat('E, MMM d, yyyy hh:mm a').format(ride.scheduledDateTime!.toLocal())),
-                  _buildDetailItem(theme, Icons.my_location, 'From', ride.pickupAddressName ?? 'N/A'),
+                  _buildDetailItem(theme, Icons.schedule, AppLocale.scheduled_time.getString(context), DateFormat('E, MMM d, yyyy hh:mm a').format(ride.scheduledDateTime!.toLocal())),
+                  _buildDetailItem(theme, Icons.my_location, AppLocale.from.getString(context), ride.pickupAddressName ?? AppLocale.not_available_abbreviation.getString(context)),
                   if (ride.stops.isNotEmpty)
                     ...ride.stops.asMap().entries.map((entry) {
                       final index = entry.key;
                       final stop = entry.value;
-                      return _buildDetailItem(theme, Icons.location_on_outlined, 'Stop ${index + 1}', stop['addressName'] ?? 'N/A');
+                      return _buildDetailItem(theme, Icons.location_on_outlined, '${AppLocale.stop_prefix.getString(context)}${index + 1}', stop['addressName'] ?? AppLocale.not_available_abbreviation.getString(context));
                     }).toList(),
-                  _buildDetailItem(theme, Icons.flag, 'To', ride.dropoffAddressName ?? 'N/A'),
+                  _buildDetailItem(theme, Icons.flag, AppLocale.to.getString(context), ride.dropoffAddressName ?? AppLocale.not_available_abbreviation.getString(context)),
                   // Route & Fare Details
                   if (_routeDistance != null && _routeDuration != null) ...[
                     verticalSpaceMedium,
-                    _buildSectionHeader(theme, 'Route & Fare'),
-                    _buildDetailItem(theme, Icons.directions_car, 'Estimated Duration', _routeDuration!),
-                    _buildDetailItem(theme, Icons.route, 'Estimated Distance', _routeDistance!),
+                    _buildSectionHeader(theme, AppLocale.route_and_fare.getString(context)),
+                    _buildDetailItem(theme, Icons.directions_car, AppLocale.estimated_duration.getString(context), _routeDuration!),
+                    _buildDetailItem(theme, Icons.route, AppLocale.estimated_distance.getString(context), _routeDistance!),
                     if (_estimatedFare != null)
-                      _buildDetailItem(theme, Icons.payments_outlined, 'Estimated Fare', 'TZS ${_estimatedFare!.toStringAsFixed(0)}'),
+                      _buildDetailItem(theme, Icons.payments_outlined, AppLocale.estimated_fare.getString(context), 'TZS ${_estimatedFare!.toStringAsFixed(0)}'),
                   ],
                   if (ride.isRecurring == true) ...[
                     verticalSpaceMedium,
-                    _buildSectionHeader(theme, 'Recurrence'),
-                    _buildDetailItem(theme, Icons.repeat, 'Frequency', ride.recurrenceType ?? 'N/A'),
+                    _buildSectionHeader(theme, AppLocale.recurrence.getString(context)),
+                    _buildDetailItem(theme, Icons.repeat, AppLocale.frequency.getString(context), ride.recurrenceType ?? AppLocale.not_available_abbreviation.getString(context)),
                     if (ride.recurrenceDaysOfWeek != null && ride.recurrenceDaysOfWeek!.isNotEmpty)
-                      _buildDetailItem(theme, Icons.calendar_view_week, 'Days', ride.recurrenceDaysOfWeek!.join(', ')),
+                      _buildDetailItem(theme, Icons.calendar_view_week, AppLocale.days.getString(context), ride.recurrenceDaysOfWeek!.join(', ')),
                     if (ride.recurrenceEndDate != null)
-                      _buildDetailItem(theme, Icons.event_busy, 'Ends On', DateFormat.yMMMd().format(ride.recurrenceEndDate!.toLocal())),
+                      _buildDetailItem(theme, Icons.event_busy, AppLocale.ends_on.getString(context), DateFormat.yMMMd().format(ride.recurrenceEndDate!.toLocal())),
                   ],
                   if (ride.customerNoteToDriver != null && ride.customerNoteToDriver!.isNotEmpty) ...[
                     verticalSpaceMedium,
-                    _buildSectionHeader(theme, 'Note to Driver'),
+                    _buildSectionHeader(theme, AppLocale.note_to_driver_header.getString(context)),
                     Text(ride.customerNoteToDriver!, style: theme.textTheme.bodyLarge?.copyWith(fontStyle: FontStyle.italic)),
                   ]
                 ],
@@ -292,10 +309,10 @@ class _ScheduledRideDetailsScreenState extends State<ScheduledRideDetailsScreen>
           // TODO: Implement Edit functionality
           // This will be complex, likely opening a new screen or a large dialog
           // similar to the scheduling dialog in customer_home.dart
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Editing scheduled rides is coming soon!')));
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppLocale.editing_coming_soon.getString(context))));
         },
         icon: const Icon(Icons.edit),
-        label: const Text('Edit Ride'),
+        label: Text(AppLocale.edit_ride.getString(context)),
       ),
     );
   }
@@ -336,17 +353,17 @@ class _ScheduledRideDetailsScreenState extends State<ScheduledRideDetailsScreen>
     final bool? confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Cancel Scheduled Ride'),
-        content: const Text('Are you sure you want to permanently cancel this scheduled ride?'),
+        title: Text(AppLocale.cancel_scheduled_ride_dialog_title.getString(dialogContext)),
+        content: Text(AppLocale.cancel_scheduled_ride_dialog_content.getString(dialogContext)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('No'),
+            child: Text(AppLocale.dialog_no.getString(dialogContext)),
           ),
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
             style: TextButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.error),
-            child: const Text('Yes, Cancel'),
+            child: Text(AppLocale.dialog_yes_cancel.getString(dialogContext)),
           ),
         ],
       ),
@@ -357,14 +374,14 @@ class _ScheduledRideDetailsScreenState extends State<ScheduledRideDetailsScreen>
         await rideProvider.deleteScheduledRide(rideId);
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Scheduled ride cancelled.')),
+            SnackBar(content: Text(AppLocale.ride_cancelled_snackbar.getString(context))),
           );
           Navigator.of(context).pop(); // Go back to the list screen
         }
       } catch (e) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to cancel ride: $e')),
+            SnackBar(content: Text('${AppLocale.failed_to_cancel_ride_snackbar.getString(context)}$e')),
           );
         }
       }
@@ -376,17 +393,17 @@ class _ScheduledRideDetailsScreenState extends State<ScheduledRideDetailsScreen>
     final bool? confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Stop Recurring Ride'),
-        content: const Text('Are you sure you want to stop this ride from recurring? This will not affect any rides that have already been scheduled.'),
+        title: Text(AppLocale.stop_recurring_ride_dialog_title.getString(dialogContext)),
+        content: Text(AppLocale.stop_recurring_ride_dialog_content.getString(dialogContext)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('No'),
+            child: Text(AppLocale.dialog_no.getString(dialogContext)),
           ),
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
             style: TextButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.error),
-            child: const Text('Yes, Stop'),
+            child: Text(AppLocale.dialog_yes_stop.getString(dialogContext)),
           ),
         ],
       ),
@@ -397,20 +414,13 @@ class _ScheduledRideDetailsScreenState extends State<ScheduledRideDetailsScreen>
         await rideProvider.stopScheduledRecurrence(rideId);
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Recurring ride stopped.')),
+            SnackBar(content: Text(AppLocale.recurring_ride_stopped_snackbar.getString(context))),
           );
         }
       } catch (e) {
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to stop ride: $e')));
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${AppLocale.failed_to_stop_ride_snackbar.getString(context)}$e')));
         }
       }
     }
   }
-
-extension StringExtension on String {
-  String capitalize() {
-    if (isEmpty) return this;
-    return "${this[0].toUpperCase()}${substring(1).toLowerCase()}";
-  }
-}

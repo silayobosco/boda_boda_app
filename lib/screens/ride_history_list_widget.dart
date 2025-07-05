@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localization/flutter_localization.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../models/Ride_Request_Model.dart';
 import '../providers/ride_request_provider.dart'; // To fetch ride history
 import '../services/auth_service.dart'; // To get current user ID
+import '../localization/locales.dart';
 import '../utils/ui_utils.dart'; // For styles and spacing
 import 'ride_history_details_screen.dart'; // Import the details screen
 
@@ -20,7 +22,7 @@ class RideHistoryListWidget extends StatelessWidget {
     final String? currentUserId = authService.currentUser?.uid;
 
     if (currentUserId == null) {
-      return const Center(child: Text("User not authenticated."));
+      return Center(child: Text(AppLocale.userNotAuthenticated.getString(context)));
     }
 
     return StreamBuilder<List<RideRequestModel>>(
@@ -30,10 +32,10 @@ class RideHistoryListWidget extends StatelessWidget {
           return const Center(child: CircularProgressIndicator());
         }
         if (snapshot.hasError) {
-          return Center(child: Text('Error: ${snapshot.error}', style: appTextStyle(color: theme.colorScheme.error)));
+          return Center(child: Text('${AppLocale.error_prefix.getString(context)}${snapshot.error}', style: appTextStyle(color: theme.colorScheme.error)));
         }
         if (!snapshot.hasData || snapshot.data!.isEmpty) {
-          return Center(child: Text('No ride history found.', style: theme.textTheme.bodyMedium));
+          return Center(child: Text(AppLocale.no_ride_history_found.getString(context), style: theme.textTheme.bodyMedium));
         }
 
         final rideHistory = snapshot.data!;
@@ -49,9 +51,9 @@ class RideHistoryListWidget extends StatelessWidget {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               child: ListTile(
                 leading: _buildStatusIcon(ride.status, theme),
-                title: Text('To: ${ride.dropoffAddressName ?? 'Destination'}', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-                subtitle: Text('On: ${ride.completedTime != null ? DateFormat.yMMMd().add_jm().format(ride.completedTime!) : DateFormat.yMMMd().add_jm().format(ride.requestTime!)}'),
-                trailing: Text('TZS ${ride.fare?.toStringAsFixed(0) ?? 'N/A'}', style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold)),
+                title: Text('${AppLocale.to_prefix.getString(context)}${ride.dropoffAddressName ?? AppLocale.destination.getString(context)}', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                subtitle: Text('${AppLocale.on_prefix.getString(context)}${ride.completedTime != null ? DateFormat.yMMMd().add_jm().format(ride.completedTime!) : DateFormat.yMMMd().add_jm().format(ride.requestTime!)}'),
+                trailing: Text('TZS ${ride.fare?.toStringAsFixed(0) ?? AppLocale.not_available_abbreviation.getString(context)}', style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold)),
                 onTap: () {
                   Navigator.push(context, MaterialPageRoute(builder: (context) => RideHistoryDetailsScreen(ride: ride)));
                 },

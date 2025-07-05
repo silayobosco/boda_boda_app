@@ -1,69 +1,96 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localization/flutter_localization.dart';
+import 'package:provider/provider.dart';
 import '../utils/ui_utils.dart'; // For spacing and styles
 import 'about_us_screen.dart';
 import 'help_and_support_screen.dart';
+import '../localization/locales.dart';
+import 'language_selection_screen.dart';
+import 'legal_and_privacy_screen.dart';
+import '../utils/account_utils.dart';
+import '../providers/driver_provider.dart';
+import 'kijiwe_profile_screen.dart';
 
 class DriverAccountScreen extends StatelessWidget {
   const DriverAccountScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    //final theme = Theme.of(context);
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Driver Account'),
-        automaticallyImplyLeading: false, // No back button if it's a main tab
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16.0),
-        children: [
-          _buildSectionTitle(context, 'Driver Operations'),
-          _buildAccountOption(context, Icons.account_balance_wallet, 'Earnings / Wallet', () {
-            // TODO: Navigate to Earnings
-          }),
-          _buildAccountOption(context, Icons.motorcycle, 'Vehicle Management', () {
-            // TODO: Navigate to Vehicle Management
-          }),
-          _buildAccountOption(context, Icons.description, 'Document Management', () {
-            // TODO: Navigate to Document Management
-          }),
-          _buildAccountOption(context, Icons.group_work, 'Kijiwe Profile', () {
-            // TODO: Navigate to Kijiwe Profile/Management
-          }),
-          _buildAccountOption(context, Icons.bar_chart, 'Performance', () {
-            // TODO: Navigate to Performance
-          }),
-          verticalSpaceMedium,
-          _buildSectionTitle(context, 'Preferences'),
-          _buildAccountOption(context, Icons.notifications_active, 'Notification Preferences', () {
-            // TODO: Navigate to Notification Preferences
-          }),
-          _buildAccountOption(context, Icons.language, 'Language', () {
-            // TODO: Navigate to Language Selection
-          }),
-          verticalSpaceMedium,
-          _buildSectionTitle(context, 'Support & Legal'),
-          _buildAccountOption(context, Icons.support_agent, 'Help & Support',
-              () {
-            Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const HelpAndSupportScreen(userRole: 'Driver')));
-          }),
-          _buildAccountOption(context, Icons.info_outline, 'About Us', () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const AboutUsScreen()),
-            );
-          }),
-          _buildAccountOption(context, Icons.gavel, 'Legal & Privacy', () {
-            // TODO: Navigate to Legal & Privacy
-          }),
-          verticalSpaceLarge,
-          _buildAccountOption(context, Icons.delete_forever, 'Delete Account', () {
-            // TODO: Implement Delete Account flow
-          }, isDestructive: true),
-        ],
-      ),
+    return Consumer<DriverProvider>(
+      builder: (context, driverProvider, child) {
+        return Scaffold(
+          appBar: AppBar(
+            title: Text(AppLocale.myAccount.getString(context)),
+            centerTitle: true,
+            automaticallyImplyLeading: false, // No back button if it's a main tab
+          ),
+          body: ListView(
+            padding: const EdgeInsets.all(16.0),
+            children: [
+              _buildSectionTitle(context, AppLocale.driverOperations.getString(context)),
+              _buildAccountOption(context, Icons.account_balance_wallet, AppLocale.earningsWallet.getString(context), () {
+                // TODO: Navigate to Earnings
+              }),
+              _buildAccountOption(context, Icons.motorcycle, AppLocale.vehicleManagement.getString(context), () {
+                // TODO: Navigate to Vehicle Management
+              }),
+              _buildAccountOption(context, Icons.description, AppLocale.documentManagement.getString(context), () {
+                // TODO: Navigate to Document Management
+              }),
+              _buildAccountOption(context, Icons.group_work, AppLocale.kijiweProfile.getString(context), () {
+                final kijiweId = driverProvider.currentKijiweId;
+                if (kijiweId != null) {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => KijiweProfileScreen(kijiweId: kijiweId)),
+                  );
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('You are not currently associated with a Kijiwe.')),
+                  );
+                }
+              }),
+              _buildAccountOption(context, Icons.bar_chart, AppLocale.performance.getString(context), () {
+                // TODO: Navigate to Performance
+              }),
+              verticalSpaceMedium,
+              _buildSectionTitle(context, AppLocale.preferences.getString(context)),
+              _buildAccountOption(context, Icons.notifications_active, AppLocale.notificationPreferences.getString(context), () {
+                // TODO: Navigate to Notification Preferences
+              }),
+              _buildAccountOption(context, Icons.language, AppLocale.language.getString(context), () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const LanguageSelectionScreen()),
+                );
+              }),
+              verticalSpaceMedium,
+              _buildSectionTitle(context, AppLocale.supportLegal.getString(context)),
+              _buildAccountOption(context, Icons.support_agent, AppLocale.helpSupport.getString(context),
+                  () {
+                Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const HelpAndSupportScreen(userRole: 'Driver')));
+              }),
+              _buildAccountOption(context, Icons.info_outline, AppLocale.aboutUs.getString(context), () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const AboutUsScreen()),
+                );
+              }),
+              _buildAccountOption(context, Icons.gavel, AppLocale.legalPrivacy.getString(context), () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const LegalAndPrivacyScreen(userRole: 'Driver')),
+                );
+              }),
+              verticalSpaceLarge,
+              _buildAccountOption(context, Icons.delete_forever, AppLocale.deleteAccount.getString(context),
+                  () => AccountUtils.showDeleteAccountDialog(context), isDestructive: true),
+            ],
+          ),
+        );
+      },
     );
   }
 

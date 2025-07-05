@@ -466,7 +466,8 @@ void _measureRideRequestSheet() {
     if (userId != null) {
       _dailyEarnings = await firestoreService.getDriverDailyEarnings(userId);
     }
-  }  Widget _buildOnlineCardWithToggle(DriverProvider driverProvider) {
+  }  
+  Widget _buildOnlineCardWithToggle(DriverProvider driverProvider) {
   final theme = Theme.of(context); // Define theme here
   return SizedBox(
     width: 117, // Square width
@@ -488,9 +489,9 @@ void _measureRideRequestSheet() {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Online', 
+                  Text(AppLocale.online.getString(context), 
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: successColor,
+                        color: successColor, // successColor is defined in ui_utils.dart
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -502,14 +503,14 @@ void _measureRideRequestSheet() {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.center, // Center text in column
                   children: [
-                    Text('⭐ ${(driverProvider.driverProfileData?['averageRating'] as num?)?.toStringAsFixed(1) ?? 'N/A'}', // Display actual rating
+                    Text('⭐ ${(driverProvider.driverProfileData?['averageRating'] as num?)?.toStringAsFixed(1) ?? AppLocale.not_applicable.getString(context)}', // Display actual rating
                       style: theme.textTheme.bodyMedium?.copyWith(
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                     verticalSpaceSmall, // Use spacing constant
-                    Text('\$125.50 today', 
-                      style: theme.textTheme.bodySmall?.copyWith(
+                    Text('TZS ${driverProvider.dailyEarnings.toStringAsFixed(0)} ${AppLocale.today.getString(context)}', // Display actual earnings
+                      style: theme.textTheme.bodySmall?.copyWith( // You missed the theme in previous edits
                         color: theme.hintColor,
                       ),
                     ),
@@ -563,9 +564,9 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
     final theme = Theme.of(context);
     final isGoingToPickup = _activeRideDetails?.status == 'accepted' || _activeRideDetails?.status == 'goingToPickup';
 
-    final String customerName = _activeRideDetails?.customerName ?? 'Customer';
-    final String pickupAddress = _activeRideDetails?.pickupAddressName ?? 'Pickup Location';
-    final String dropoffAddress = _activeRideDetails?.dropoffAddressName ?? 'Destination';
+    final String customerName = _activeRideDetails?.customerName ?? AppLocale.customer.getString(context);
+    final String pickupAddress = _activeRideDetails?.pickupAddressName ?? AppLocale.pickup_location.getString(context);
+    final String dropoffAddress = _activeRideDetails?.dropoffAddressName ?? AppLocale.destination_location.getString(context);
     final bool pickupStepCompleted = isAtPickup || isRideInProgress;
     final bool canNavigate = isGoingToPickup || isRideInProgress || isAtPickup; 
     final bool mainRideStarted = isRideInProgress;
@@ -629,7 +630,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
                 title: Text(customerName, style: theme.textTheme.titleMedium),
                 // Display customer details here
                 subtitle: Text(
-                  _activeRideDetails?.customerDetails ?? 'Customer details not available',
+                  _activeRideDetails?.customerDetails ?? AppLocale.customer_details_not_available.getString(context),
                   style: theme.textTheme.bodySmall,
                 ),
                 // subtitle: Text('Status: ${_currentRide?['status'] ?? 'Unknown'}', style: theme.textTheme.bodySmall), // Status is shown in Chip below
@@ -638,7 +639,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
               if (_activeRideDetails?.fare == null && (_activeRideDetails?.status == 'accepted' || _activeRideDetails?.status == 'goingToPickup' || _activeRideDetails?.status == 'arrivedAtPickup'))
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
-                  child: Text('Estimated Fare: TZS ${_activeRideDetails?.estimatedFare?.toStringAsFixed(0) ?? 'N/A'}', // Display estimated fare from model
+                  child: Text('${AppLocale.estimated_fare_prefix.getString(context)} TZS ${_activeRideDetails?.estimatedFare?.toStringAsFixed(0) ?? AppLocale.not_applicable.getString(context)}', // Display estimated fare from model
                       style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold, color: theme.colorScheme.primary)),
                 ),
 
@@ -646,12 +647,12 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
               if (_activeRideDetails?.customerId != null && (_activeRideDetails?.status == 'accepted' || _activeRideDetails?.status == 'goingToPickup' || _activeRideDetails?.status == 'arrivedAtPickup' || _activeRideDetails?.status == 'onRide')) ...[
                 verticalSpaceSmall,
                 TextButton.icon(
-                  icon: Icon(Icons.chat_bubble_outline, color: theme.colorScheme.primary),
-                  label: Text('Chat with Customer', style: TextStyle(color: theme.colorScheme.primary)),
+                  icon: Icon(Icons.chat_bubble_outline, color: theme.colorScheme.primary, size: 20),
+                  label: Text(AppLocale.chat_with_customer.getString(context), style: TextStyle(color: theme.colorScheme.primary)),
                   onPressed: () {
                     debugPrint("DriverHome: Chat button pressed for ride ID: ${_activeRideDetails!.id} with customer ID: ${_activeRideDetails!.customerId}");
                     Navigator.push(context, MaterialPageRoute(builder: (context) => ChatScreen(
-                      rideRequestId: _activeRideDetails!.id!,
+                      rideRequestId: _activeRideDetails!.id,
                       recipientId: _activeRideDetails!.customerId,
                       recipientName: _activeRideDetails!.customerName ?? "Customer",
                     )));
@@ -662,7 +663,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
               if (_activeRideDetails?.customerNoteToDriver != null && _activeRideDetails!.customerNoteToDriver!.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0), // Use spacing constants?
-                child: Text("Note: ${_activeRideDetails!.customerNoteToDriver}", style: theme.textTheme.bodyMedium?.copyWith(fontStyle: FontStyle.italic, color: theme.colorScheme.secondary)),
+                child: Text("${AppLocale.note_from_customer_prefix.getString(context)} ${_activeRideDetails!.customerNoteToDriver}", style: theme.textTheme.bodyMedium?.copyWith(fontStyle: FontStyle.italic, color: theme.colorScheme.secondary)),
               ),
 
               // Display route to pickup or main ride information if available
@@ -671,9 +672,9 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 8.0),
                   child: Text(
-                    _activeRideDetails?.status == 'accepted'
-                        ? 'To Pickup: ${_driverToPickupDuration ?? '...'} · ${_driverToPickupDistance ?? '...'}' // Add null checks
-                        : 'Ride: $_mainRideDuration · $_mainRideDistance',
+                    _activeRideDetails?.status == 'accepted' || _activeRideDetails?.status == 'goingToPickup'
+                        ? '${AppLocale.to_pickup_prefix.getString(context)} ${_driverToPickupDuration ?? AppLocale.calculating_dots.getString(context)} · ${_driverToPickupDistance ?? AppLocale.calculating_dots.getString(context)}' // Add null checks
+                        : '${AppLocale.ride_prefix.getString(context)} $_mainRideDuration · $_mainRideDistance',
                     style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.secondary),
                   ),
                 ),
@@ -689,8 +690,8 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
                 child: Column( // Use Column
                   children: [
                     _buildRideStep(
-                        Icons.pin_drop, // Using getLegInfo(0) for consistency
-                        'Pickup: $pickupAddress ${(isGoingToPickup && getLegInfo(0) != null) ? "(${getLegInfo(0)})" : ""}',
+                        Icons.my_location, // Using getLegInfo(0) for consistency
+                        '${AppLocale.pickup.getString(context)}: $pickupAddress ${(isGoingToPickup && getLegInfo(0) != null) ? "(${getLegInfo(0)})" : ""}',
                         pickupStepCompleted
                     ),
                     // Stops Steps
@@ -698,16 +699,16 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
                       ...stops.asMap().entries.map((entry) {
                         final index = entry.key;
                         final stop = entry.value;
-                        final stopAddress = stop['addressName'] as String? ?? 'Stop ${index + 1}'; // Cast for 'addressName' might still be needed depending on how 'stops' is populated upstream
+                        final stopAddress = stop['addressName'] as String? ?? '${AppLocale.stop_prefix_with_number.getString(context)} ${index + 1}'; // Cast for 'addressName' might still be needed depending on how 'stops' is populated upstream
                         // Leg 0 is Driver -> Pickup
                         // Leg 1 is Pickup -> Stop 1 (index 0 of stops list)
                         // So, leg for stops[index] is _proposedRouteLegsData[index + 1]
                         final String? legInfoToStop = getLegInfo(index + 1);
-                        final String stopText = 'Stop ${index + 1}: $stopAddress ${(legInfoToStop != null) ? "($legInfoToStop)" : ""}';
+                        final String stopText = '${AppLocale.stop_prefix_with_number.getString(context)} ${index + 1}: $stopAddress ${(legInfoToStop != null) ? "($legInfoToStop)" : ""}';
                         return _buildRideStep(Icons.location_on, stopText, mainRideStarted);
                       }).toList(),
                     // Destination Step
-                    _buildRideStep(Icons.flag, 'Destination: $dropoffAddress ${(getLegInfo((_proposedRouteLegsData?.length ?? 0) - 1) != null) ? "(${getLegInfo((_proposedRouteLegsData?.length ?? 0) - 1)})" : ""}', false),
+                    _buildRideStep(Icons.flag, '${AppLocale.destination_prefix.getString(context)} $dropoffAddress ${(getLegInfo((_proposedRouteLegsData?.length ?? 0) - 1) != null) ? "(${getLegInfo((_proposedRouteLegsData?.length ?? 0) - 1)})" : ""}', false),
                   ],
                 ),
               ),
@@ -724,7 +725,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
                             backgroundColor: MaterialStateProperty.all(successColor),
                             foregroundColor: MaterialStateProperty.all(theme.colorScheme.onPrimary),
                           ),
-                          child: Text('Arrived'),
+                          child: Text(AppLocale.arrived.getString(context)),
                           onPressed: () => _confirmArrival(context), // Pass context
                         ),
                       ),
@@ -736,7 +737,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
                             backgroundColor: MaterialStateProperty.all(successColor),
                             foregroundColor: MaterialStateProperty.all(theme.colorScheme.onPrimary),
                           ),
-                          child: Text('Start Ride'),
+                          child: Text(AppLocale.start_ride.getString(context)),
                           onPressed: () => _startRide(context), // Pass context
                         ),
                       ),
@@ -749,13 +750,13 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
                             backgroundColor: MaterialStateProperty.all(successColor),
                             foregroundColor: MaterialStateProperty.all(Colors.white), // Explicit white for better contrast
                           ),
-                          child: const Text('Complete Ride'),
+                          child: Text(AppLocale.complete_ride.getString(context)),
                           onPressed: () {
                             final rideId = _activeRideDetails?.id;
                             if (rideId != null) {
                               _completeRide(context, rideId); // Pass context
                             } else {
-                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error: Ride ID is missing.')));
+                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppLocale.error_ride_id_missing.getString(context))));
                             }
                           },
                         ),
@@ -776,13 +777,40 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
                     foregroundColor: theme.colorScheme.error,
                   ),
                   onPressed: _showCancelRideConfirmationDialog, // This is where it's called
-                  child: Text('Cancel Ride'),
+                  child: Text(AppLocale.cancelRide.getString(context)),
                 ),
               ),
              ),
             ],
           ),
         ), // Removed the closing parenthesis for the SingleChildScrollView here
+        );
+      },
+    );
+  }
+
+  Future<void> _showCancelRideConfirmationDialog() async {
+    // This method is fine as is
+    final theme = Theme.of(context);
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: Text(AppLocale.confirm_cancel_ride_title.getString(context), style: theme.textTheme.titleLarge),
+          content: SingleChildScrollView(
+            child: ListBody(children: <Widget>[Text(AppLocale.confirm_cancel_ride_content.getString(context), style: theme.textTheme.bodyMedium)]),
+          ),
+          actions: <Widget>[
+            TextButton(child: Text(AppLocale.dialog_no.getString(context), style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.7))), onPressed: () => Navigator.of(dialogContext).pop()),
+            TextButton(
+              child: Text(AppLocale.dialog_yes_cancel.getString(context), style: TextStyle(color: theme.colorScheme.error)),
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                _cancelRide();
+              },
+            ),
+          ],
         );
       },
     );
@@ -823,7 +851,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
 
     final theme = Theme.of(context); // Moved theme here as it's used throughout
 
-    final String toPickupLegInfo = getLegInfo(0) ?? 'Calculating...'; // Leg 0: Driver to Customer Pickup
+    final String toPickupLegInfo = getLegInfo(0) ?? AppLocale.calculating_dots.getString(context); // Leg 0: Driver to Customer Pickup
 
      return Card(
         key: _rideRequestSheetKey, // Assign the key to the Card
@@ -845,11 +873,11 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
                   child: Icon(Icons.person, color: theme.colorScheme.onPrimaryContainer), // Add key
                 ),
                 title: Text(
-                    rideData['customerName'] != null && rideData['customerName'].isNotEmpty
-                      ? 'Ride from ${rideData['customerName']}'
-                      : 'New Ride Request!'),
+                    (rideData['customerName'] as String?)?.isNotEmpty == true
+                      ? AppLocale.ride_from_customer.getString(context).replaceFirst('{name}', rideData['customerName'])
+                      : AppLocale.new_ride_request.getString(context)),
                 subtitle: Text(
-                    rideData['customerDetails'] ?? 'Customer details not available',
+                    rideData['customerDetails'] ?? AppLocale.customer_details_not_available.getString(context),
                     style: theme.textTheme.bodySmall, // Ensure consistent styling
                   ),
               ),
@@ -857,7 +885,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
               if (rideData['customerNoteToDriver'] != null && (rideData['customerNoteToDriver'] as String).isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                  child: Text("Note: ${rideData['customerNoteToDriver']}",
+                  child: Text("${AppLocale.note_from_customer_prefix.getString(context)} ${rideData['customerNoteToDriver']}",
                       style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: theme.colorScheme.primary)),
                 ),
 
@@ -866,7 +894,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
                 padding: const EdgeInsets.symmetric(vertical: 8.0),
                 child: Chip(
                   avatar: Icon(Icons.timer, color: theme.colorScheme.onSecondaryContainer),
-                  label: Text('Auto-decline in $_countdownSeconds s', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSecondaryContainer)),
+                  label: Text(AppLocale.auto_decline_in.getString(context).replaceFirst('{seconds}', _countdownSeconds.toString()), style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSecondaryContainer)),
                   backgroundColor: theme.colorScheme.secondaryContainer,
                 ),
               ),
@@ -880,7 +908,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
                       Icon(Icons.directions_car, color: theme.colorScheme.secondary, size: 18),
                       horizontalSpaceSmall,
                       Text(
-                        'Ride: $_mainRideDuration · $_mainRideDistance',
+                        '${AppLocale.ride_prefix.getString(context)} $_mainRideDuration · $_mainRideDistance',
                         style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.secondary, fontWeight: FontWeight.bold),
                       ),
                     ],
@@ -890,14 +918,14 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
               if (displayEstimatedFareText != null && displayEstimatedFareText.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                  child: Text('Estimated Fare: TZS ${double.tryParse(displayEstimatedFareText)?.toStringAsFixed(0) ?? displayEstimatedFareText}',
+                  child: Text('${AppLocale.estimated_fare_prefix.getString(context)} TZS ${double.tryParse(displayEstimatedFareText)?.toStringAsFixed(0) ?? displayEstimatedFareText}',
                       style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: theme.colorScheme.primary)),
                 ),
 
               // To Pickup Leg Info - Displaying the toPickupLegInfo
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
-                child: Text('To Pickup: $toPickupLegInfo', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.secondary)),
+                child: Text('${AppLocale.to_pickup_prefix.getString(context)} $toPickupLegInfo', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.secondary)),
               ),
               const Divider(indent: 16, endIndent: 16, height: 20),
               
@@ -909,7 +937,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
                     Icon(Icons.my_location, color: successColor, size: 20),
                     horizontalSpaceSmall,
                     Expanded(
-                      child: Text('Pickup: ${rideData['pickupAddressName'] ?? 'Customer Pickup'}', style: theme.textTheme.bodyMedium),
+                      child: Text('${AppLocale.pickup.getString(context)}: ${rideData['pickupAddressName'] ?? AppLocale.customer_pickup.getString(context)}', style: theme.textTheme.bodyMedium),
                     ),
                   ],
                 ),
@@ -920,7 +948,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
                 ...stopsToDisplay.asMap().entries.map((entry) {
                   final index = entry.key;
                   final stopMap = entry.value;
-                  final stopAddress = stopMap['addressName'] as String? ?? (stopMap['name'] as String? ?? 'Stop');
+                  final stopAddress = stopMap['addressName'] as String? ?? (stopMap['name'] as String? ?? AppLocale.stop_prefix_with_number.getString(context));
                   // Leg to this stop:
                   // Leg 0 is Driver -> Pickup
                   // Leg 1 is Pickup -> Stop 1 (index 0 of stopsToDisplay)
@@ -934,7 +962,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
                         Icon(Icons.location_on, color: theme.colorScheme.secondary, size: 20),
                         horizontalSpaceSmall,
                         Expanded(
-                          child: Text('Stop ${index + 1}: $stopAddress', style: theme.textTheme.bodyMedium),
+                          child: Text('${AppLocale.stop_prefix_with_number.getString(context)} ${index + 1}: $stopAddress', style: theme.textTheme.bodyMedium),
                         ),
                         if (legInfoToStop != null)
                           Text('($legInfoToStop)', style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor)),
@@ -951,7 +979,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
                     Icon(Icons.flag, color: theme.colorScheme.error, size: 20),
                     horizontalSpaceSmall,
                     Expanded(
-                      child: Text('Destination: ${rideData['dropoffAddressName'] ?? 'Final Destination'}', style: theme.textTheme.bodyMedium),
+                      child: Text('${AppLocale.destination_prefix.getString(context)} ${rideData['dropoffAddressName'] ?? AppLocale.final_destination.getString(context)}', style: theme.textTheme.bodyMedium),
                     ),
                     if (_proposedRouteLegsData != null && _proposedRouteLegsData!.isNotEmpty)
                       Text('(${getLegInfo(_proposedRouteLegsData!.length - 1) ?? ""})', style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor)),
@@ -966,16 +994,15 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
                 children: [
                   Expanded(
                     child: OutlinedButton( // Use OutlinedButton
-                      child: Text('Decline', style: TextStyle(color: theme.colorScheme.error)),
+                      child: Text(AppLocale.decline.getString(context), style: TextStyle(color: theme.colorScheme.error)),
                       onPressed: () => _declineRide(rideRequestId, customerId),
                     ),
                   ),
                   SizedBox(width: 16),
                   Expanded(
                     child: ElevatedButton(
-                      // Extract pickupLat and pickupLng from rideData for the accept action
                       onPressed: () => _acceptRide(rideRequestId, customerId, rideData['pickupLat'], rideData['pickupLng'], _pendingRideCustomerName),
-                      child: Text('Accept', style: TextStyle(color: theme.colorScheme.onPrimary)), // Use ElevatedButton
+                      child: Text(AppLocale.accept.getString(context), style: TextStyle(color: theme.colorScheme.onPrimary)), // Use ElevatedButton
                     ),
                   ),
                 ],
@@ -1056,7 +1083,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
       // Success, UI already updated by provider's notifyListeners
       if (!isMounted) return; // Use captured mounted state
       scaffoldMessenger.showSnackBar(
-        SnackBar(content: Text(wasOnline ? 'You are now offline.' : 'You are now online.')),
+        SnackBar(content: Text(wasOnline ? AppLocale.you_are_now_offline.getString(context) : AppLocale.you_are_now_online.getString(context))),
       );
     }
   }
@@ -1300,20 +1327,20 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
         _rideSpecificMarkers.add(gmf.Marker(
           markerId: gmf.MarkerId('proposed_pickup'),
           position: ridePickupLocation, // Customer's pickup
-          infoWindow: gmf.InfoWindow(title: 'Pickup: ${rideData['pickupAddressName'] as String? ?? 'Customer Pickup'}'),
+          infoWindow: gmf.InfoWindow(title: '${AppLocale.pickup.getString(context)}: ${rideData['pickupAddressName'] as String? ?? AppLocale.customer_pickup.getString(context)}'),
           icon: gmf.BitmapDescriptor.defaultMarkerWithHue(gmf.BitmapDescriptor.hueGreen),
         ));
         _rideSpecificMarkers.add(gmf.Marker(
           markerId: gmf.MarkerId('proposed_dropoff'),
           position: rideDropoffLocation,
-          infoWindow: gmf.InfoWindow(title: 'Destination: ${rideData['dropoffAddressName'] ?? 'Customer Destination'}'),
+          infoWindow: gmf.InfoWindow(title: '${AppLocale.destination.getString(context)}: ${rideData['dropoffAddressName'] ?? AppLocale.customer_destination.getString(context)}'),
           icon: gmf.BitmapDescriptor.defaultMarkerWithHue(gmf.BitmapDescriptor.hueRed),
         ));
         customerStops.asMap().forEach((index, stopLatLng) {
         _rideSpecificMarkers.add(gmf.Marker(
             markerId: gmf.MarkerId('proposed_stop_$index'),
             position: stopLatLng,
-            infoWindow: gmf.InfoWindow(title: 'Stop ${index + 1}'), // You might need stop names from rideData
+            infoWindow: gmf.InfoWindow(title: '${AppLocale.stop_prefix_with_number.getString(context)} ${index + 1}'), // You might need stop names from rideData
             icon: gmf.BitmapDescriptor.defaultMarkerWithHue(gmf.BitmapDescriptor.hueOrange),
           ));
         });
@@ -1359,7 +1386,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
         _rideSpecificMarkers.add(gmf.Marker(
           markerId: gmf.MarkerId('customer_pickup_active'),
           position: customerPickupLocation,
-          infoWindow: gmf.InfoWindow(title: 'Pickup: ${_activeRideDetails?.pickupAddressName ?? 'Customer Pickup'}'),
+          infoWindow: gmf.InfoWindow(title: '${AppLocale.pickup.getString(context)}: ${_activeRideDetails?.pickupAddressName ?? AppLocale.customer_pickup.getString(context)}'),
           icon: gmf.BitmapDescriptor.defaultMarkerWithHue(gmf.BitmapDescriptor.hueGreen),
         ));
       });
@@ -1401,20 +1428,20 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
         _rideSpecificMarkers.add(gmf.Marker(
           markerId: gmf.MarkerId('main_ride_pickup'),
           position: ridePickup,
-          infoWindow: gmf.InfoWindow(title: 'Ride Pickup'),
+          infoWindow: gmf.InfoWindow(title: AppLocale.ride_pickup.getString(context)),
           icon: gmf.BitmapDescriptor.defaultMarkerWithHue(gmf.BitmapDescriptor.hueGreen),
         ));
         _rideSpecificMarkers.add(gmf.Marker(
           markerId: gmf.MarkerId('main_ride_destination'),
           position: rideDropoff,
-          infoWindow: gmf.InfoWindow(title: 'Ride Destination'),
+          infoWindow: gmf.InfoWindow(title: AppLocale.ride_destination.getString(context)),
           icon: gmf.BitmapDescriptor.defaultMarkerWithHue(gmf.BitmapDescriptor.hueRed),
         ));
         stops.asMap().forEach((index, stopLatLng) {
           _rideSpecificMarkers.add(gmf.Marker(
             markerId: gmf.MarkerId('main_ride_stop_$index'),
             position: stopLatLng,
-            infoWindow: gmf.InfoWindow(title: 'Stop ${index + 1}'),
+            infoWindow: gmf.InfoWindow(title: '${AppLocale.stop_prefix_with_number.getString(context)} ${index + 1}'),
             icon: gmf.BitmapDescriptor.defaultMarkerWithHue(gmf.BitmapDescriptor.hueOrange),
           ));
         });
@@ -1551,11 +1578,11 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
           id: rideId,
           customerId: customerId,
           status: 'accepted', // Initial status after acceptance
-          customerName: customerName ?? 'Customer',
+          customerName: customerName ?? AppLocale.customer.getString(context),
           pickup: gmf.LatLng(double.parse(pickupLatRaw.toString()), double.parse(pickupLngRaw.toString())),
           dropoff: gmf.LatLng(double.parse(dropoffLatRaw.toString()), double.parse(dropoffLngRaw.toString())),
-          pickupAddressName: pickupAddressName ?? 'Pickup Location',
-          dropoffAddressName: dropoffAddressName ?? 'Destination',
+          pickupAddressName: pickupAddressName ?? AppLocale.pickup_location.getString(context),
+          dropoffAddressName: dropoffAddressName ?? AppLocale.destination_location.getString(context),
           stops: [], // Initialize with empty stops, will be populated by stream if they exist
           // Other fields will be null or default initially
         );
@@ -1576,14 +1603,12 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
       debugPrint("DriverHome: _acceptRide - UI state updated, snackbar shown.");
       // Ensure context is still valid before showing SnackBar
       if (isMounted) {
-        scaffoldMessenger.showSnackBar(
-        const SnackBar(content: Text('Ride accepted successfully')), // Use captured scaffoldMessenger
-      );
+        scaffoldMessenger.showSnackBar(SnackBar(content: Text(AppLocale.ride_accepted.getString(context))), // Use captured scaffoldMessenger
+        );
       }
     } catch (e) {
       if (isMounted) {
-        scaffoldMessenger.showSnackBar(
-          SnackBar(content: Text('Failed to accept ride: ${e.toString()}')), // Use captured variables
+        scaffoldMessenger.showSnackBar(SnackBar(content: Text('${AppLocale.failed_to_accept_ride.getString(context)}: ${e.toString()}')), // Use captured variables
         );
       }
     }
@@ -1660,14 +1685,12 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
       });
       }
       if (isMounted) {
-        scaffoldMessenger.showSnackBar(
-        SnackBar(content: Text('Ride declined')),
+        scaffoldMessenger.showSnackBar(SnackBar(content: Text(AppLocale.ride_declined.getString(context))),
       );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to decline ride: ${e.toString()}')),
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${AppLocale.error_declining_ride.getString(context)}: ${e.toString()}')),
         );
       }
     }
@@ -1675,17 +1698,17 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
 
   Future<void> _navigateToNextPoint() async {
     if (_activeRideDetails == null) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No active ride.')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppLocale.no_active_ride.getString(context))));
       return;
     }
 
     final String status = _activeRideDetails!.status;
     gmf.LatLng? destinationLatLng;
-    String destinationName = "Next Destination";
+    String destinationName = AppLocale.next_destination.getString(context);
 
     if (status == 'accepted' || status == 'goingToPickup') {
       destinationLatLng = _activeRideDetails!.pickup;
-      destinationName = _activeRideDetails!.pickupAddressName ?? "Pickup";
+      destinationName = _activeRideDetails!.pickupAddressName ?? AppLocale.pickup.getString(context);
     } else if (status == 'onRide' || status == 'arrivedAtPickup') { // 'arrivedAtPickup' implies next point is start of main ride or first stop
       final List<Map<String, dynamic>> stops = _activeRideDetails!.stops;
       // For simplicity, we'll assume stops are ordered and we navigate to the first one if not yet "completed"
@@ -1694,13 +1717,13 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
         // Find the first "unvisited" stop. This is a simplified logic.
         final firstStop = stops.first; // Assuming stops are ordered
         destinationLatLng = firstStop['location'] as gmf.LatLng?;
-        destinationName = firstStop['addressName'] as String? ?? "Next Stop";
+        destinationName = firstStop['addressName'] as String? ?? AppLocale.next_stop.getString(context);
       }
 
       // If no stops or all stops visited, navigate to final destination
       if (destinationLatLng == null) {
         destinationLatLng = _activeRideDetails!.dropoff;
-        destinationName = _activeRideDetails!.dropoffAddressName ?? "Final Destination";
+        destinationName = _activeRideDetails!.dropoffAddressName ?? AppLocale.final_destination.getString(context);
       }
     }
 
@@ -1709,10 +1732,10 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri);
       } else {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not launch navigation to $destinationName')));
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${AppLocale.could_not_launch_navigation.getString(context)} $destinationName')));
       }
     } else {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Next destination not available.')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppLocale.next_destination_not_available.getString(context))));
     }
   }
 
@@ -1725,7 +1748,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
     final bool isMounted = mounted; // Capture mounted state
 
     if (rideId == null || customerId == null) {
-      if (isMounted) scaffoldMessenger.showSnackBar(const SnackBar(content: Text('Error: Ride details missing for arrival confirmation.')));
+      if (isMounted) scaffoldMessenger.showSnackBar(SnackBar(content: Text(AppLocale.error_ride_details_missing_for_arrival.getString(context))));
       return;
     }
     debugPrint("DriverHome: _confirmArrival called for ride ID: $rideId");
@@ -1756,8 +1779,8 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
       }
     }
     } catch (e) {
-      if (isMounted) {
-      scaffoldMessenger.showSnackBar(SnackBar(content: Text('Failed to confirm arrival: ${e.toString()}')));
+      if (isMounted) { // Use captured mounted state
+      scaffoldMessenger.showSnackBar(SnackBar(content: Text('${AppLocale.failed_to_confirm_arrival.getString(context)}: ${e.toString()}')));
       }
     }
   }
@@ -1771,7 +1794,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
     final bool isMounted = mounted; // Capture mounted state
 
     if (rideId == null || customerId == null) {
-      if (isMounted) scaffoldMessenger.showSnackBar(const SnackBar(content: Text('Error: Ride details missing for starting ride.')));
+      if (isMounted) scaffoldMessenger.showSnackBar(SnackBar(content: Text(AppLocale.error_ride_details_missing_for_start.getString(context))));
       return;
     }
     debugPrint("DriverHome: _startRide called for ride ID: $rideId");
@@ -1785,15 +1808,15 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
       });
       }
     } catch (e) {
-      if (isMounted) {
-        scaffoldMessenger.showSnackBar(SnackBar(content: Text('Failed to start ride: ${e.toString()}')));      }
+      if (isMounted) { // Use captured mounted state
+        scaffoldMessenger.showSnackBar(SnackBar(content: Text('${AppLocale.failed_to_start_ride.getString(context)}: ${e.toString()}')));      }
     }
   }
 
   void _completeRide(BuildContext context, String rideId) async {
     final customerId = _activeRideDetails?.customerId;
     if (customerId == null) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error: Customer ID not found for this ride.'))); // This one is fine, it's a guard
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppLocale.error_customer_id_not_found.getString(context)))); // This one is fine, it's a guard
       return;
     }
     debugPrint("DriverHome: _completeRide called for ride ID: $rideId");
@@ -1820,10 +1843,10 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
       // UI update handled by stream listener or _resetActiveRideState.
       // We'll call _resetActiveRideState after attempting to show the dialog.
 
-      if (!isMounted) return;
-      if (isMounted) scaffoldMessenger.showSnackBar(const SnackBar(content: Text('Ride completed successfully')));
+      if (!isMounted) return; // Use captured mounted state
+      if (isMounted) scaffoldMessenger.showSnackBar(SnackBar(content: Text(AppLocale.ride_completed_successfully.getString(context))));
 
-      // Capture details for the dialog BEFORE resetting state
+      // Capture details for the dialog BEFORE resetting state.
       // Schedule the dialog and state reset to occur after the current frame
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
@@ -1833,7 +1856,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
       });
     } catch (e) {
       if (isMounted) {
-        scaffoldMessenger.showSnackBar(SnackBar(content: Text('Failed to complete ride: ${e.toString()}')));
+        scaffoldMessenger.showSnackBar(SnackBar(content: Text('${AppLocale.failed_to_complete_ride.getString(context)}: ${e.toString()}')));
       }
     }
   }
@@ -1871,12 +1894,12 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
       builder: (BuildContext dialogContext) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
-            return AlertDialog(
-              title: Text('Rate Customer', style: theme.textTheme.titleLarge),
+            return AlertDialog( // The AlertDialog itself
+              title: Text(AppLocale.rate_customer.getString(context), style: theme.textTheme.titleLarge),
               content: SingleChildScrollView(
                 child: ListBody(
                   children: <Widget>[
-                    Text('How was your experience with the customer?', style: theme.textTheme.bodyMedium),
+                    Text(AppLocale.how_was_your_experience_with_customer.getString(context), style: theme.textTheme.bodyMedium),
                     // Display Final Fare here using a StreamBuilder
                     StreamBuilder<DocumentSnapshot>(
                       stream: FirebaseFirestore.instance.collection('rideRequests').doc(rideId).snapshots(),
@@ -1887,7 +1910,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
                           if (fare != null) {
                             return Padding(
                               padding: const EdgeInsets.symmetric(vertical: 8.0),
-                              child: Text('Final Fare: TZS ${fare.toStringAsFixed(0)}', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: theme.colorScheme.primary)),
+                              child: Text('${AppLocale.final_fare_prefix.getString(context)} TZS ${fare.toStringAsFixed(0)}', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: theme.colorScheme.primary)),
                             );
                           }
                         }
@@ -1912,7 +1935,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
                     SizedBox(height: 10),
                     TextField(
                       controller: commentController,
-                      decoration: appInputDecoration(hintText: "Add a comment (optional)"), // Use appInputDecoration
+                      decoration: appInputDecoration(hintText: AppLocale.addCommentOptional.getString(context)), // Use appInputDecoration
                       maxLines: 2,
                     ),
                   ],
@@ -1920,11 +1943,11 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
               ),
               actions: <Widget>[
                 TextButton(
-                  child: Text('Skip', style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.7))),
+                  child: Text(AppLocale.skip.getString(context), style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.7))),
                   onPressed: () => Navigator.of(dialogContext).pop(),
                 ),
                 ElevatedButton( // Changed to ElevatedButton for primary action
-                  child: Text('Submit Rating'),
+                  child: Text(AppLocale.submit_rating.getString(context)),
                   onPressed: () async {
                     if (ratingValue > 0) {
                       try {
@@ -1937,15 +1960,15 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
                         );
                         Navigator.of(dialogContext).pop();
                         if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Rating submitted!')));
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppLocale.rating_submitted.getString(context))));
                         }
                       } catch (e) {
                         if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to submit rating: $e')));
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${AppLocale.failed_to_submit_rating.getString(context)}: $e')));
                         }
                       }
                     } else {
-                      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Please select a star rating.')));
+                      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppLocale.please_select_star_rating.getString(context))));
                     }
                   },
                 ),
@@ -1957,36 +1980,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
     );
   }
 
-
-
-  Future<void> _showCancelRideConfirmationDialog() async {
-    // This method is fine as is
-    final theme = Theme.of(context);
-    return showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext dialogContext) {
-        return AlertDialog(
-          title: Text('Cancel Ride', style: theme.textTheme.titleLarge),
-          content: SingleChildScrollView(
-            child: ListBody(children: <Widget>[Text('Are you sure you want to cancel this ride?', style: theme.textTheme.bodyMedium)]),
-          ),
-          actions: <Widget>[
-            TextButton(child: Text('No', style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.7))), onPressed: () => Navigator.of(dialogContext).pop()),
-            TextButton(
-              child: Text('Yes, Cancel', style: TextStyle(color: theme.colorScheme.error)),
-              onPressed: () {
-                Navigator.of(dialogContext).pop();
-                _cancelRide();
-              },
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _cancelRide() async {
+  Future<void> _cancelRide() async {
     final details = _getCurrentRideDetails();
     final rideId = details['rideId'];
     final customerId = details['customerId'];
@@ -1997,7 +1991,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
 
 
     if (rideId == null || customerId == null) {
-      if (isMounted) scaffoldMessenger.showSnackBar(const SnackBar(content: Text('Error: Ride details missing for cancellation.')));
+      if (isMounted) scaffoldMessenger.showSnackBar(SnackBar(content: Text(AppLocale.error_ride_details_missing_for_cancellation.getString(context))));
       return;
     }
     debugPrint("DriverHome: _cancelRide called for ride ID: $rideId");
@@ -2008,7 +2002,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
       _resetActiveRideState(); // UI update handled by stream listener or this reset
     } catch (e) {
       if (isMounted) {
-        scaffoldMessenger.showSnackBar(SnackBar(content: Text('Failed to cancel ride: ${e.toString()}')));
+        scaffoldMessenger.showSnackBar(SnackBar(content: Text('${AppLocale.failed_to_cancel_ride.getString(context)}: ${e.toString()}')));
       }
     }
   }
@@ -2038,43 +2032,43 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text("Waiting for Ride...", style: theme.textTheme.titleLarge?.copyWith(color: theme.colorScheme.primary)),
+              Text(AppLocale.waiting_for_ride.getString(context), style: theme.textTheme.titleLarge?.copyWith(color: theme.colorScheme.primary)),
               verticalSpaceSmall,
               if (driverProvider.currentKijiweId != null)
                 StreamBuilder<DocumentSnapshot>(
                   stream: firestoreService.getKijiweQueueStream(driverProvider.currentKijiweId!),
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
-                      return Row(children: [Text("Kijiwe: ", style: theme.textTheme.bodyMedium), CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation(theme.colorScheme.primary))]);
+                      return Row(children: [Text("${AppLocale.kijiwe_prefix.getString(context)} ", style: theme.textTheme.bodyMedium), CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation(theme.colorScheme.primary))]);
                     }
                     if (snapshot.hasError || !snapshot.hasData || !snapshot.data!.exists) {
-                      return Text("Kijiwe: Not Found", style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.error));
+                      return Text(AppLocale.kijiwe_not_found.getString(context), style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.error));
                     }
                     final kijiweData = snapshot.data!.data() as Map<String, dynamic>;
-                    final kijiweName = kijiweData['name'] as String? ?? 'Unnamed Kijiwe';
+                    final kijiweName = kijiweData['name'] as String? ?? AppLocale.unnamed_kijiwe.getString(context);
                     final List<dynamic> queue = kijiweData['queue'] as List<dynamic>? ?? [];
                     final queuePosition = currentDriverId != null ? queue.indexOf(currentDriverId) : -1;
-                    final positionText = queuePosition != -1 ? "${queuePosition + 1}/${queue.length}" : "Not in queue";
+                    final positionText = queuePosition != -1 ? "${queuePosition + 1}/${queue.length}" : AppLocale.not_in_queue.getString(context);
 
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text("Kijiwe: $kijiweName", style: theme.textTheme.titleMedium),
-                        Text("Your Position: $positionText", style: theme.textTheme.bodyMedium),
+                        Text("${AppLocale.kijiwe_prefix.getString(context)} $kijiweName", style: theme.textTheme.titleMedium),
+                        Text("${AppLocale.your_position_prefix.getString(context)} $positionText", style: theme.textTheme.bodyMedium),
                       ],
                     );
                   },
                 )
               else
-                Text("Not associated with a Kijiwe.", style: theme.textTheme.bodyMedium),
+                Text(AppLocale.not_associated_with_kijiwe.getString(context), style: theme.textTheme.bodyMedium),
               
               verticalSpaceMedium,
-              Text("Your Stats:", style: theme.textTheme.titleMedium),
+              Text(AppLocale.your_stats.getString(context), style: theme.textTheme.titleMedium),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  _buildStatItem(theme, Icons.motorcycle, "Rides", completedRides),
-                  _buildStatItem(theme, Icons.star, "Rating", averageRating),
+                  _buildStatItem(theme, Icons.motorcycle, AppLocale.rides.getString(context), completedRides),
+                  _buildStatItem(theme, Icons.star, AppLocale.rating.getString(context), averageRating),
                   // Add more stats if needed
                 ],
               ),
@@ -2126,7 +2120,7 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
                 markerId: const gmf.MarkerId('current_kijiwe'),
                 position: gmf.LatLng(position.latitude, position.longitude),
                 icon: _kijiweIcon!,
-                infoWindow: gmf.InfoWindow(title: 'Home Kijiwe: $name'),
+                infoWindow: gmf.InfoWindow(title: '${AppLocale.home_kijiwe_prefix.getString(context)} $name'),
                 zIndex: 1,
               );
             });
@@ -2135,8 +2129,6 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
       }
     });
   }
-
-
-  }
+}
   
   

@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localization/flutter_localization.dart';
 import '../utils/ui_utils.dart'; // For spacing and styles
 import 'about_us_screen.dart';
 import 'help_and_support_screen.dart';
 import 'saved_places_screen.dart';
+import '../localization/locales.dart';
+import 'language_selection_screen.dart';
+import 'legal_and_privacy_screen.dart';
+import '../utils/account_utils.dart';
 
 class CustomerAccountScreen extends StatelessWidget {
   const CustomerAccountScreen({super.key});
@@ -12,17 +17,18 @@ class CustomerAccountScreen extends StatelessWidget {
     //final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('My Account'),
+        title: Text(AppLocale.myAccount.getString(context)),
+        centerTitle: true,
         automaticallyImplyLeading: false, // No back button if it's a main tab
       ),
       body: ListView(
         padding: const EdgeInsets.all(16.0),
         children: [
-          _buildSectionTitle(context, 'Account Management'),
-          _buildAccountOption(context, Icons.payment, 'Payment Methods', () {
+          _buildSectionTitle(context, AppLocale.accountManagement.getString(context)),
+          _buildAccountOption(context, Icons.payment, AppLocale.paymentMethods.getString(context), () {
             // TODO: Navigate to Payment Methods
           }),
-          _buildAccountOption(context, Icons.place, 'Saved Places', () {
+          _buildAccountOption(context, Icons.place, AppLocale.savedPlaces.getString(context), () {
             Navigator.push(
               context,
               MaterialPageRoute(
@@ -31,22 +37,25 @@ class CustomerAccountScreen extends StatelessWidget {
             );
           }),
           verticalSpaceMedium,
-          _buildSectionTitle(context, 'Preferences'),
-          _buildAccountOption(context, Icons.notifications, 'Notification Preferences', () {
+          _buildSectionTitle(context, AppLocale.preferences.getString(context)),
+          _buildAccountOption(context, Icons.notifications, AppLocale.notificationPreferences.getString(context), () {
             // TODO: Navigate to Notification Preferences
           }),
-          _buildAccountOption(context, Icons.language, 'Language', () {
-            // TODO: Navigate to Language Selection
+          _buildAccountOption(context, Icons.language, AppLocale.language.getString(context), () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const LanguageSelectionScreen()),
+            );
           }),
           verticalSpaceMedium,
-          _buildSectionTitle(context, 'Support & Legal'),
-          _buildAccountOption(context, Icons.help_outline, 'Help & Support',
+          _buildSectionTitle(context, AppLocale.supportLegal.getString(context)),
+          _buildAccountOption(context, Icons.support_agent, AppLocale.helpSupport.getString(context),
               () {
             Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => const HelpAndSupportScreen(userRole: 'Customer')));
           }),
-          _buildAccountOption(context, Icons.info_outline, 'About Us', () {
+          _buildAccountOption(context, Icons.info_outline, AppLocale.aboutUs.getString(context), () {
             Navigator.push(
               context,
               MaterialPageRoute(
@@ -54,13 +63,15 @@ class CustomerAccountScreen extends StatelessWidget {
               ),
             );
           }),
-          _buildAccountOption(context, Icons.gavel, 'Legal & Privacy', () {
-            // TODO: Navigate to Legal & Privacy
+          _buildAccountOption(context, Icons.gavel, AppLocale.legalPrivacy.getString(context), () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const LegalAndPrivacyScreen(userRole: 'Customer')),
+            );
           }),
           verticalSpaceLarge,
-          _buildAccountOption(context, Icons.delete_forever, 'Delete Account', () {
-            // TODO: Implement Delete Account flow
-          }, isDestructive: true),
+          _buildAccountOption(context, Icons.delete_forever, AppLocale.deleteAccount.getString(context),
+              () => AccountUtils.showDeleteAccountDialog(context), isDestructive: true),
         ],
       ),
     );

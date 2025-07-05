@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter_localization/flutter_localization.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:geocoding/geocoding.dart';
@@ -9,6 +10,7 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:provider/provider.dart';
 
+import '../localization/locales.dart';
 import '../models/user_model.dart';
 import '../services/user_service.dart';
 import '../services/firestore_service.dart';
@@ -70,7 +72,7 @@ class _SavedPlacesScreenState extends State<SavedPlacesScreen> {
       if (mounted) {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading saved places: $e')),
+          SnackBar(content: Text('${AppLocale.error_loading_saved_places.getString(context)}$e')),
         );
       }
     }
@@ -82,13 +84,13 @@ class _SavedPlacesScreenState extends State<SavedPlacesScreen> {
       await _firestoreService.updateUserSavedPlaces(_userId, _savedPlaces);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Saved places updated!')),
+          SnackBar(content: Text(AppLocale.saved_places_updated.getString(context))),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error saving places: $e')),
+          SnackBar(content: Text('${AppLocale.error_saving_places.getString(context)}$e')),
         );
       }
     }
@@ -157,7 +159,7 @@ class _SavedPlacesScreenState extends State<SavedPlacesScreen> {
         return StatefulBuilder(
           builder: (stfContext, setDialogState) {
             return AlertDialog(
-              title: Text(existingPlace == null ? 'Add New Place' : 'Edit Place'),
+              title: Text(existingPlace == null ? AppLocale.add_new_place.getString(dialogContext) : AppLocale.edit_place.getString(dialogContext)),
               content: SingleChildScrollView(
                 child: Form(
                   key: formKey,
@@ -166,15 +168,15 @@ class _SavedPlacesScreenState extends State<SavedPlacesScreen> {
                     children: [
                       TextFormField(
                         controller: labelController,
-                        decoration: appInputDecoration(labelText: 'Label', hintText: 'e.g., Home, Work'),
-                        validator: (value) => value == null || value.isEmpty ? 'Please enter a label' : null,
+                        decoration: appInputDecoration(labelText: AppLocale.label.getString(dialogContext), hintText: 'e.g., ${AppLocale.home.getString(dialogContext)}, ${AppLocale.work.getString(dialogContext)}'),
+                        validator: (value) => value == null || value.isEmpty ? AppLocale.please_enter_label.getString(dialogContext) : null,
                       ),
                       verticalSpaceMedium,
                       TextFormField(
                         controller: addressController,
                         decoration: appInputDecoration(
-                          labelText: 'Address',
-                          hintText: 'Search for an address',
+                          labelText: AppLocale.address.getString(dialogContext),
+                          hintText: AppLocale.search_for_address.getString(dialogContext),
                           suffixIcon: IconButton(
                             icon: const Icon(Icons.map_outlined),
                             onPressed: () async {
@@ -221,7 +223,7 @@ class _SavedPlacesScreenState extends State<SavedPlacesScreen> {
                             }
                           });
                         },
-                        validator: (value) => value == null || value.isEmpty ? 'Please enter an address' : null,
+                        validator: (value) => value == null || value.isEmpty ? AppLocale.please_enter_address.getString(dialogContext) : null,
                       ),
                       if (suggestions.isNotEmpty)
                         SizedBox(
@@ -261,7 +263,7 @@ class _SavedPlacesScreenState extends State<SavedPlacesScreen> {
                     debounce?.cancel();
                     Navigator.pop(dialogContext);
                   },
-                  child: const Text('Cancel'),
+                  child: Text(AppLocale.cancel.getString(dialogContext)),
                 ),
                 ElevatedButton(
                   onPressed: isDialogLoading ? null : () async {
@@ -290,13 +292,13 @@ class _SavedPlacesScreenState extends State<SavedPlacesScreen> {
                         Navigator.pop(dialogContext, newPlace);
                       } else {
                         ScaffoldMessenger.of(stfContext).showSnackBar(
-                          const SnackBar(content: Text('Could not find location for the address.')),
+                          SnackBar(content: Text(AppLocale.could_not_find_location.getString(stfContext))),
                         );
                         setDialogState(() => isDialogLoading = false);
                       }
                     }
                   },
-                  child: const Text('Save'),
+                  child: Text(AppLocale.save.getString(dialogContext)),
                 ),
               ],
             );
@@ -340,7 +342,7 @@ class _SavedPlacesScreenState extends State<SavedPlacesScreen> {
     final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Saved Places'),
+        title: Text(AppLocale.savedPlaces.getString(context)),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -352,12 +354,12 @@ class _SavedPlacesScreenState extends State<SavedPlacesScreen> {
                       Icon(Icons.place_outlined, size: 80, color: theme.hintColor),
                       verticalSpaceMedium,
                       Text(
-                        'No saved places yet.',
+                        AppLocale.no_saved_places_yet.getString(context),
                         style: theme.textTheme.titleMedium?.copyWith(color: theme.hintColor),
                       ),
                       verticalSpaceSmall,
-                      const Text(
-                        'Tap the + button to add a new place.',
+                      Text(
+                        AppLocale.tap_plus_to_add_place.getString(context),
                         textAlign: TextAlign.center,
                       ),
                     ],

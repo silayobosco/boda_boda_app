@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_localization/flutter_localization.dart';
+
 import '../models/user_model.dart';
 import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 import '../utils/ui_utils.dart'; // For spacing and styling
 import 'chat_screen.dart';
+import '../localization/locales.dart';
 
 class KijiweProfileScreen extends StatefulWidget {
   final String kijiweId;
@@ -18,26 +21,42 @@ class KijiweProfileScreen extends StatefulWidget {
 }
 
 class _KijiweProfileScreenState extends State<KijiweProfileScreen> {
-  late Future<DocumentSnapshot<Map<String, dynamic>>> _kijiweFuture;
+  String? _currentUserId;
+  String? _currentUserRole;
 
   @override
   void initState() {
     super.initState();
-    _kijiweFuture = FirebaseFirestore.instance
-        .collection('kijiwe')
-        .doc(widget.kijiweId)
-        .get();
+    _loadCurrentUser();
+  }
+
+  Future<void> _loadCurrentUser() async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final firestoreService = Provider.of<FirestoreService>(context, listen: false);
+    final userId = authService.currentUser?.uid;
+    if (userId != null) {
+      final role = await firestoreService.getUserRole(userId);
+      if (mounted) {
+        setState(() {
+          _currentUserId = userId;
+          _currentUserRole = role;
+        });
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final firestoreService = Provider.of<FirestoreService>(context, listen: false);
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Kijiwe Profile'),
+        title: Text(AppLocale.kijiweProfile.getString(context)),
+        centerTitle: true,
       ),
-      body: FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-        future: _kijiweFuture,
+      body: StreamBuilder<DocumentSnapshot>(
+        stream: firestoreService.getKijiweQueueStream(widget.kijiweId),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -49,19 +68,22 @@ class _KijiweProfileScreenState extends State<KijiweProfileScreen> {
             return const Center(child: Text('Kijiwe not found.'));
           }
 
-          final kijiweData = snapshot.data!.data()!;
+          final kijiweData = snapshot.data!.data() as Map<String, dynamic>;
           final kijiweName = kijiweData['name'] as String? ?? 'Unnamed Kijiwe';
-          final members = kijiweData['permanentMembers'] as List<dynamic>? ?? [];
-          final queue = kijiweData['queue'] as List<dynamic>? ?? [];
+          final List<String> queue = List<String>.from(kijiweData['queue'] ?? []);
+          final List<String> permanentMembers = List<String>.from(kijiweData['permanentMembers'] ?? []);
           final position = kijiweData['position']?['geopoint'] as GeoPoint?;
           final adminId = kijiweData['adminId'] as String?;
+
+          // Separate online members (in queue) from offline permanent members
+          final otherMembers = permanentMembers.where((id) => !queue.contains(id)).toList();
 
           return ListView(
             padding: const EdgeInsets.all(16.0),
             children: [
               Text(
                 kijiweName,
-                style: theme.textTheme.headlineMedium,
+                style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
                 textAlign: TextAlign.center,
               ),
               verticalSpaceMedium,
@@ -84,38 +106,33 @@ class _KijiweProfileScreenState extends State<KijiweProfileScreen> {
                   ),
                 ),
               verticalSpaceLarge,
-              Card(
-                child: ListTile(
-                  leading: const Icon(Icons.group_outlined),
-                  title: const Text('Permanent Members'),
-                  trailing: Text(
-                    '${members.length}',
-                    style: theme.textTheme.titleMedium,
-                  ),
-                ),
+              ExpansionTile(
+                title: Text(AppLocale.kijiweQueue.getString(context), style: theme.textTheme.titleLarge),
+                leading: const Icon(Icons.motorcycle_outlined),
+                initiallyExpanded: true,
+                children: queue.isEmpty
+                    ? [const ListTile(title: Text('No drivers currently online in the queue.'))]
+                    : queue.map((memberId) => _buildMemberTile(memberId, memberId == adminId, true)).toList(),
               ),
-              Card(
-                child: ListTile(
-                  leading: const Icon(Icons.motorcycle_outlined),
-                  title: const Text('Drivers Online'),
-                  trailing: Text(
-                    '${queue.length}',
-                    style: theme.textTheme.titleMedium,
-                  ),
-                ),
+              ExpansionTile(
+                title: Text(AppLocale.otherMembers.getString(context), style: theme.textTheme.titleLarge),
+                leading: const Icon(Icons.group_outlined),
+                children: otherMembers.isEmpty
+                    ? [const ListTile(title: Text('No other permanent members.'))]
+                    : otherMembers.map((memberId) => _buildMemberTile(memberId, memberId == adminId, false)).toList(),
               ),
-              if (adminId != null) ...[
-                verticalSpaceLarge,
-                _buildAdminProfileSection(adminId, theme),
-              ],
               verticalSpaceLarge,
-              ElevatedButton.icon(
-                onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('This feature is coming soon!')),
+              if (_currentUserRole == 'Customer')
+                ElevatedButton.icon(
+                  onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('This feature is coming soon!')),
+                  ),
+                  icon: const Icon(Icons.add_task_outlined),
+                  label: const Text('Request Ride From This Kijiwe'),
+                  style: theme.elevatedButtonTheme.style?.copyWith(
+                    padding: MaterialStateProperty.all(const EdgeInsets.symmetric(vertical: 16)),
+                  ),
                 ),
-                icon: const Icon(Icons.add_task_outlined),
-                label: const Text('Request Ride From This Kijiwe'),
-              ),
             ],
           );
         },
@@ -123,70 +140,86 @@ class _KijiweProfileScreenState extends State<KijiweProfileScreen> {
     );
   }
 
-  Widget _buildAdminProfileSection(String adminId, ThemeData theme) {
-    final currentUserId =
-        Provider.of<AuthService>(context, listen: false).currentUser?.uid;
+  String _calculateAgeGroup(DateTime? dob) {
+    if (dob == null) return 'Unknown';
+    final now = DateTime.now();
+    int age = now.year - dob.year;
+    if (now.month < dob.month || (now.month == dob.month && now.day < dob.day)) {
+      age--;
+    }
+    if (age < 18) return 'Unknown';
+    return '${(age ~/ 10) * 10}s';
+  }
+
+  Widget _buildMemberTile(String memberId, bool isAdmin, bool isOnline) {
+    final firestoreService = Provider.of<FirestoreService>(context, listen: false);
+    final bool canContact = _currentUserRole == 'Driver' && _currentUserId != memberId;
 
     return FutureBuilder<UserModel?>(
-      future: FirestoreService().getUser(adminId),
-      builder: (context, adminSnapshot) {
-        if (!adminSnapshot.hasData) {
-          return const Center(child: Text("Loading leader info..."));
+      future: firestoreService.getUser(memberId),
+      builder: (context, userSnapshot) {
+        if (userSnapshot.connectionState == ConnectionState.waiting) {
+          return const ListTile(title: Text('Loading member...'), leading: CircleAvatar(child: CircularProgressIndicator(strokeWidth: 2)));
         }
-        if (adminSnapshot.data == null) {
-          return const SizedBox.shrink(); // Don't show if admin profile not found
+        if (!userSnapshot.hasData || userSnapshot.data == null) {
+          return ListTile(title: Text('Unknown Member ($memberId)'));
         }
-
-        final adminProfile = adminSnapshot.data!;
-
-        // Don't show contact button if the user is the admin
-        final bool isCurrentUserTheAdmin = currentUserId == adminId;
+        if (userSnapshot.hasError) {
+          return ListTile(title: Text('Error loading member ($memberId)'));
+        }
+        final user = userSnapshot.data!;
+        final ageGroup = _calculateAgeGroup(user.dob);
+        final licensePlate = user.driverDetails?['licenseNumber'] ?? 'N/A';
 
         return Card(
-          elevation: 2,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
+          margin: const EdgeInsets.symmetric(vertical: 6.0),
+          child: ListTile(
+            leading: CircleAvatar(
+              backgroundImage: user.profileImageUrl != null ? NetworkImage(user.profileImageUrl!) : null,
+              child: user.profileImageUrl == null ? const Icon(Icons.person) : null,
+            ),
+            title: Text(user.name ?? 'No Name'),
+            subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Kijiwe Leader', style: theme.textTheme.titleLarge),
-                verticalSpaceMedium,
-                ListTile(
-                  leading: CircleAvatar(
-                    backgroundImage: adminProfile.profileImageUrl != null
-                        ? NetworkImage(adminProfile.profileImageUrl!)
-                        : null,
-                    child: adminProfile.profileImageUrl == null
-                        ? const Icon(Icons.person)
-                        : null,
+                Text(user.driverDetails?['vehicleType'] ?? 'No vehicle info'),
+                if (_currentUserRole == 'Driver') ...[
+                  Text('${user.gender ?? 'N/A'} • $ageGroup'),
+                  Text('${AppLocale.licensePlate.getString(context)}: $licensePlate'),
+                ],
+              ],
+            ),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (isAdmin)
+                  Chip(
+                    avatar: Icon(Icons.shield, size: 16, color: Theme.of(context).colorScheme.onSecondary),
+                    label: Text(AppLocale.kijiweAdmin.getString(context)),
+                    backgroundColor: Theme.of(context).colorScheme.secondary,
+                    labelStyle: TextStyle(color: Theme.of(context).colorScheme.onSecondary),
                   ),
-                  title: Text(adminProfile.name ?? 'Kijiwe Leader'),
-                  subtitle: const Text('Admin'),
-                ),
-                if (!isCurrentUserTheAdmin) ...[
-                  verticalSpaceMedium,
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: () {
-                        List<String> ids = [currentUserId!, adminProfile.uid!];
-                        ids.sort();
-                        final directChatId = ids.join('_');
-                        Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (context) => ChatScreen.direct(
-                                    directChatId: directChatId,
-                                    recipientId: adminProfile.uid!,
-                                    recipientName: adminProfile.name ?? 'Kijiwe Leader')));
-                      },
-                      icon: const Icon(Icons.chat_bubble_outline),
-                      label: const Text('Contact Leader'),
-                    ),
+                if (canContact)
+                  IconButton(
+                    icon: const Icon(Icons.chat_bubble_outline),
+                    tooltip: AppLocale.chat.getString(context),
+                    onPressed: () {
+                      if (_currentUserId == null) return;
+                      List<String> ids = [_currentUserId!, memberId];
+                      ids.sort();
+                      final directChatId = ids.join('_');
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ChatScreen.direct(
+                            directChatId: directChatId,
+                            recipientId: memberId,
+                            recipientName: user.name ?? 'Driver',
+                          ),
+                        ),
+                      );
+                    },
                   ),
-                ]
               ],
             ),
           ),

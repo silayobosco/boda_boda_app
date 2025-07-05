@@ -21,6 +21,8 @@ import 'chat_screen.dart';
 import 'kijiwe_profile_screen.dart'; // Import KijiweProfileScreen
 import 'scheduled_rides_list_widget.dart'; // Import ScheduledRidesListWidget
 import 'rides_screen.dart'; // Import RidesScreen for ride history
+import 'package:flutter_localization/flutter_localization.dart';
+import '../localization/locales.dart';
 
 class CustomerHome extends StatefulWidget {
   const CustomerHome({super.key});
@@ -350,9 +352,9 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
               newMarkers.add(
                 Marker(
                   markerId: MarkerId('kijiwe_${doc.id}'),
-                  position: kijiweLocation,
-                  icon: _kijiweIcon!,
-                  infoWindow: InfoWindow(title: kijiweName, snippet: 'Tap for options'),
+                  position: kijiweLocation, // This is correct
+                  icon: _kijiweIcon!, // This is correct
+                  infoWindow: InfoWindow(title: kijiweName, snippet: AppLocale.infoWindowKijiweSnippet.getString(context)),
                   onTap: () => _showKijiweOptionsDialog(kijiweName, kijiweLocation, kijiweId),
                   alpha: 0.8,
                   zIndex: 1,
@@ -376,7 +378,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
         print("=======================================================================");
         if (mounted && error.toString().contains("type 'Null' is not a subtype of type 'GeoPoint'")) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Error loading nearby hubs. Some location data may be invalid.')),
+            SnackBar(content: Text(AppLocale.errorLoadingHubs.getString(context))),
           );
         }
         print("=======================================================================");
@@ -393,10 +395,10 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
       builder: (BuildContext context) {
         return AlertDialog(
           title: Text(kijiweName),
-          content: const Text('What would you like to do?'),
+          content: Text(AppLocale.kijiweOptions.getString(context)),
           actions: <Widget>[
             TextButton(
-              child: const Text('View Profile'),
+              child: Text(AppLocale.viewKijiweProfile.getString(context)),
               onPressed: () {
                 Navigator.of(context).pop(); // Close the dialog
                 Navigator.push(
@@ -408,14 +410,14 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
               },
             ),
             TextButton(
-              child: const Text('Set as Pickup'),
+              child: Text(AppLocale.setAsPickup.getString(context)),
               onPressed: () {
                 Navigator.of(context).pop(); // Close the dialog
                 _setKijiweAsLocation(kijiweName, kijiweLocation, isPickup: true);
               },
             ),
             TextButton(
-              child: const Text('Set as Destination'),
+              child: Text(AppLocale.setAsDropoff.getString(context)),
               onPressed: () {
                 Navigator.of(context).pop(); // Close the dialog
                 _setKijiweAsLocation(kijiweName, kijiweLocation, isPickup: false);
@@ -686,14 +688,16 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
     }
     
     if (addressParts.isEmpty) {
-      return 'Selected location';
+      return AppLocale.selectedLocation.getString(context);
     }
     
     return addressParts.join(', ');
   }
 
   String _formatFallbackAddress(ll.LatLng location) {
-    return 'Location (${location.latitude.toStringAsFixed(4)}, ${location.longitude.toStringAsFixed(4)})';
+    return AppLocale.locationWithCoords.getString(context)
+        .replaceFirst('{lat}', location.latitude.toStringAsFixed(4))
+        .replaceFirst('{lng}', location.longitude.toStringAsFixed(4));
   }
 
   void _updateGooglePickupMarker(LatLng location) {
@@ -703,7 +707,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
         Marker(
           markerId: const MarkerId('pickup'),
           position: location,
-          infoWindow: const InfoWindow(title: 'Pickup'),
+          infoWindow: InfoWindow(title: AppLocale.pickup.getString(context)),
           icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
         ),
       );
@@ -717,8 +721,8 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
         _markers.add(
           Marker(
       markerId: const MarkerId('dropoff'),
-            position: location,
-            infoWindow: const InfoWindow(title: 'Drop-off'),
+            position: location, // This is correct
+            infoWindow: InfoWindow(title: AppLocale.dropoff.getString(context)),
       icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
           ),
         );
@@ -732,8 +736,8 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
       _markers.add(
         Marker(
       markerId: MarkerId('stop_$index'),
-          position: location,
-          infoWindow: InfoWindow(title: 'Stop ${index + 1}'),
+          position: location, // This is correct
+          infoWindow: InfoWindow(title: AppLocale.stopWithNumber.getString(context).replaceFirst('{number}', (index + 1).toString())),
       icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
       zIndex: index.toDouble(),
         ),
@@ -847,7 +851,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
         // Inform the user about the failure
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to get route details: $e. Please check your internet connection.')),
+            SnackBar(content: Text(AppLocale.failedToGetRouteDetails.getString(context))),
           );
         }
       });
@@ -1236,7 +1240,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
       // Check mounted BEFORE using context
       if (mounted) { 
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please select both pickup and drop-off locations')),
+          SnackBar(content: Text(AppLocale.selectPickupAndDropoff.getString(context))),
         );
         // setState(() => _isFindingDriver = false); // No longer needed here
       }
@@ -1246,7 +1250,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
     if (!mounted || currentUserId == null) { // Add !mounted check
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('User not authenticated. Cannot create ride request.')),
+           SnackBar(content: Text(AppLocale.userNotAuthenticated.getString(context))),
         );
         // if (mounted) setState(() => _isFindingDriver = false); // No longer needed here
       }
@@ -1290,9 +1294,9 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
     } catch (e) {
       // After await (in catch), check if the widget is still mounted.
       if (mounted) { 
-        // Use the initially captured context for the SnackBar.
-        ScaffoldMessenger.of(context).showSnackBar( // Using the current context here, assuming it's still valid if mounted.
-          SnackBar(content: Text('Failed to create ride request: $e')),
+        // Use the current context for the SnackBar, assuming it's still valid if mounted.
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${AppLocale.failedToCreateRideRequest.getString(context)}: $e')),
         );
         // If creation fails, reset both
         setState(() {
@@ -1307,19 +1311,19 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
 
     return showDialog(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Add Note to Driver'),
+      builder: (dialogContext) => AlertDialog( // The AlertDialog itself
+        title: Text(AppLocale.addNote.getString(context)),
         content: TextField(
           controller: noteController,
-          decoration: appInputDecoration(hintText: 'e.g., I am wearing a red shirt'),
+          decoration: appInputDecoration(hintText: AppLocale.addNoteHint.getString(context)),
           maxLines: 3,
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: Text(AppLocale.cancel.getString(context))),
           ElevatedButton(onPressed: () async {
             await rideRequestProvider.updateCustomerNote(rideId, noteController.text.trim());
             Navigator.pop(dialogContext);
-          }, child: const Text('Save Note')),
+          }, child:  Text(AppLocale.save.getString(context))),
         ],
       ),
     );
@@ -1333,7 +1337,9 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
     String dropOffAddress,
     List<Map<String, dynamic>> stops 
     ) async {
-  final TextEditingController titleController = TextEditingController(text: "Scheduled Ride to ${dropOffAddress.isNotEmpty ? dropOffAddress : 'Destination'}");
+  final TextEditingController titleController = TextEditingController(
+    text: AppLocale.scheduledRideTo.getString(context).replaceFirst('{destination}', dropOffAddress.isNotEmpty ? dropOffAddress : AppLocale.destination.getString(context))
+  );
   DateTime? selectedDate = DateTime.now(); // Default to today
   TimeOfDay? selectedTime = TimeOfDay.fromDateTime(DateTime.now().add(const Duration(hours: 1))); // Default to one hour from now
   // Recurrence state variables
@@ -1350,8 +1356,8 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
       builder: (dialogContext) { // Renamed context to avoid conflict
         return StatefulBuilder( // Use StatefulBuilder to update dialog content
           builder: (stfContext, stfSetState) {
-            return AlertDialog(
-              title: const Text('Schedule New Ride'),
+            return AlertDialog( // The AlertDialog itself
+              title: Text(AppLocale.scheduleNewRide.getString(context)),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1359,19 +1365,19 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                   TextField(
                     controller: titleController,
                     decoration: appInputDecoration(
-                      labelText: 'Title',
-                      hintText: 'Enter a title for your ride',
+                      labelText: AppLocale.title.getString(context),
+                      hintText: AppLocale.rideTitleHint.getString(context),
                     ),
                   ),
                   verticalSpaceMedium,
-                  Text("Select Date & Time:", style: theme.textTheme.titleSmall),
+                  Text(AppLocale.choseDateAndTime.getString(context), style: theme.textTheme.titleSmall),
                   verticalSpaceSmall,
                   Row(
                     children: [
                       Expanded(
                         child: ElevatedButton.icon(
-                          icon: const Icon(Icons.calendar_today),
-                          label: Text(selectedDate != null ? "${selectedDate!.toLocal()}".split(' ')[0] : 'Pick Date'),
+                          icon: const Icon(Icons.calendar_today), // The Icon
+                          label: Text(selectedDate != null ? "${selectedDate!.toLocal()}".split(' ')[0] : AppLocale.pickDate.getString(context)),
                           onPressed: () async {
                             final now = DateTime.now();
                             final DateTime? pickedDate = await showDatePicker(
@@ -1403,8 +1409,8 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                       horizontalSpaceSmall,
                       Expanded(
                         child: ElevatedButton.icon(
-                          icon: const Icon(Icons.access_time),
-                          label: Text(selectedTime != null ? selectedTime!.format(stfContext) : 'Pick Time'),
+                          icon: const Icon(Icons.access_time), // The Icon
+                          label: Text(selectedTime != null ? selectedTime!.format(stfContext) : AppLocale.pickTime.getString(context)),
                           onPressed: () async {
                             final now = DateTime.now();
                             TimeOfDay initialTime = selectedTime ?? TimeOfDay.fromDateTime(now.add(Duration(minutes: _minSchedulingMinutesAhead + 5))); // Default with a small buffer
@@ -1433,7 +1439,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text("Repeat this ride?", style: theme.textTheme.titleSmall),
+                      Text(AppLocale.repeatThisRide.getString(context), style: theme.textTheme.titleSmall),
                       Switch(
                         value: _isRecurring,
                         onChanged: (value) {
@@ -1456,8 +1462,8 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                     verticalSpaceSmall,
                     DropdownButtonFormField<String>(
                       value: _recurrenceType,
-                      decoration: appInputDecoration(labelText: 'Frequency'),
-                      items: ['Daily', 'Weekly']
+                      decoration: appInputDecoration(labelText: AppLocale.frequency.getString(context)),
+                      items: [AppLocale.daily.getString(context), AppLocale.weekly.getString(context)]
                           .map((label) => DropdownMenuItem(
                                 value: label,
                                 child: Text(label),
@@ -1465,16 +1471,16 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                           .toList(),
                       onChanged: (value) {
                         stfSetState(() {
-                          _recurrenceType = value!;
-                          if (_recurrenceType != 'Weekly') {
+                          _recurrenceType = value ?? 'Daily';
+                          if (_recurrenceType != AppLocale.weekly.getString(context)) {
                             _selectedRecurrenceDays = List.filled(7, false);
                           }
                         });
                       },
                     ),
-                    if (_recurrenceType == 'Weekly') ...[
+                    if (_recurrenceType == AppLocale.weekly.getString(context)) ...[
                       verticalSpaceSmall,
-                      Text("Repeat on:", style: theme.textTheme.bodyMedium),
+                      Text(AppLocale.repeatOn.getString(context), style: theme.textTheme.bodyMedium),
                       Wrap( // Using Wrap for days of the week
                         spacing: 6.0,
                         runSpacing: 0.0,
@@ -1493,8 +1499,12 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                     ],
                     verticalSpaceSmall,
                     ElevatedButton.icon(
-                      icon: const Icon(Icons.calendar_today),
-                      label: Text(_recurrenceEndDate != null ? "Repeat until: ${_recurrenceEndDate!.toLocal()}".split(' ')[0] : 'Set End Date'),
+                      icon: const Icon(Icons.calendar_today), // The Icon
+                      label: Text(
+                        _recurrenceEndDate != null
+                          ? AppLocale.repeatUntil.getString(context).replaceFirst('{date}', _recurrenceEndDate!.toLocal().toString().split(' ')[0])
+                          : AppLocale.setEndDate.getString(context)
+                      ),
                       onPressed: () async {
                         final DateTime? pickedEndDate = await showDatePicker(
                           context: stfContext,
@@ -1511,7 +1521,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(dialogContext).pop(false),
-                  child: const Text('Cancel'),
+                  child: Text(AppLocale.cancel.getString(context)),
                 ),
                 ElevatedButton(
                   onPressed: () {
@@ -1523,33 +1533,33 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                       final DateTime now = DateTime.now();
                       final DateTime minValidDateTime = now.add(Duration(minutes: _minSchedulingMinutesAhead));
 
-                      if (_isRecurring && _recurrenceType == 'Weekly' && !_selectedRecurrenceDays.contains(true)) {
+                      if (_isRecurring && _recurrenceType == AppLocale.weekly.getString(context) && !_selectedRecurrenceDays.contains(true)) {
                         ScaffoldMessenger.of(stfContext).showSnackBar(
-                          const SnackBar(content: Text('Please select at least one day for weekly recurrence.')),
+                          SnackBar(content: Text(AppLocale.pleaseSelectAtleastOneDayForWeeklyRecurrence.getString(context))),
                         );
                         return;
                       }
                       if (_isRecurring && _recurrenceEndDate == null) {
                         ScaffoldMessenger.of(stfContext).showSnackBar(
-                          const SnackBar(content: Text('Please set an end date for the recurring ride.')),
+                          SnackBar(content: Text(AppLocale.pleaseSetAnEndDateForTheRecurringRide.getString(context))),
                         );
                         return;
                       }
 
                       if (scheduledDateTime.isBefore(minValidDateTime)) {
                         ScaffoldMessenger.of(stfContext).showSnackBar(
-                          SnackBar(content: Text('Scheduled time must be at least $_minSchedulingMinutesAhead minutes from now.')),
+                          SnackBar(content: Text(AppLocale.scheduledTimeMustBeAtleast.getString(context).replaceFirst('{minutes}', _minSchedulingMinutesAhead.toString()))),
                         );
                         return;
                       }
                       Navigator.of(dialogContext).pop(true); // Return true for save
                     } else {
                       ScaffoldMessenger.of(stfContext).showSnackBar(
-                        const SnackBar(content: Text('Please provide a title, date, and time')),
+                         SnackBar(content: Text(AppLocale.pleaseProvideATitleDateAndTime.getString(context))),
                       );
                     }
                   },
-                  child: const Text('Save'),
+                  child: Text(AppLocale.save.getString(context)),
                 ),
               ],
             );
@@ -1569,7 +1579,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
     final String? customerId = rideRequestProvider.authService.currentUser?.uid;
 
     if (customerId == null) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error: User not authenticated.')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppLocale.userNotAuthenticated.getString(context))));
       return;
     }
     try {
@@ -1585,7 +1595,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
         'status': 'scheduled',
           'isRecurring': _isRecurring,
           'recurrenceType': _isRecurring ? _recurrenceType : null,
-          'recurrenceDaysOfWeek': _isRecurring && _recurrenceType == 'Weekly'
+          'recurrenceDaysOfWeek': _isRecurring && _recurrenceType == AppLocale.weekly.getString(context)
               ? _selectedRecurrenceDays.asMap().entries.where((e) => e.value).map((e) => _dayAbbreviations[e.key]).toList()
               : null,
           'recurrenceEndDate': _isRecurring && _recurrenceEndDate != null ? Timestamp.fromDate(_recurrenceEndDate!) : null,
@@ -1600,7 +1610,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Ride scheduled successfully!')),
+          SnackBar(content: Text(AppLocale.rideScheduledSuccessfully.getString(context))),
         );
         debugPrint("CustomerHome: Attempting to show post-scheduling dialog."); // <--- ADD THIS
         _showPostSchedulingDialog(); // Show the new dialog
@@ -1608,7 +1618,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to schedule ride: $e')),
+          SnackBar(content: Text('${AppLocale.failedToScheduleRide.getString(context)}: $e')),
         );
       }
     }
@@ -1620,18 +1630,18 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
       barrierDismissible: false, // User must choose an option
       builder: (BuildContext dialogContext) {
         return AlertDialog(
-          title: const Text('Ride Scheduled!'),
-          content: const Text('What would you like to do next?'),
+          title: Text(AppLocale.rideScheduled.getString(context)),
+          content: Text(AppLocale.whatWouldYouLikeToDoNext.getString(context)),
           actions: <Widget>[
             TextButton(
-              child: const Text('Plan Another Ride'),
+              child: Text(AppLocale.planAnotherRide.getString(context)),
               onPressed: () {
                 Navigator.of(dialogContext).pop();
                 _resetUIForNewTrip();
               },
             ),
             TextButton(
-              child: const Text('View Scheduled Rides'),
+              child: Text(AppLocale.viewScheduledRides.getString(context)),
               onPressed: () {
                 Navigator.of(dialogContext).pop();
                 Navigator.push(
@@ -1642,7 +1652,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
               },
             ),
             TextButton(
-              child: const Text('Continue Editing'),
+              child: Text(AppLocale.continueEditing.getString(context)),
               onPressed: () {
                 Navigator.of(dialogContext).pop();
                 // Do nothing, user stays on the current screen with the route
@@ -1765,13 +1775,13 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
       body: Stack(
         children: [
           if (locationProvider.currentLocation == null)
-            const Center(
+            Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   CircularProgressIndicator(),
                   verticalSpaceMedium,
-                  Text('Fetching your location...'),
+                  Text(AppLocale.fetchingLocation.getString(context)),
                 ],
               ),
             )
@@ -1848,18 +1858,19 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
   String _getRideEndMessage(String? status) {
     switch (status) {
       case 'completed':
-        return 'Ride completed!';
+        return AppLocale.rideCompleted.getString(context);
       case 'cancelled_by_customer':
-        return 'Ride cancelled by you.';
+        return AppLocale.rideCancelledByYou.getString(context);
       case 'cancelled_by_driver':
-        return 'Ride cancelled by driver.';
+        return AppLocale.rideCancelledByDriver.getString(context);
       case 'no_drivers_available':
-        return 'No drivers available at the moment. Please try again later.';
+        return AppLocale.noDriverAvailable.getString(context);
       case 'matching_error_missing_pickup':
+        return AppLocale.matchingErrorMissingPickup.getString(context);
       case 'matching_error_kijiwe_fetch':
-        return 'There was an error matching your ride. Please check your pickup or try again.';
+        return AppLocale.matchingErrorKijiweFetch.getString(context);
       default:
-        return 'Ride has ended.';
+        return AppLocale.rideHasEnded.getString(context);
     }
   }
 
@@ -1873,7 +1884,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
     if (targetLocation == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Current location not available.')),
+         SnackBar(content: Text(AppLocale.currentLocationNotAvailable.getString(context))),
         );
       }
       return;
@@ -1994,28 +2005,27 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                             child: Row(
                               children: [
                                 Text(
-                                  'Your route',
+                                  AppLocale.yourRoute.getString(context),
                                   style: Theme.of(context).textTheme.titleLarge,
-                                ),
-                                const Spacer(),
+                                ),                                const Spacer(),
                                 // Swap button (only show if both pickup and destination are set)
                                 if (_pickupLocation != null && _dropOffLocation != null)
-                                  IconButton(
-                                    icon: const Icon(Icons.swap_vert, size: 24),
-                                    tooltip: 'Swap locations',
+                                  IconButton( // The IconButton
+                                    icon: const Icon(Icons.swap_vert, size: 24), // The Icon
+                                    tooltip: AppLocale.swapLocations.getString(context),
                                     onPressed: _swapLocations,
                                   ),
                                 // Add Stop button (only show if pickup and destination are set)
                                 if (_pickupLocation != null && _dropOffLocation != null) 
                                   IconButton(
                                     icon: const Icon(Icons.add_location_alt_outlined),
-                                    tooltip: 'Add Stop',
+                                    tooltip: AppLocale.addStop.getString(context),
                                     onPressed: _addStop,
                                   ),
                                 // Expand/Collapse toggle
                                 IconButton(
-                                  icon: Icon(_isSheetExpanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_up),
-                                  tooltip: _isSheetExpanded ? 'Collapse Sheet' : 'Expand Sheet',
+                                  icon: Icon(_isSheetExpanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_up), // The Icon
+                                  tooltip: _isSheetExpanded ? AppLocale.collapseSheet.getString(context) : AppLocale.expandSheet.getString(context),
                                   onPressed: () {
                                     if (_isSheetExpanded) {
                                       _collapseSheet();
@@ -2038,8 +2048,8 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                                 Expanded( // Allow text to take available space
                                   child: Text(
                                     _selectedRouteDistance != null && _selectedRouteDuration != null
-                                        ? '$_selectedRouteDuration · $_selectedRouteDistance'
-                                        : 'Calculating route...', // Placeholder if distance/duration not ready
+                                        ? '$_selectedRouteDuration · $_selectedRouteDistance' // This is correct
+                                        : AppLocale.calculatingRoute.getString(context), // Placeholder if distance/duration not ready
                                     style: Theme.of(context).textTheme.bodyMedium,
                                     overflow: TextOverflow.ellipsis, // Handle long text
                                   ),
@@ -2052,12 +2062,12 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                                   debugPrint("CustomerHome: DraggableSheet Builder - RENDERING FARE. CurrentFare: $currentFare, Distance: $_selectedRouteDistance, Duration: $_selectedRouteDuration");
                                   if (currentFare != null && _selectedRouteDistance != null && _selectedRouteDuration != null) {
                                     return Text(
-                                      'Fare: TZS ${currentFare == currentFare.roundToDouble() ? currentFare.toStringAsFixed(0) : currentFare.toStringAsFixed(2)}',
+                                      '${AppLocale.fare.getString(context)}: TZS ${currentFare == currentFare.roundToDouble() ? currentFare.toStringAsFixed(0) : currentFare.toStringAsFixed(2)}',
                                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold),
                                     );
                                   } else if (_selectedRouteDistance != null && _selectedRouteDuration != null) {
                                       return Text(
-                                        'Fare: Calculating...',
+                                        '${AppLocale.fare.getString(context)}: ${AppLocale.calculatingFare.getString(context)}',
                                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontStyle: FontStyle.italic, color: Theme.of(context).hintColor),
                                       );
                                   }
@@ -2077,9 +2087,9 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                                   Expanded(
                                     child: _buildLocationField(
                                       key: const ValueKey('pickup_field'),
-                                      controller: _pickupController,
-                                      labelText: 'Pickup Location',
-                                      hintText: 'Enter pickup location',
+                                      controller: _pickupController, // This is correct
+                                      labelText: AppLocale.pickup.getString(context),
+                                      hintText: AppLocale.enterPickupLocation.getString(context),
                                       iconData: Icons.my_location,
                                       iconColor: successColor,
                                       isEditing: _editingPickup,
@@ -2087,13 +2097,13 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                                       onTapWhenNotEditing: () => _startEditing('pickup'),
                                       onChanged: (value) async { if (value.isNotEmpty) { final suggestions = await _getGooglePlacesSuggestions(value); if (mounted) setState(() => _pickupSuggestions = suggestions); } else { if (mounted) setState(() => _pickupSuggestions = []); } },
                                       onClear: _clearPickup,
-                                      onMapIconTap: () { setState(() { _selectingPickup = true; _editingPickup = true; }); _collapseSheet(); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tap on map to select pickup location'))); },
+                                      onMapIconTap: () { setState(() { _selectingPickup = true; _editingPickup = true; }); _collapseSheet(); ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppLocale.tapToSelectPickup.getString(context)))); },
                                     ),
                                   ),
                                 // X button to clear pickup
                                 IconButton(
-                                  icon: const Icon(Icons.clear),
-                                  tooltip: 'Clear Pickup',
+                                  icon: const Icon(Icons.clear), // The Icon
+                                  tooltip: AppLocale.clearPickup.getString(context),
                                   onPressed: () {
                                       _clearPickup();
                                       setState(() {
@@ -2101,7 +2111,8 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                                         _pickupFocusNode.requestFocus();
                                       });
                                     },
-                                  ),                                ],
+                                  ),                                
+                                ],
                               ),
                             ),
                           if (_editingPickup) // Suggestions list for pickup
@@ -2134,7 +2145,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                                   child: _buildLocationField(
                                     key: const ValueKey('destination_field'),
                                     controller: _destinationController,
-                                    labelText: 'Destination',
+                                    labelText: AppLocale.destination.getString(context),
                                     legDistance: () { // Calculate leg distance for destination
                                       if (_allFetchedRoutes.isNotEmpty &&
                                           _selectedRouteIndex < _allFetchedRoutes.length &&
@@ -2165,7 +2176,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                                       }
                                       return null;
                                     }(),
-                                    hintText: 'Where to?',
+                                    hintText: AppLocale.enterDestination.getString(context),
                                     iconData: Icons.flag_outlined,
                                     iconColor: Theme.of(context).colorScheme.error,
                                     isEditing: _editingDestination,
@@ -2173,13 +2184,13 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                                     onTapWhenNotEditing: () => _startEditing('destination'),
                                     onChanged: (value) async { if (value.isNotEmpty) { final suggestions = await _getGooglePlacesSuggestions(value); if (mounted) setState(() => _destinationSuggestions = suggestions); } else { if (mounted) setState(() => _destinationSuggestions = []); } },
                                     onClear: _clearDestination,
-                                    onMapIconTap: () { setState(() => _editingDestination = true); _collapseSheet(); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tap on map to select destination'))); },
+                                    onMapIconTap: () { setState(() => _editingDestination = true); _collapseSheet(); ScaffoldMessenger.of(context).showSnackBar( SnackBar(content: Text(AppLocale.tapOnMapToSelectDestination.getString(context)))); },
                                   ),
                                 ),
                                 if (_pickupLocation != null && _dropOffLocation != null) // Show swap button if both are set
                                   IconButton(
-                                    icon: const Icon(Icons.clear),
-                                    tooltip: 'Clear Destination',
+                                  icon: const Icon(Icons.clear), // The Icon
+                                  tooltip: AppLocale.clearPickup.getString(context),
                                     onPressed: () {
                                         _clearDestination();
                                         setState(() {
@@ -2209,8 +2220,8 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                                 key: const ValueKey('customer_note_textfield'), // Add key
                                 controller: _customerNoteController,
                                 decoration: appInputDecoration( // Use appInputDecoration
-                                  labelText: 'Note to Driver (Optional)', // Added labelText
-                                  hintText: 'e.g., I am at the main gate',
+                                  labelText: AppLocale.addNoteToDriver.getString(context),
+                                  hintText: AppLocale.addNoteToDriverHint.getString(context),
                                   prefixIcon: Icon(Icons.note_add_outlined, color: Theme.of(context).hintColor),
                                 ),
                                 maxLines: 2,
@@ -2261,7 +2272,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                           style: Theme.of(context).outlinedButtonTheme.style?.copyWith(
                                 minimumSize: MaterialStateProperty.all(const Size(double.infinity, 50)),
                               ),
-                          child: const Text('Schedule'),
+                          child:  Text(AppLocale.schedule.getString(context)),
                         ),
                       ),
                       horizontalSpaceMedium,
@@ -2272,7 +2283,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                           style: Theme.of(context).elevatedButtonTheme.style?.copyWith(
                                 minimumSize: MaterialStateProperty.all(const Size(double.infinity, 50)),
                               ),
-                          child: Text(_estimatedFare != null ? 'Confirm Route' : 'Calculating Fare...', style: const TextStyle(color: Colors.white)),
+                          child: Text(_estimatedFare != null ? AppLocale.confirmRoute.getString(context) : AppLocale.calculatingFare.getString(context), style: const TextStyle(color: Colors.white)),
                         ),
                       ),
                     ],
@@ -2306,7 +2317,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
             CircularProgressIndicator(color: theme.colorScheme.primary),
             verticalSpaceMedium,
             Text(
-              'Finding a driver for you...',
+              AppLocale.findingADriverForYou.getString(context),
               style: theme.textTheme.titleMedium,
               textAlign: TextAlign.center,
             ),
@@ -2382,14 +2393,14 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                       _activeRideRequestId = null;
                       _isFindingDriver = false;
                     }),
-                    child: const Text('Cancel'),
+                    child:  Text(AppLocale.cancel.getString(context)),
                   ),
                 ),
                 horizontalSpaceMedium,
                 Expanded(
                   child: ElevatedButton(
                     onPressed: _confirmRideRequest, // Re-run the ride request logic
-                    child: const Text('Find Another Driver'),
+                    child:  Text(AppLocale.findAnotherDriver.getString(context)),
                   ),
                 ),
               ],
@@ -2416,7 +2427,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
               borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
               boxShadow: [BoxShadow(blurRadius: 10, color: Colors.black12, offset: Offset(0, -2))],
             ),
-            child: const Center(child: Text("Waiting for ride details..."))
+            child:  Center(child: Text(AppLocale.waitingForRideDetails.getString(context)))
           );
         }
 
@@ -2438,7 +2449,9 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                 CircularProgressIndicator(color: theme.colorScheme.primary),
                 verticalSpaceMedium,
                 Text(
-                  rideStatus == 'pending_driver_acceptance' ? 'Waiting for driver to accept...' : 'Driver assigned. Loading details...',
+                  rideStatus == 'pending_driver_acceptance'
+                      ? AppLocale.waitingForDriverToAccept.getString(context)
+                      : AppLocale.driverAssignedLoadingDetails.getString(context),
                   style: theme.textTheme.titleMedium,
                   textAlign: TextAlign.center,
                 ),
@@ -2452,7 +2465,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                         try { await rideProvider.cancelRideByCustomer(_activeRideRequestId!); } catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to cancel: $e'))); }
                       }
                     },
-                    child: const Text('Cancel Ride'),
+                    child:  Text(AppLocale.cancelRide.getString(context)),
                   ),
               ],
             ),
@@ -2482,9 +2495,9 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
               else
                 Center(child: CircleAvatar(radius: 30, backgroundColor: theme.colorScheme.primaryContainer, child: Icon(Icons.drive_eta, size: 30, color: theme.colorScheme.onPrimaryContainer))),
               verticalSpaceSmall,
-              Center(child: Text(rideDetails.driverName ?? 'Driver', style: theme.textTheme.titleLarge)),
+              Center(child: Text(rideDetails.driverName ?? AppLocale.driver.getString(context), style: theme.textTheme.titleLarge)),
               if (rideDetails.driverVehicleType != null && rideDetails.driverVehicleType != "N/A")
-                Center(child: Text('Vehicle: ${rideDetails.driverVehicleType}', style: theme.textTheme.bodySmall)),
+                Center(child: Text("${AppLocale.vehicle.getString(context)}: ${rideDetails.driverVehicleType}", style: theme.textTheme.bodySmall)),
               
               Builder(builder: (context) {
                 final gender = rideDetails.driverGender;
@@ -2515,12 +2528,17 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
               if (rideDetails.driverLicenseNumber != null && rideDetails.driverLicenseNumber!.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(top: 4.0),
-                  child: Center(child: Text('License: ${rideDetails.driverLicenseNumber}', style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor))),
+                  child: Center(
+                    child: Text(
+                      '${AppLocale.licensePlate.getString(context)}: ${rideDetails.driverLicenseNumber}',
+                      style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
+                    ),
+                  ),
                 ),
               verticalSpaceSmall,
               Center(
                 child: Chip(
-                  label: Text('Status: $rideStatus', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSecondaryContainer)),
+                  label: Text('${AppLocale.status.getString(context)} $rideStatus', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSecondaryContainer)),
                   backgroundColor: theme.colorScheme.secondaryContainer,
                 ),
               ),
@@ -2529,7 +2547,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
               if (rideDetails.driverId != null && (rideStatus == 'accepted' || rideStatus == 'goingToPickup' || rideStatus == 'arrivedAtPickup' || rideStatus == 'onRide'))
                 TextButton.icon(
                   icon: Icon(Icons.chat_bubble_outline, color: theme.colorScheme.primary),
-                  label: Text('Chat with Driver', style: TextStyle(color: theme.colorScheme.primary)),
+                  label: Text('${AppLocale.chatWithDriver.getString(context)} $rideStatus', style: TextStyle(color: theme.colorScheme.primary)),
                   onPressed: () {
                     Navigator.push(context, MaterialPageRoute(builder: (context) => ChatScreen(
                       rideRequestId: rideDetails.id!,
@@ -2554,10 +2572,10 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                     style: OutlinedButton.styleFrom(foregroundColor: theme.colorScheme.error, side: BorderSide(color: theme.colorScheme.error)),
                     onPressed: () async {
                       if (_activeRideRequestId != null) {
-                        try { await Provider.of<RideRequestProvider>(context, listen: false).cancelRideByCustomer(_activeRideRequestId!); } catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to cancel ride: $e'))); }
+                        try { await Provider.of<RideRequestProvider>(context, listen: false).cancelRideByCustomer(_activeRideRequestId!); } catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${AppLocale.failedToCancelRide.getString(context)}: $e'))); }
                       }
                     },
-                    child: const Text('Cancel Ride'),
+                    child:  Text(AppLocale.cancelRide.getString(context)),
                   ),
                 ),
             ],
@@ -2623,7 +2641,22 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                     onTapWhenNotEditing: () => _startEditing('stop_$index'),
                     onChanged: (value) async { if (value.isNotEmpty) { final suggestions = await _getGooglePlacesSuggestions(value); if (mounted) setState(() => _stopSuggestions = suggestions); } else { if (mounted) setState(() => _stopSuggestions = []); } },
                     onClear: () => _clearStop(index),
-                    onMapIconTap: () { setState(() { _editingStopIndex = index; _selectingPickup = false; _editingPickup = false; _editingDestination = false; }); _collapseSheet(); ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Tap on map to select location for Stop ${index + 1}'))); },
+                    onMapIconTap: () { 
+                      setState(() { 
+                        _editingStopIndex = index; 
+                        _selectingPickup = false; 
+                        _editingPickup = false; 
+                        _editingDestination = false; 
+                      }); 
+                      _collapseSheet(); 
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            '${AppLocale.tapOnMapToSelectLocationOrStop.getString(context)} ${index + 1}'
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ),
               ),
@@ -2673,7 +2706,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
     return ListTile(
       // Use theme icon color
       leading: Icon(isPickup ? Icons.location_on : Icons.flag, color: theme.iconTheme.color),
-      title: Text(suggestion['description'] ?? '', style: theme.textTheme.bodyMedium), // Use theme text style
+      title: Text(suggestion[AppLocale.description.getString(context)] ?? '', style: theme.textTheme.bodyMedium), // Use theme text style
       onTap: () {
         if (stopIndex != null) { // Check if editing a stop
           _handleStopSelected(stopIndex, suggestion);
@@ -2730,13 +2763,13 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
           _collapseSheet();
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Location not found')),
+             SnackBar(content: Text(AppLocale.locationNotFound.getString(context))),
           );
         }
       } catch (e) {
         print('Error geocoding history item: $e');
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Error finding location')),
+           SnackBar(content: Text(AppLocale.errorFindingLocation.getString(context))),
         );
       }
     },
@@ -2755,11 +2788,11 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
         return StatefulBuilder( // To update stars in the dialog
           builder: (context, setDialogState) {
             return AlertDialog(
-              title: Text('Rate Your Driver', style: theme.textTheme.titleLarge),
+              title: Text(AppLocale.rateYourDriver.getString(context), style: theme.textTheme.titleLarge),
               content: SingleChildScrollView(
                 child: ListBody(
                   children: <Widget>[
-                    Text('How was your ride?', style: theme.textTheme.bodyMedium),
+                    Text(AppLocale.howWasYourRide.getString(context), style: theme.textTheme.bodyMedium),
                     verticalSpaceMedium,
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -2787,11 +2820,11 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
               ),
               actions: <Widget>[
                 TextButton(
-                  child: Text('Skip', style: TextStyle(color: theme.hintColor)),
+                  child: Text(AppLocale.skip.getString(context), style: TextStyle(color: theme.hintColor)),
                   onPressed: () => Navigator.of(dialogContext).pop(),
                 ),
                 ElevatedButton(
-                  child: const Text('Submit Rating'),
+                  child:  Text(AppLocale.submitRating.getString(context)),
                   onPressed: () async {
                     final rideProvider = Provider.of<RideRequestProvider>(context, listen: false);
                     final navigator = Navigator.of(dialogContext);
@@ -2814,7 +2847,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                            navigator.pop();
                         }
 
-                        scaffoldMessenger.showSnackBar(const SnackBar(content: Text('Rating submitted! Thank you.')));
+                        scaffoldMessenger.showSnackBar(SnackBar(content: Text(AppLocale.ratingSubmitted.getString(context))));
                         _showPostRideCompletionDialog();
                       } catch (e) {
                         if (!mounted) return;
@@ -2822,10 +2855,10 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                         if (navigator.canPop()) { 
                            navigator.pop();
                         }
-                        scaffoldMessenger.showSnackBar(SnackBar(content: Text('Failed to submit rating: $e')));
+                        scaffoldMessenger.showSnackBar(SnackBar(content: Text('${AppLocale.failedToSubmitRating.getString(context)} $e')));
                       }
                     } else {
-                      scaffoldMessenger.showSnackBar(const SnackBar(content: Text('Please select a star rating.')));
+                      scaffoldMessenger.showSnackBar( SnackBar(content: Text(AppLocale.pleaseSelectAStarRating.getString(context))));
                     }
                   },
                 ),
@@ -2843,8 +2876,6 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
       barrierDismissible: false,
       builder: (BuildContext dialogContext) {
         return AlertDialog(
-          title: const Text('Ride Completed!'),
-          content: const Text('Thank you for riding with us.'),
           actions: <Widget>[
             TextButton(
               child: const Text('Return Trip'),

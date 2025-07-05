@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localization/flutter_localization.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart' as gmf;
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import '../models/Ride_Request_Model.dart';
+import '../localization/locales.dart';
 import '../utils/ui_utils.dart';
 import '../utils/map_utils.dart';
 import '../services/auth_service.dart';
@@ -81,6 +83,20 @@ class _RideHistoryDetailsScreenState extends State<RideHistoryDetailsScreen> {
     setState(() => _isRouteLoading = false);
   }
 
+  String _getLocalizedStatus(BuildContext context, String status) {
+    switch (status) {
+      case 'completed':
+        return AppLocale.status_completed.getString(context);
+      case 'cancelled_by_customer':
+        return AppLocale.status_cancelled_by_customer.getString(context);
+      case 'cancelled_by_driver':
+        return AppLocale.status_cancelled_by_driver.getString(context);
+      default:
+        // Fallback for any other status that doesn't have a specific translation
+        return status.replaceAll('_', ' ').split(' ').map((str) => str.isNotEmpty ? '${str[0].toUpperCase()}${str.substring(1).toLowerCase()}' : '').join(' ');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -90,7 +106,7 @@ class _RideHistoryDetailsScreenState extends State<RideHistoryDetailsScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Ride on ${DateFormat.yMMMd().format(ride.requestTime!)}'),
+        title: Text('${AppLocale.ride_on.getString(context)} ${DateFormat.yMMMd().format(ride.requestTime!)}'),
       ),
       body: Column(
         children: [
@@ -120,39 +136,39 @@ class _RideHistoryDetailsScreenState extends State<RideHistoryDetailsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildSectionHeader(theme, 'Trip Details'),
-                  _buildDetailItem(theme, Icons.my_location, 'From', ride.pickupAddressName ?? 'N/A'),
+                  _buildSectionHeader(theme, AppLocale.trip_details.getString(context)),
+                  _buildDetailItem(theme, Icons.my_location, AppLocale.from.getString(context), ride.pickupAddressName ?? AppLocale.not_available_abbreviation.getString(context)),
                   if (ride.stops.isNotEmpty)
                     ...ride.stops.asMap().entries.map((entry) {
                       final index = entry.key;
                       final stop = entry.value;
-                      return _buildDetailItem(theme, Icons.location_on_outlined, 'Stop ${index + 1}', stop['addressName'] ?? 'N/A');
+                      return _buildDetailItem(theme, Icons.location_on_outlined, '${AppLocale.stop_prefix.getString(context)}${index + 1}', stop['addressName'] ?? AppLocale.not_available_abbreviation.getString(context));
                     }).toList(),
-                  _buildDetailItem(theme, Icons.flag, 'To', ride.dropoffAddressName ?? 'N/A'),
-                  _buildDetailItem(theme, Icons.schedule, 'Date', DateFormat('E, MMM d, yyyy hh:mm a').format(ride.completedTime ?? ride.requestTime!)),
-                  _buildDetailItem(theme, Icons.info_outline, 'Status', ride.status.replaceAll('_', ' ').capitalize()),
+                  _buildDetailItem(theme, Icons.flag, AppLocale.to.getString(context), ride.dropoffAddressName ?? AppLocale.not_available_abbreviation.getString(context)),
+                  _buildDetailItem(theme, Icons.schedule, AppLocale.date.getString(context), DateFormat('E, MMM d, yyyy hh:mm a').format(ride.completedTime ?? ride.requestTime!)),
+                  _buildDetailItem(theme, Icons.info_outline, AppLocale.status.getString(context), _getLocalizedStatus(context, ride.status)),
                   verticalSpaceMedium,
-                  _buildSectionHeader(theme, 'Fare Details'),
-                  _buildDetailItem(theme, Icons.payments_outlined, 'Final Fare', 'TZS ${ride.fare?.toStringAsFixed(0) ?? 'N/A'}'),
+                  _buildSectionHeader(theme, AppLocale.fare_details.getString(context)),
+                  _buildDetailItem(theme, Icons.payments_outlined, AppLocale.final_fare.getString(context), 'TZS ${ride.fare?.toStringAsFixed(0) ?? AppLocale.not_available_abbreviation.getString(context)}'),
                   verticalSpaceMedium,
-                  _buildSectionHeader(theme, isDriver ? 'Customer Info' : 'Driver Info'),
+                  _buildSectionHeader(theme, isDriver ? AppLocale.customer_info.getString(context) : AppLocale.driver_info.getString(context)),
                   Builder(builder: (context) {
                     String subtitleText;
                     if (isDriver) {
-                      subtitleText = ride.customerDetails ?? 'No customer details available.';
+                      subtitleText = ride.customerDetails ?? AppLocale.no_customer_details.getString(context);
                     } else {
                       List<String> driverDetails = [];
-                      if (ride.driverVehicleType != null && ride.driverVehicleType!.isNotEmpty) driverDetails.add('Vehicle: ${ride.driverVehicleType}');
-                      if (ride.driverLicenseNumber != null && ride.driverLicenseNumber!.isNotEmpty) driverDetails.add('Plate: ${ride.driverLicenseNumber}');
+                      if (ride.driverVehicleType != null && ride.driverVehicleType!.isNotEmpty) driverDetails.add('${AppLocale.vehicle_prefix.getString(context)}${ride.driverVehicleType}');
+                      if (ride.driverLicenseNumber != null && ride.driverLicenseNumber!.isNotEmpty) driverDetails.add('${AppLocale.plate_prefix.getString(context)}${ride.driverLicenseNumber}');
                       if (ride.driverGender != null && ride.driverGender != "Unknown" && ride.driverAgeGroup != null && ride.driverAgeGroup != "Unknown") driverDetails.add('${ride.driverGender}, ${ride.driverAgeGroup}');
-                      subtitleText = driverDetails.isNotEmpty ? driverDetails.join(' • ') : 'No driver details available.';
+                      subtitleText = driverDetails.isNotEmpty ? driverDetails.join(' • ') : AppLocale.no_driver_details.getString(context);
                     }
                     return ListTile(
                       leading: CircleAvatar(
                         backgroundImage: NetworkImage(isDriver ? ride.customerProfileImageUrl ?? '' : ride.driverProfileImageUrl ?? ''),
                         child: (isDriver ? ride.customerProfileImageUrl : ride.driverProfileImageUrl) == null ? const Icon(Icons.person) : null,
                       ),
-                      title: Text(isDriver ? ride.customerName ?? 'Customer' : ride.driverName ?? 'Driver'),
+                      title: Text(isDriver ? ride.customerName ?? AppLocale.customer.getString(context) : ride.driverName ?? AppLocale.driver.getString(context)),
                       subtitle: Text(subtitleText),
                     );
                   }),
@@ -161,9 +177,9 @@ class _RideHistoryDetailsScreenState extends State<RideHistoryDetailsScreen> {
                     width: double.infinity,
                     child: OutlinedButton.icon(
                       icon: const Icon(Icons.support_agent),
-                      label: const Text('Get Help With This Ride'),
+                      label: Text(AppLocale.get_help_with_ride.getString(context)),
                       onPressed: () {
-                        Navigator.push(context, MaterialPageRoute(builder: (context) => ChatScreen(rideRequestId: ride.id!, recipientId: 'support_team_id', recipientName: 'Support Team', isChatActive: false, canContactAdmin: true)));
+                        Navigator.push(context, MaterialPageRoute(builder: (context) => ChatScreen(rideRequestId: ride.id!, recipientId: 'support_team_id', recipientName: AppLocale.support_team.getString(context), isChatActive: false, canContactAdmin: true)));
                       },
                       style: OutlinedButton.styleFrom(side: BorderSide(color: theme.colorScheme.secondary), foregroundColor: theme.colorScheme.secondary),
                     ),
@@ -207,12 +223,5 @@ class _RideHistoryDetailsScreenState extends State<RideHistoryDetailsScreen> {
         ],
       ),
     );
-  }
-}
-
-extension StringExtension on String {
-  String capitalize() {
-    if (isEmpty) return this;
-    return "${this[0].toUpperCase()}${substring(1).toLowerCase()}";
   }
 }
