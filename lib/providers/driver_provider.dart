@@ -4,6 +4,7 @@ import '../services/firestore_service.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart'; 
+import 'dart:math';
 
 class DriverProvider extends ChangeNotifier {
   final AuthService _authService = AuthService();
@@ -15,6 +16,7 @@ class DriverProvider extends ChangeNotifier {
   double _dailyEarnings = 0.0; // New field for daily earnings
   Map<String, dynamic>? _pendingRideRequestDetails;
   Map<String, dynamic>? _driverProfileData; // To store driver-specific profile data
+  Map<String, dynamic>? _fareConfig; // To store fare configuration from Firestore
 
   bool get isLoading => _isLoading;
   bool get isOnline => _isOnline;
@@ -26,6 +28,26 @@ class DriverProvider extends ChangeNotifier {
   void setLoading(bool value) {
     _isLoading = value;
     notifyListeners();
+  }
+
+  Future<void> _fetchFareConfig() async {
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('appConfiguration')
+          .doc('fareSettings')
+          .get();
+
+      if (doc.exists && doc.data() != null) {
+        _fareConfig = doc.data();
+        debugPrint("DriverProvider: Fare config loaded successfully: $_fareConfig");
+      } else {
+        debugPrint("DriverProvider: 'fareSettings' document does not exist. Using fallback fare calculation.");
+        _fareConfig = null;
+      }
+    } catch (e) {
+      debugPrint("DriverProvider: ERROR fetching fare config: $e. Using fallback fare calculation.");
+      _fareConfig = null;
+    }
   }
 
   Future<void> loadDriverData() async {
@@ -40,25 +62,30 @@ class DriverProvider extends ChangeNotifier {
     }
     setLoading(true);
     try {
-      DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('users').doc(userId).get();
-      if (userDoc.exists && userDoc.data() != null) {
-        final data = userDoc.data() as Map<String, dynamic>;
-        if (data.containsKey('driverProfile')) {
-          final driverProfile = data['driverProfile'] as Map<String, dynamic>;
-          _isOnline = driverProfile['isOnline'] ?? false;
-          _currentKijiweId = driverProfile['kijiweId'] as String?;
-          _driverProfileData = Map<String, dynamic>.from(driverProfile); // Store the profile
-        } else { // Driver profile doesn't exist
-          debugPrint("DriverProvider: Driver profile not found for user $userId.");
-          _isOnline = false;
-          _currentKijiweId = null;
-          _driverProfileData = null;
-        }
-      } else { // User document doesn't exist
-        _isOnline = false;
-        _currentKijiweId = null;
-        _driverProfileData = null; // Ensure profile is null if user doc doesn't exist
-      }
+      // Fetch fare config and user data in parallel for efficiency
+      await Future.wait([
+        _fetchFareConfig(),
+        FirebaseFirestore.instance.collection('users').doc(userId).get().then((userDoc) {
+          if (userDoc.exists && userDoc.data() != null) {
+            final data = userDoc.data() as Map<String, dynamic>;
+            if (data.containsKey('driverProfile')) {
+              final driverProfile = data['driverProfile'] as Map<String, dynamic>;
+              _isOnline = driverProfile['isOnline'] ?? false;
+              _currentKijiweId = driverProfile['kijiweId'] as String?;
+              _driverProfileData = Map<String, dynamic>.from(driverProfile); // Store the profile
+            } else { // Driver profile doesn't exist
+              debugPrint("DriverProvider: Driver profile not found for user $userId.");
+              _isOnline = false;
+              _currentKijiweId = null;
+              _driverProfileData = null;
+            }
+          } else { // User document doesn't exist
+            _isOnline = false;
+            _currentKijiweId = null;
+            _driverProfileData = null; // Ensure profile is null if user doc doesn't exist
+          }
+        })
+      ]);
     } catch (e) {
       debugPrint("Error loading driver data: $e");
       _isOnline = false; // Reset on error
@@ -429,5 +456,55 @@ class DriverProvider extends ChangeNotifier {
 
       setLoading(false);
     }
+  }
+
+  /// Calculates the fare for a given distance and duration.
+  /// This can be used for both estimated and final fare calculations.
+  double calculateFare(
+      {required double distanceMeters, required int durationSeconds}) {
+    // Use fetched fare config if available, otherwise use hardcoded fallbacks.
+    if (_fareConfig == null) {
+      debugPrint("DriverProvider: Fare config not loaded, using fallback calculation.");
+      // These values should ideally be fetched from a remote config or constants file.
+      const double baseFare = 1000.0; // TZS
+      const double ratePerKm = 500.0; // TZS
+      const double ratePerMinute = 50.0; // TZS
+      const double minimumFare = 1000.0; // TZS
+
+      final double distanceKm = distanceMeters / 1000.0;
+      final double durationMinutes = durationSeconds / 60.0;
+
+      double calculatedFare =
+          baseFare + (distanceKm * ratePerKm) + (durationMinutes * ratePerMinute);
+
+      // Ensure the fare is not below the minimum.
+      calculatedFare = max(calculatedFare, minimumFare);
+
+      // Round to a reasonable value, e.g., nearest 50 TZS.
+      return (calculatedFare / 50).round() * 50.0;
+    }
+
+    // Use values from Firestore config, with fallbacks for safety.
+    final double baseFare = (_fareConfig!['startingFare'] as num?)?.toDouble() ?? 1000.0;
+    final double perKmRate = (_fareConfig!['farePerKilometer'] as num?)?.toDouble() ?? 500.0;
+    final double perMinRate = (_fareConfig!['farePerMinuteDriving'] as num?)?.toDouble() ?? 50.0;
+    final double minFare = (_fareConfig!['minimumFare'] as num?)?.toDouble() ?? 1500.0;
+    final double roundingInc = (_fareConfig!['roundingIncrement'] as num?)?.toDouble() ?? 50.0;
+
+    final double distanceKm = distanceMeters / 1000.0;
+    final double durationMinutes = durationSeconds / 60.0;
+
+    double calculatedFare =
+        baseFare + (distanceKm * perKmRate) + (durationMinutes * perMinRate);
+
+    // Ensure the fare is not below the minimum.
+    calculatedFare = max(calculatedFare, minFare);
+
+    // Round to the specified increment.
+    if (roundingInc > 0) {
+      calculatedFare = (calculatedFare / roundingInc).ceil() * roundingInc;
+    }
+
+    return calculatedFare;
   }
 }

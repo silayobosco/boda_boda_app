@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert'; // Added for jsonDecode
+import 'manual_ride_screen.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '/utils/map_utils.dart';
 import 'package:flutter/material.dart';
@@ -14,6 +15,8 @@ import '../services/auth_service.dart'; // Import AuthService to get current use
 import '../models/Ride_Request_Model.dart'; // Import RideRequestModel
 import 'package:latlong2/latlong.dart' as ll; // Use latlong2 for calculations
 import '../utils/ui_utils.dart'; // Import UI Utils for styles and spacing
+import 'package:flutter_localization/flutter_localization.dart';
+import '../localization/locales.dart';
 import 'chat_screen.dart'; // Import ChatScreen
 
 class DriverHome extends StatefulWidget {
@@ -2075,8 +2078,20 @@ Widget _buildToggleButton(DriverProvider driverProvider) {
                   // Add more stats if needed
                 ],
               ),
-              verticalSpaceSmall,
-              // You could add a "Refresh" button or other actions here if needed
+              verticalSpaceMedium,
+              ElevatedButton.icon(
+                icon: const Icon(Icons.add_road),
+                label: Text(AppLocale.street_pickup.getString(context)),
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 50),
+                  backgroundColor: theme.colorScheme.secondary,
+                  foregroundColor: theme.colorScheme.onSecondary,
+                ),
+                onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const ManualRideScreen())),
+              ),
             ],
           ),
         ),
