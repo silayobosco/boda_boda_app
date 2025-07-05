@@ -1,27 +1,20 @@
-//plugins {
-    //id ("com.android.library")
-   // id("com.android.application") version "8.9.1" //apply false
-    // START: FlutterFire Configuration
-  //  id("com.google.gms.google-services") version "4.4.2" apply false
-    // END: FlutterFire Configuration
-    //id("kotlin-android")
-  //  id("org.jetbrains.kotlin.android") version "2.1.10" apply false
-    //id("dev.flutter.flutter-gradle-plugin") //version "83.0.4"
-//}
-
+plugins {
+    // It's recommended to align your AGP and Kotlin versions for better stability.
+    // Using a very new Kotlin version (like 2.1.10) with an older AGP can cause dependency issues.
+    id("com.android.application") version "8.10.1" apply false
+    id("com.google.gms.google-services") version "4.4.2" apply false
+    id("org.jetbrains.kotlin.android") version "2.0.21" apply false
+}
 
 buildscript {
     repositories {
         google()
         mavenCentral()
     }
-   
+
     dependencies {
-        val kotlinVersion = "2.1.10" // Correctly defined
-        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion") // Corrected line!
-        classpath("com.android.tools.build:gradle:8.1.0")
-        classpath("com.google.gm" + "s:google-services:4.4.2")
-        //classpath ("com.android.tools.build:gradle:8.1.0")
+        // Classpaths are now managed by the `plugins` block above, which is the modern
+        // and recommended approach for Gradle. This section can be left empty.
     }
 }
 
