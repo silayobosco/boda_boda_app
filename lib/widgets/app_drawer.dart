@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_localization/flutter_localization.dart';
-import '../screens/home_screen.dart';
+import 'package:provider/provider.dart';
 import '../screens/profile_screen.dart';
 import '../screens/login_screen.dart';
 import '../screens/about_us_screen.dart';
 import '../screens/help_and_support_screen.dart';
-import '../screens/driver_registration_screen.dart';
+import '../providers/driver_provider.dart';
 import '../screens/chat_list_screen.dart'; // Import ChatListScreen
 import '../localization/locales.dart';
 
@@ -134,123 +134,78 @@ class AppDrawer extends StatelessWidget {
               );
             },
           ),
-          ListTile(
-            leading: const Icon(Icons.exit_to_app),
-            title: Text(AppLocale.logout.getString(context)),
-            onTap: () async {
-              final navigator = Navigator.of(context); // Capture navigator before await
-              await FirebaseAuth.instance.signOut();
-              if (!context.mounted) return; // Check if widget is still in the tree
-              navigator.pushReplacement( // Use the captured navigator
-                MaterialPageRoute(builder: (context) => const LoginScreen()),
-              );
-            },
-          ),
-          const Spacer(), // Push the driver button to the bottom
-          // "Become a Driver" or "Switch Role" Button
-          _buildDriverButton(context),
+          const Spacer(), // Pushes the logout button to the bottom
+          const Divider(),
+          _buildLogoutButton(context),
         ],
       ),
     );
   }
 
-  Widget _buildDriverButton(BuildContext context) {
-    final currentUser = FirebaseAuth.instance.currentUser;
-
-    if (currentUser == null) {
-      return const SizedBox.shrink();
-    }
-
-    return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      future: FirebaseFirestore.instance.collection('users').doc(currentUser.uid).get(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const ListTile(
-            leading: SizedBox(height: 24, width: 24, child: CircularProgressIndicator(strokeWidth: 2)),
-            title: Text("Loading..."), // This is fine as it's temporary
-            enabled: false,
-          );
-        }
-
-        if (snapshot.hasError || !snapshot.hasData || !snapshot.data!.exists) {
-          // If there's an error or no data, don't allow switching roles
-          return ListTile(
-            leading: const Icon(Icons.error_outline),
-            title: Text(AppLocale.unableToLoadDriverStatus.getString(context)),
-            enabled: false,
-          );
-        }
-
-        String currentRole = 'Customer';
-        Map<String, dynamic>? driverProfile;
-
-        final userData = snapshot.data!.data();
-        if (userData != null) {
-          currentRole = userData['role'] as String? ?? 'Customer';
-          if (userData.containsKey('driverProfile') && userData['driverProfile'] is Map) {
-            driverProfile = userData['driverProfile'] as Map<String, dynamic>?;
-          }
-        }
-
-        final bool isCurrentlyDriver = currentRole == 'Driver';
-        final bool hasCompletedDriverProfile = driverProfile?['kijiweId'] != null && (driverProfile!['kijiweId'] as String).isNotEmpty;
-
-        final String buttonTitle = isCurrentlyDriver
-            ? AppLocale.switchToCustomer.getString(context)
-            : hasCompletedDriverProfile
-                ? AppLocale.switchToDriver.getString(context)
-                : AppLocale.becomeADriver.getString(context);
-
-        // Only show the button if the user has a completed driver profile or is already a driver
-        if (!isCurrentlyDriver && !hasCompletedDriverProfile) {
-          // Only allow registration, not switching, if not completed
-          return ListTile(
-            leading: const Icon(Icons.directions_bike),
-            title: Text(AppLocale.becomeADriver.getString(context)),
-            onTap: () {
-              if (Navigator.of(context).canPop()) Navigator.of(context).pop();
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const DriverRegistrationScreen()),
-              );
-            },
-          );
-        }
-
-        return ListTile(
-          leading: const Icon(Icons.switch_account),
-          title: Text(buttonTitle),
-          onTap: () async {
-            // Capture context-dependent objects before the async gap
-            final navigator = Navigator.of(context);
-            final scaffoldMessenger = ScaffoldMessenger.of(context);
-
-            if (navigator.canPop()) navigator.pop(); // Pop the drawer first
-
-            final userDocRef = FirebaseFirestore.instance.collection('users').doc(currentUser.uid);
-
-            try {
-              if (isCurrentlyDriver) {
-                await userDocRef.update({'role': 'Customer'});
-              } else {
-                await userDocRef.update({'role': 'Driver'});
-              }
-              // After the await, check if the widget is still mounted before navigating
-              if (!context.mounted) return;
-              navigator.pushReplacement(
-                MaterialPageRoute(builder: (context) => const HomeScreen()),
-              );
-            } catch (e) {
-              debugPrint("Error switching role: $e");
-              if (context.mounted) { // Check mounted before showing SnackBar
-                scaffoldMessenger.showSnackBar(
-                  SnackBar(content: Text('${AppLocale.failedToSwitchRole.getString(context)}: ${e.toString()}')),
-                );
-              }
-            }
-          },
-        );
+  Widget _buildLogoutButton(BuildContext context) {
+    return ListTile(
+      leading: const Icon(Icons.exit_to_app),
+      title: Text(AppLocale.logout.getString(context)),
+      onTap: () {
+        // Close the drawer first
+        Navigator.of(context).pop();
+        // Show confirmation dialog
+        _showLogoutConfirmationDialog(context);
       },
+    );
+  }
+
+  void _showLogoutConfirmationDialog(BuildContext context) {
+    final theme = Theme.of(context);
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(AppLocale.logout.getString(context)),
+        content: Text(AppLocale.logout_confirmation.getString(context)),
+        actions: [
+          TextButton(
+            child: Text(AppLocale.dialog_cancel.getString(context), style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.7))),
+            onPressed: () => Navigator.of(dialogContext).pop(),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: theme.colorScheme.error,
+              foregroundColor: theme.colorScheme.onError,
+            ),
+            child: Text(AppLocale.logout.getString(context)),
+            onPressed: () async {
+              // Close dialog
+              Navigator.of(dialogContext).pop();
+
+              // Capture context-dependent objects before async gap
+              final scaffoldMessenger = ScaffoldMessenger.of(context);
+              final navigator = Navigator.of(context);
+
+              try {
+                // If user is a driver, make them offline first
+                if (userRole == 'Driver') {
+                  final driverProvider = Provider.of<DriverProvider>(context, listen: false);
+                  if (driverProvider.isOnline) {
+                    await driverProvider.toggleOnlineStatus();
+                  }
+                }
+
+                // Sign out from Firebase
+                await FirebaseAuth.instance.signOut();
+
+                // Navigate to login screen
+                if (!context.mounted) return;
+                navigator.pushAndRemoveUntil(MaterialPageRoute(builder: (context) => const LoginScreen()), (route) => false);
+              } catch (e) {
+                debugPrint("Error during logout: $e");
+                if (context.mounted) {
+                  scaffoldMessenger.showSnackBar(SnackBar(content: Text('${AppLocale.error_logging_out.getString(context)}: ${e.toString()}')));
+                }
+              }
+            },
+          ),
+        ],
+      ),
     );
   }
 }
