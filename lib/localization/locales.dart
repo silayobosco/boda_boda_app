@@ -1,5 +1,11 @@
 mixin AppLocale {
   // General
+  static const String recurringRide = 'recurring_ride';
+  static const String noteUpdated = 'note_updated';
+  static const String failedToUpdateNote = 'failed_to_update_note';
+  static const String noDriversFound = 'no_drivers_found';
+  static const String addANoteHere = 'add_a_note_here';
+  static const String addStopAfterThisOne = 'add_stop_after_this_one';
   static const String myAccount = 'my_account';
   static const String accountManagement = 'account_management';
   static const String paymentMethods = 'payment_methods';
@@ -523,9 +529,26 @@ mixin AppLocale {
   static const String location = 'location';
   static const String enter = 'enter';
   static const String select = 'select';
+  // Notification related keys
+  static const String notification_title = 'notification_title';
+  static const String notification_body = 'notification_body';
+  static const String notification_action_accept = 'notification_action_accept';
+  static const String notification_action_decline = 'notification_action_decline';
+  static const String notification_action_cancel = 'notification_action_cancel';
+  static const String notification_action_reply = 'notification_action_reply';
+  static const String notification_input_label_reply = 'notification_input_label_reply';
+  static const String notification_channel_name = 'notification_channel_name';
+  static const String notification_channel_description = 'notification_channel_description';
+
 
   static const Map<String, dynamic> EN = {
     // Add these localizations
+    recurringRide: 'Recurring Ride',
+    noteUpdated: 'Note updated successfully.',
+    failedToUpdateNote: 'Failed to update note.',
+    noDriversFound: 'No drivers found for this ride.',
+    addANoteHere: 'Add a note here...',
+    addStopAfterThisOne: 'Add a stop after this one',
     location: 'Location',
     myAccount: 'My Account',
     accountManagement: 'Account Management',
@@ -1018,10 +1041,27 @@ mixin AppLocale {
     driver_faq3_a: 'Declining a ride will make you unavailable for a short period. Frequent declines may affect your driver score. The request will be sent to the next available driver in the queue.',
     enter: 'Enter',
     select: 'Select',
+    // Notification related keys
+    notification_title: 'Notification Title',
+    notification_body: 'Notification Body',
+    notification_action_accept: 'Accept',
+    notification_action_decline: 'Decline',
+    notification_action_reply: 'Reply',
+    notification_input_label_reply: 'Type your reply here...',
+    notification_channel_name: 'Ride Notifications',
+    notification_channel_description: 'Notifications for ride updates and messages.',
   };
 
+
+// Swahili (SW) Localizations
   static const Map<String, dynamic> SW = {
     // Add these localizations
+    recurringRide: 'Safari ya Mara kwa Mara',
+    noteUpdated: 'Kumbukumbu Imeboreshwa',
+    failedToUpdateNote: 'Imeshindikana Kuboreshwa Kumbukumbu',
+    noDriversFound: 'Hakuna Madereva Walio Patikana',
+    addANoteHere: 'Ongeza ujumbe Hapa',
+    addStopAfterThisOne: 'Ongeza Kituo Baada ya Hiki',
     location: 'Eneo',
     myAccount: 'Akaunti Yangu',
     accountManagement: 'Usimamizi wa Akaunti',
@@ -1510,5 +1550,14 @@ mixin AppLocale {
     driver_faq3_a: 'Kukataa safari kutakufanya usipatikane kwa muda mfupi. Kukataa mara kwa mara kunaweza kuathiri alama yako ya dereva. Ombi litatumwa kwa dereva anayefuata anayeweza kupokea safari.',
     enter: 'Ingiza',
     select: 'Chagua',
+    // Notification related keys
+    notification_title: 'Arifa ya Safari',
+    notification_body: 'Una ombi jipya la safari kutoka kwa {driverName}. Gusa hapa kuona maelezo.',
+    notification_action_accept: 'Kubali',
+    notification_action_decline: 'Kataa',
+    notification_action_reply: 'Jibu',
+    notification_input_label_reply: 'Andika ujumbe wako...',
+    notification_channel_name: 'Arifa za Safari',
+    notification_channel_description: 'Arifa za maombi ya safari, masasisho, na jumbe za soga.',
   };
 }

@@ -3,6 +3,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart'; // Example for local notifications
+import '../utils/notification_localization_util.dart';
 import '../services/firestore_service.dart';
 import '../services/auth_service.dart'; // Import AuthService
 
@@ -39,10 +40,6 @@ class NotificationProvider with ChangeNotifier {
 
     // Request notification permissions first
     await checkAndRequestNotificationPermissions();
-
-    // Store the callbacks
-    _onForegroundMessageReceived = onForegroundMessageReceived;
-    _onNotificationTap = onNotificationTap;
 
     // Store the callbacks
     _onForegroundMessageReceived = onForegroundMessageReceived;
@@ -188,13 +185,35 @@ class NotificationProvider with ChangeNotifier {
 
     // Add a "Reply" action for chat messages
     if (type == 'chat_message') {
-      actions.add(const AndroidNotificationAction('reply_action', 'Reply', inputs: [AndroidNotificationActionInput(label: 'Type your message...')]));
+      // Localize action button text
+      final replyActionText = await NotificationLocalizationUtil.getLocalizedText('notification_action_reply');
+      final replyInputLabel = await NotificationLocalizationUtil.getLocalizedText('notification_input_label_reply');
+      actions.add(AndroidNotificationAction('reply_action', replyActionText, inputs: [AndroidNotificationActionInput(label: replyInputLabel)]));
     }
+
+    // --- NEW: Handle localization for foreground notifications ---
+    // Use appName from locales as a fallback title
+    String notificationTitle = message.notification?.title ?? await NotificationLocalizationUtil.getLocalizedText('appName');
+    String notificationBody = message.notification?.body ?? '';
+
+    // If localization keys are present, use the utility to translate them.
+    // This ensures consistency with the background handler.
+    if (message.data.containsKey('title_loc_key')) {
+      notificationTitle = await NotificationLocalizationUtil.getLocalizedTitle(message.data); // This uses getLocalizedText internally
+    }
+    if (message.data.containsKey('body_loc_key')) {
+      notificationBody = await NotificationLocalizationUtil.getLocalizedBody(message.data); // This uses getLocalizedText internally
+    }
+    // --- END NEW ---
+
+    // Localize channel details
+    final channelName = await NotificationLocalizationUtil.getLocalizedText('notification_channel_name');
+    final channelDescription = await NotificationLocalizationUtil.getLocalizedText('notification_channel_description');
 
     final AndroidNotificationDetails androidPlatformChannelSpecifics = AndroidNotificationDetails(
       'your_channel_id', //  unique channel ID
-      'Your Channel Name', // channel name
-      channelDescription: 'Your channel description', // channel description
+      channelName,
+      channelDescription: channelDescription,
       importance: Importance.max,
       priority: Priority.high,
       showWhen: true,
@@ -207,8 +226,8 @@ class NotificationProvider with ChangeNotifier {
 
     await _localNotificationsPlugin.show(
       message.hashCode, // Unique ID for the notification
-      message.notification?.title,
-      message.notification?.body,
+      notificationTitle,
+      notificationBody,
       platformChannelSpecifics,
       // Encode the data map as a JSON string for easy parsing on tap.
       payload: jsonEncode(message.data),

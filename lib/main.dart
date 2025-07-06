@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'utils/notification_localization_util.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -32,6 +33,19 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   debugPrint("Handling a background message: ${message.messageId}");
   debugPrint('Message data: ${message.data}');
 
+  // --- NEW: Handle localization for background notifications ---
+  String notificationTitle = message.notification?.title ?? 'Boda Boda App';
+  String notificationBody = message.notification?.body ?? '';
+
+  // If localization keys are present, use the utility to translate them.
+  if (message.data.containsKey('title_loc_key')) {
+    notificationTitle = await NotificationLocalizationUtil.getLocalizedTitle(message.data);
+  }
+  if (message.data.containsKey('body_loc_key')) {
+    notificationBody = await NotificationLocalizationUtil.getLocalizedBody(message.data);
+  }
+  // --- END NEW ---
+
   final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
 
   // Setup for showing the notification. The channel ID must match the one used in NotificationProvider.
@@ -50,8 +64,8 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   // Show the notification
   await flutterLocalNotificationsPlugin.show(
     message.hashCode,
-    message.notification?.title,
-    message.notification?.body,
+    notificationTitle,
+    notificationBody,
     platformChannelSpecifics,
     payload: jsonEncode(message.data), // Pass the data payload for tap handling
   );
