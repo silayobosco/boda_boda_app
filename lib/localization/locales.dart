@@ -54,10 +54,18 @@ mixin AppLocale {
   static const String chats = 'chats';
   static const String settings = 'settings';
   static const String logout = 'logout';
+  static const String accountActions = 'accountActions';
+  static const String logout_confirmation = 'logout_confirmation';
+  static const String dialog_cancel = 'dialog_cancel';
+  static const String error_logging_out = 'error_logging_out';
   static const String unableToLoadDriverStatus = 'unable_to_load_driver_status';
   static const String switchToCustomer = 'switch_to_customer';
   static const String switchToDriver = 'switch_to_driver';
   static const String becomeADriver = 'become_a_driver';
+  static const String goOffline = 'goOffline';
+  static const String error_user_not_found = 'error_user_not_found';
+  static const String switch_and_go_offline = 'switch_and_go_offline';
+  static const String switch_to_customer_warning = 'switch_to_customer_warning';
   static const String failedToSwitchRole = 'failed_to_switch_role';
   static const String darkMode = 'dark_mode';
   static const String myRides = 'my_rides';
@@ -306,6 +314,7 @@ mixin AppLocale {
   static const String infoWindowKijiweSnippet = 'infoWindowKijiweSnippet';  
   static const String errorLoadingHubs = 'errorLoadingHubs';
   static const String selectedLocation = 'selectedLocation';
+  static const String add_comment_optional = 'add_comment_optional';
   // Kijiwe Profile specific keys
   // Driver Registration Screen
   static const String driver_registration = 'driver_registration';
@@ -572,10 +581,18 @@ mixin AppLocale {
     chats: 'Chats',
     settings: 'Settings',
     logout: 'Logout',
+    accountActions: 'Account Actions',
+    logout_confirmation: 'Are you sure you want to log out? If you are a driver, this will take you offline.',
+    dialog_cancel: 'Cancel',
+    error_logging_out: 'Error logging out',
     unableToLoadDriverStatus: 'Unable to load driver status',
     switchToCustomer: 'Switch to Customer',
     switchToDriver: 'Switch to Driver',
     becomeADriver: 'Become a Driver',
+    goOffline: 'Go Offline',
+    error_user_not_found: 'Error: User not found.',
+    switch_and_go_offline: 'Switch & Go Offline',
+    switch_to_customer_warning: 'This will take you offline and you will lose your position in the Kijiwe queue. Are you sure you want to switch to the customer role?',
     failedToSwitchRole: 'Failed to switch role',
     darkMode: 'Dark Mode',
     myRides: 'My Rides',
@@ -1060,10 +1077,18 @@ mixin AppLocale {
     chats: 'Soga',
     settings: 'Mipangilio',
     logout: 'Toka',
+    accountActions: 'Vitendo vya Akaunti',
+    logout_confirmation: 'Una uhakika unataka kutoka? Ikiwa wewe ni dereva, hii itakutoa mtandaoni.',
+    dialog_cancel: 'Ghairi',
+    error_logging_out: 'Hitilafu wakati wa kutoka',
     unableToLoadDriverStatus: 'Imeshindwa kupakia hali ya dereva',
     switchToCustomer: 'Badilisha uwe Mteja',
     switchToDriver: 'Badilisha uwe Dereva',
     becomeADriver: 'Kuwa Dereva',
+    goOffline: 'Toka Hewani',
+    error_user_not_found: 'Hitilafu: Mtumiaji hajapatikana.',
+    switch_and_go_offline: 'Badilisha & Toka Hewani',
+    switch_to_customer_warning: 'Kitendo hiki kitakutoa hewani na utapoteza nafasi yako kwenye foleni ya Kijiwe. Una uhakika unataka kubadilisha kuwa na jukumu la mteja?',
     failedToSwitchRole: 'Imeshindwa kubadilisha jukumu',
     darkMode: 'Hali ya Giza',
     myRides: 'Safari Zangu',
