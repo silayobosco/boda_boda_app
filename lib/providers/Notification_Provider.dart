@@ -1,39 +1,37 @@
- import 'package:firebase_messaging/firebase_messaging.dart';
+import 'dart:convert';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart'; // Example for local notifications
 import '../services/firestore_service.dart';
 import '../services/auth_service.dart'; // Import AuthService
 
-class NotificationProvider {
+class NotificationProvider with ChangeNotifier {
   final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
   final FirestoreService _firestoreService;
   final AuthService _authService; // Add AuthService dependency
   final FlutterLocalNotificationsPlugin _localNotificationsPlugin = FlutterLocalNotificationsPlugin();
 
-  // Callbacks to interact with the UI layer (e.g., HomeScreen)
-  final Function(RemoteMessage message) onForegroundMessageReceived;
-  final Function(Map<String, dynamic> data) onNotificationTap;
+  // Callbacks will be set during initialization
+  late Function(RemoteMessage message) _onForegroundMessageReceived;
+  late Function(Map<String, dynamic> data) _onNotificationTap;
 
   bool _isFcmInitialized = false; // Flag to ensure FCM setup runs once
 
   NotificationProvider({
     required AuthService authService,
     required FirestoreService firestoreService,
-    required this.onForegroundMessageReceived,
-    required this.onNotificationTap,
   }) : _authService = authService,
        _firestoreService = firestoreService {
     _initializeLocalNotifications(); // Initialize local notifications immediately
   }
 
-  Future<void> initialize() async {
-    // This method now focuses on FCM related setup and permissions
-    // Local notifications are initialized in the constructor.
+  Future<void> initialize({
+    required Function(RemoteMessage message) onForegroundMessageReceived,
+    required Function(Map<String, dynamic> data) onNotificationTap,
+  }) async {
     if (_isFcmInitialized) {
       debugPrint("NotificationProvider: FCM already initialized. Verifying permissions.");
-      // Even if initialized, it's good to check notification permissions
-      // as they can be changed by the user in system settings.
       await checkAndRequestNotificationPermissions();
       return;
     }
@@ -41,6 +39,14 @@ class NotificationProvider {
 
     // Request notification permissions first
     await checkAndRequestNotificationPermissions();
+
+    // Store the callbacks
+    _onForegroundMessageReceived = onForegroundMessageReceived;
+    _onNotificationTap = onNotificationTap;
+
+    // Store the callbacks
+    _onForegroundMessageReceived = onForegroundMessageReceived;
+    _onNotificationTap = onNotificationTap;
 
     // Then proceed with token and listeners
     await _getAndSaveDeviceToken();
@@ -106,7 +112,7 @@ class NotificationProvider {
       // in HomeScreen to decide on further actions or UI updates based on the message type
       // and app state (e.g., current screen).
 
-      onForegroundMessageReceived(message); // Then call the UI callback for other actions
+      _onForegroundMessageReceived(message); // Then call the UI callback for other actions
       }
     );
   }
@@ -115,7 +121,7 @@ class NotificationProvider {
     // When the app is opened from a background state (not terminated)
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
       debugPrint('Message opened from background: ${message.messageId}');
-      onNotificationTap(message.data); // Use the callback
+      _onNotificationTap(message.data); // Use the callback
       // Example of how onNotificationTap might be used in HomeScreen:
       // if (message.data['type'] == 'chat_message') {
       //   final rideRequestId = message.data['rideRequestId'];
@@ -130,7 +136,7 @@ class NotificationProvider {
         // Example of how onNotificationTap might be used in HomeScreen:
         // if (message.data['type'] == 'chat_message') { ... }
 
-      onNotificationTap(message.data); // Use the callback
+      _onNotificationTap(message.data); // Use the callback
       }
     });
   }
@@ -147,28 +153,56 @@ class NotificationProvider {
     );
     await _localNotificationsPlugin.initialize(initializationSettings,
       onDidReceiveNotificationResponse: (NotificationResponse notificationResponse) async {
-        // Handle tap on local notification
-        debugPrint('Local notification tapped: ${notificationResponse.payload}');
-        // You might want to parse the payload and navigate
-      }
+        // This handles taps on the main notification body when the app is in the foreground.
+        debugPrint('Local notification tapped with payload: ${notificationResponse.payload}');
+        if (notificationResponse.payload != null && notificationResponse.payload!.isNotEmpty) {
+          try {
+            final Map<String, dynamic> data = jsonDecode(notificationResponse.payload!);
+            _onNotificationTap(data); // Use the main handler to navigate
+          } catch (e) {
+            debugPrint('Error decoding notification payload: $e');
+          }
+        }
+      },
+      // This callback is needed for Android to handle background actions like "Reply"
+      onDidReceiveBackgroundNotificationResponse: onDidReceiveBackgroundNotificationResponse,
     );
   }
 
+  // This function needs to be a top-level function or a static method to be used as a callback for background execution.
+  @pragma('vm:entry-point')
+  static void onDidReceiveBackgroundNotificationResponse(NotificationResponse notificationResponse) {
+    // This is called when a notification action (like 'Reply') is tapped while the app is in the background or terminated.
+    // IMPORTANT: This runs in a separate isolate. You cannot update UI or use providers from the main app here.
+    // You would need to re-initialize services like Firebase to send a message.
+    debugPrint('Background notification action tapped: actionId=${notificationResponse.actionId}, input=${notificationResponse.input}');
+
+    // Here you would implement the logic to send the reply.
+    // This is a complex task involving background processing.
+    // For now, we just log the action.
+  }
+
   Future<void> _showLocalNotification(RemoteMessage message) async {
-    // Example using flutter_local_notifications
-    const AndroidNotificationDetails androidPlatformChannelSpecifics =
-        AndroidNotificationDetails(
+    final String type = message.data['type'] ?? '';
+    List<AndroidNotificationAction> actions = [];
+
+    // Add a "Reply" action for chat messages
+    if (type == 'chat_message') {
+      actions.add(const AndroidNotificationAction('reply_action', 'Reply', inputs: [AndroidNotificationActionInput(label: 'Type your message...')]));
+    }
+
+    final AndroidNotificationDetails androidPlatformChannelSpecifics = AndroidNotificationDetails(
       'your_channel_id', //  unique channel ID
       'Your Channel Name', // channel name
       channelDescription: 'Your channel description', // channel description
       importance: Importance.max,
       priority: Priority.high,
-      showWhen: false,
-      // sound: RawResourceAndroidNotificationSound('custom_sound'), // if you have a custom sound
+      showWhen: true,
+      actions: actions,
     );
     // Add iOS details if needed
     // const DarwinNotificationDetails iOSPlatformChannelSpecifics = DarwinNotificationDetails();
-    const NotificationDetails platformChannelSpecifics =
+    final NotificationDetails platformChannelSpecifics =
         NotificationDetails(android: androidPlatformChannelSpecifics /*, iOS: iOSPlatformChannelSpecifics*/);
 
     await _localNotificationsPlugin.show(
@@ -176,7 +210,8 @@ class NotificationProvider {
       message.notification?.title,
       message.notification?.body,
       platformChannelSpecifics,
-      payload: message.data.toString(), // Optional: pass data to be used when notification is tapped
+      // Encode the data map as a JSON string for easy parsing on tap.
+      payload: jsonEncode(message.data),
     );
   }
 }
