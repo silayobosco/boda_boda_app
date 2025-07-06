@@ -1,6 +1,10 @@
+import 'login_screen.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:provider/provider.dart';
+import '../services/auth_service.dart';
 import '../utils/ui_utils.dart'; // For spacing and styles
 import 'about_us_screen.dart';
 import 'help_and_support_screen.dart';
@@ -85,8 +89,16 @@ class DriverAccountScreen extends StatelessWidget {
                 );
               }),
               verticalSpaceLarge,
+              _buildSectionTitle(context, AppLocale.accountActions.getString(context)),
+              _buildAccountOption(context, Icons.switch_account, AppLocale.switchToCustomer.getString(context), () {
+                _showSwitchRoleDialog(context, driverProvider);
+              }),
+              verticalSpaceSmall,
               _buildAccountOption(context, Icons.delete_forever, AppLocale.deleteAccount.getString(context),
                   () => AccountUtils.showDeleteAccountDialog(context), isDestructive: true),
+              verticalSpaceSmall,
+              _buildAccountOption(context, Icons.exit_to_app, AppLocale.logout.getString(context),
+                  () => _showLogoutConfirmationDialog(context, driverProvider), isDestructive: true),
             ],
           ),
         );
@@ -108,5 +120,113 @@ class DriverAccountScreen extends StatelessWidget {
         title: Text(title, style: TextStyle(color: isDestructive ? theme.colorScheme.error : null)),
         onTap: onTap,
         contentPadding: EdgeInsets.zero);
+  }
+
+  void _showSwitchRoleDialog(BuildContext context, DriverProvider driverProvider) {
+    final theme = Theme.of(context);
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(AppLocale.switchToCustomer.getString(context)),
+        content: Text(AppLocale.switch_to_customer_warning.getString(context)),
+        actions: [
+          TextButton(
+            child: Text(AppLocale.dialog_cancel.getString(context), style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.7))),
+            onPressed: () => Navigator.of(dialogContext).pop(),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: theme.colorScheme.primary,
+              foregroundColor: theme.colorScheme.onPrimary,
+            ),
+            child: Text(AppLocale.switch_and_go_offline.getString(context)),
+            onPressed: () async {
+              // Close dialog first
+              Navigator.of(dialogContext).pop();
+
+              // Capture context-dependent objects before async gap
+              final scaffoldMessenger = ScaffoldMessenger.of(context);
+              final navigator = Navigator.of(context);
+              final authService = AuthService();
+              final String? userId = authService.currentUser?.uid;
+
+              if (userId == null) {
+                scaffoldMessenger.showSnackBar(SnackBar(content: Text(AppLocale.error_user_not_found.getString(context))));
+                return;
+              }
+
+              try {
+                // Go offline first (referencing logic from driver_home.dart)
+                if (driverProvider.isOnline) {
+                  await driverProvider.toggleOnlineStatus();
+                }
+                
+                // Then switch role in Firestore
+                await FirebaseFirestore.instance.collection('users').doc(userId).update({'role': 'Customer'});
+
+                // Sign out to force re-authentication with the new role
+                await FirebaseAuth.instance.signOut();
+
+                // Navigate to login screen
+                navigator.pushAndRemoveUntil(MaterialPageRoute(builder: (context) => const LoginScreen()), (route) => false);
+              } catch (e) {
+                scaffoldMessenger.showSnackBar(SnackBar(content: Text("${AppLocale.failedToSwitchRole.getString(context)}: $e")));
+              }
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showLogoutConfirmationDialog(BuildContext context, DriverProvider driverProvider) {
+    final theme = Theme.of(context);
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(AppLocale.logout.getString(context)),
+        content: Text(AppLocale.logout_confirmation.getString(context)),
+        actions: [
+          TextButton(
+            child: Text(AppLocale.dialog_cancel.getString(context), style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.7))),
+            onPressed: () => Navigator.of(dialogContext).pop(),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: theme.colorScheme.error,
+              foregroundColor: theme.colorScheme.onError,
+            ),
+            child: Text(AppLocale.logout.getString(context)),
+            onPressed: () async {
+              // Close dialog
+              Navigator.of(dialogContext).pop();
+
+              // Capture context-dependent objects before async gap
+              final scaffoldMessenger = ScaffoldMessenger.of(context);
+              final navigator = Navigator.of(context);
+
+              try {
+                // Go offline first
+                if (driverProvider.isOnline) {
+                  await driverProvider.toggleOnlineStatus();
+                }
+
+                // Sign out from Firebase
+                await FirebaseAuth.instance.signOut();
+
+                // Navigate to login screen
+                if (!context.mounted) return;
+                navigator.pushAndRemoveUntil(MaterialPageRoute(builder: (context) => const LoginScreen()), (route) => false);
+              } catch (e) {
+                debugPrint("Error during logout: $e");
+                if (context.mounted) {
+                  scaffoldMessenger.showSnackBar(SnackBar(content: Text('${AppLocale.error_logging_out.getString(context)}: ${e.toString()}')));
+                }
+              }
+            },
+          ),
+        ],
+      ),
+    );
   }
 }
