@@ -23,9 +23,15 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _passwordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   bool _obscurePassword = true;
+  bool _isLoading = false;
 
   void login() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_isLoading) return; // Prevent multiple submissions
+
+    setState(() {
+      _isLoading = true;
+    });
 
     String email = _emailController.text.trim();
     String password = _passwordController.text.trim();
@@ -63,6 +69,12 @@ class _LoginScreenState extends State<LoginScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text("${AppLocale.login_failed.getString(context)}$e")),
         );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
       }
     }
   }
@@ -231,15 +243,25 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     verticalSpaceMedium,
                     ElevatedButton(
-                      onPressed: login,
+                      onPressed: _isLoading ? null : login,
                       style: appButtonStyle().copyWith(
                           padding: MaterialStateProperty.all<EdgeInsets>(
                               const EdgeInsets.symmetric(vertical: 16))),
-                      child: Text(AppLocale.login.getString(context),
-                          style: appTextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16)),
+                      child: _isLoading
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                valueColor:
+                                    AlwaysStoppedAnimation<Color>(Colors.white),
+                                strokeWidth: 2.0,
+                              ),
+                            )
+                          : Text(AppLocale.login.getString(context),
+                              style: appTextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16)),
                     ),
                     verticalSpaceMedium,
                     ElevatedButton.icon(
