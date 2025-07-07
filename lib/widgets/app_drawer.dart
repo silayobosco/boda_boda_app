@@ -1,24 +1,28 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_localization/flutter_localization.dart';
-import 'package:provider/provider.dart';
 import '../screens/profile_screen.dart';
-import '../screens/login_screen.dart';
 import '../screens/about_us_screen.dart';
 import '../screens/help_and_support_screen.dart';
-import '../providers/driver_provider.dart';
 import '../screens/chat_list_screen.dart'; // Import ChatListScreen
+import '../utils/account_utils.dart'; // Import the new utility
 import '../localization/locales.dart';
 
 class AppDrawer extends StatelessWidget {
   final String userRole;
+  final String userName;
+  final String? userEmail;
+  final String? photoUrl;
 
-  const AppDrawer({super.key, required this.userRole});
+  const AppDrawer({
+    super.key, 
+    required this.userRole,
+    required this.userName,
+    this.userEmail,
+    this.photoUrl,
+  });
 
   @override
   Widget build(BuildContext context) {
-    User? user = FirebaseAuth.instance.currentUser;
     final theme = Theme.of(context); // Define theme here
 
     return Drawer(
@@ -35,53 +39,26 @@ class AppDrawer extends StatelessWidget {
               children: [
                 CircleAvatar(
                   radius: 40, // Adjust the size of the profile picture
-                  backgroundImage: user?.photoURL != null && user!.photoURL!.isNotEmpty
-                      ? NetworkImage(user.photoURL!)
+                  backgroundImage: photoUrl != null && photoUrl!.isNotEmpty
+                      ? NetworkImage(photoUrl!)
                       : null,
                   backgroundColor: theme.colorScheme.onPrimary.withOpacity(0.2),
-                  child: user?.photoURL == null || user!.photoURL!.isEmpty
+                  child: photoUrl == null || photoUrl!.isEmpty
                       ? Icon(Icons.person, size: 40, color: theme.colorScheme.onPrimary)
                       : null,
                 ),
                 const SizedBox(height: 10), // Spacing between picture and name
-                FutureBuilder<DocumentSnapshot>(
-                  future:
-                      FirebaseFirestore.instance
-                          .collection('users')
-                          .doc(user?.uid)
-                          .get(),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return Text(
-                        AppLocale.loading.getString(context),
-                        style: TextStyle(color: theme.colorScheme.onPrimary),
-                      );
-                    }
-                    if (snapshot.hasError) {
-                      return Text(
-                        AppLocale.errorLoadingUserData.getString(context),
-                        style: TextStyle(color: theme.colorScheme.onPrimary),
-                      );
-                    }
-                    if (!snapshot.hasData || !snapshot.data!.exists) {
-                      return Text(
-                        AppLocale.unknownUser.getString(context),
-                        style: TextStyle(color: theme.colorScheme.onPrimary),
-                      );
-                    }
-                    return Text(
-                      snapshot.data!['name'] ?? "Unknown User",
-                      style: TextStyle(
-                        color: theme.colorScheme.onPrimary,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    );
-                  },
+                Text(
+                  userName,
+                  style: TextStyle(
+                    color: theme.colorScheme.onPrimary,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 const SizedBox(height: 5), // Spacing between name and email
                 Text(
-                  user?.email ?? AppLocale.noEmail.getString(context),
+                  userEmail ?? AppLocale.noEmail.getString(context),
                   style: TextStyle(color: theme.colorScheme.onPrimary.withOpacity(0.8), fontSize: 14),
                 ),
               ],
@@ -150,62 +127,8 @@ class AppDrawer extends StatelessWidget {
         // Close the drawer first
         Navigator.of(context).pop();
         // Show confirmation dialog
-        _showLogoutConfirmationDialog(context);
+        AccountUtils.showLogoutConfirmationDialog(context, userRole: userRole);
       },
-    );
-  }
-
-  void _showLogoutConfirmationDialog(BuildContext context) {
-    final theme = Theme.of(context);
-    showDialog(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(AppLocale.logout.getString(context)),
-        content: Text(AppLocale.logout_confirmation.getString(context)),
-        actions: [
-          TextButton(
-            child: Text(AppLocale.dialog_cancel.getString(context), style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.7))),
-            onPressed: () => Navigator.of(dialogContext).pop(),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: theme.colorScheme.error,
-              foregroundColor: theme.colorScheme.onError,
-            ),
-            child: Text(AppLocale.logout.getString(context)),
-            onPressed: () async {
-              // Close dialog
-              Navigator.of(dialogContext).pop();
-
-              // Capture context-dependent objects before async gap
-              final scaffoldMessenger = ScaffoldMessenger.of(context);
-              final navigator = Navigator.of(context);
-
-              try {
-                // If user is a driver, make them offline first
-                if (userRole == 'Driver') {
-                  final driverProvider = Provider.of<DriverProvider>(context, listen: false);
-                  if (driverProvider.isOnline) {
-                    await driverProvider.toggleOnlineStatus();
-                  }
-                }
-
-                // Sign out from Firebase
-                await FirebaseAuth.instance.signOut();
-
-                // Navigate to login screen
-                if (!context.mounted) return;
-                navigator.pushAndRemoveUntil(MaterialPageRoute(builder: (context) => const LoginScreen()), (route) => false);
-              } catch (e) {
-                debugPrint("Error during logout: $e");
-                if (context.mounted) {
-                  scaffoldMessenger.showSnackBar(SnackBar(content: Text('${AppLocale.error_logging_out.getString(context)}: ${e.toString()}')));
-                }
-              }
-            },
-          ),
-        ],
-      ),
     );
   }
 }

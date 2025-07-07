@@ -540,6 +540,9 @@ mixin AppLocale {
   static const String notification_input_label_reply = 'notification_input_label_reply';
   static const String notification_channel_name = 'notification_channel_name';
   static const String notification_channel_description = 'notification_channel_description';
+  static const String admin_panel = 'admin_panel';
+  static const String admin_reports = 'admin_reports';
+  static const String admin_settings = 'admin_settings';
 
 
   static const Map<String, dynamic> EN = {
@@ -1052,6 +1055,9 @@ mixin AppLocale {
     notification_input_label_reply: 'Type your reply here...',
     notification_channel_name: 'Ride Notifications',
     notification_channel_description: 'Notifications for ride updates and messages.',
+    admin_panel: 'Panel',
+    admin_reports: 'Reports',
+    admin_settings: 'Settings',
   };
 
 
@@ -1562,5 +1568,8 @@ mixin AppLocale {
     notification_input_label_reply: 'Andika ujumbe wako...',
     notification_channel_name: 'Arifa za Safari',
     notification_channel_description: 'Arifa za maombi ya safari, masasisho, na jumbe za soga.',
+    admin_panel: 'Jopo',
+    admin_reports: 'Ripoti',
+    admin_settings: 'Mipangilio',
   };
 }
