@@ -61,7 +61,8 @@ mixin AppLocale {
   static const String settings = 'settings';
   static const String logout = 'logout';
   static const String accountActions = 'accountActions';
-  static const String logout_confirmation = 'logout_confirmation';
+  static const String logout_confirmation_driver = 'logout_confirmation_driver';
+  static const String logout_confirmation_customer = 'logout_confirmation_customer';
   static const String dialog_cancel = 'dialog_cancel';
   static const String error_logging_out = 'error_logging_out';
   static const String unableToLoadDriverStatus = 'unable_to_load_driver_status';
@@ -603,9 +604,10 @@ mixin AppLocale {
     profile: 'Profile',
     chats: 'Chats',
     settings: 'Settings',
-    logout: 'Logout',
     accountActions: 'Account Actions',
-    logout_confirmation: 'Are you sure you want to log out? If you are a driver, this will take you offline.',
+    logout: 'Logout',
+    logout_confirmation_driver: 'Are you sure you want to log out? This will take you offline and you will lose your position in the Kijiwe queue.',
+    logout_confirmation_customer: 'Are you sure you want to log out?',
     dialog_cancel: 'Cancel',
     error_logging_out: 'Error logging out',
     unableToLoadDriverStatus: 'Unable to load driver status',
@@ -1116,9 +1118,10 @@ mixin AppLocale {
     profile: 'Wasifu',
     chats: 'Soga',
     settings: 'Mipangilio',
-    logout: 'Toka',
     accountActions: 'Vitendo vya Akaunti',
-    logout_confirmation: 'Una uhakika unataka kutoka? Ikiwa wewe ni dereva, hii itakutoa mtandaoni.',
+    logout: 'Toka',
+    logout_confirmation_driver: 'Una uhakika unataka kutoka? Kitendo hiki kitakutoa hewani na utapoteza nafasi yako kwenye foleni ya Kijiwe.',
+    logout_confirmation_customer: 'Una uhakika unataka kutoka?',
     dialog_cancel: 'Ghairi',
     error_logging_out: 'Hitilafu wakati wa kutoka',
     unableToLoadDriverStatus: 'Imeshindwa kupakia hali ya dereva',
