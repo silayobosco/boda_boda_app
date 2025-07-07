@@ -89,25 +89,32 @@ void main() async {
   runApp(
   MultiProvider(
     providers: [
-      // By creating the ThemeProvider here and calling loadThemeMode,
-      // the theme is loaded correctly for the entire app.
+      // --- Independent Providers ---
       ChangeNotifierProvider(create: (_) => ThemeProvider()..loadThemeMode()),
       ChangeNotifierProvider(create: (_) => LocationProvider()),
       ChangeNotifierProvider(create: (_) => MapDataProvider()),
-      ChangeNotifierProvider(create: (_) => DriverProvider()),
-      ChangeNotifierProvider(
-          create: (context) => NotificationProvider( // Use context.read for consistency
-              authService: context.read<AuthService>(),
-              firestoreService: context.read<FirestoreService>(),
-          )),
-      // Instantiate services directly in the provider list to avoid global variables.
       Provider<AuthService>(create: (_) => AuthService()),
       Provider<FirestoreService>(create: (_) => FirestoreService()),
-      // RideRequestProvider depends on FirestoreService, so it uses `context.read`.
+
+      // --- Dependent Providers (must come after services they depend on) ---
       ChangeNotifierProvider<RideRequestProvider>(
         create: (context) => RideRequestProvider(
           firestoreService: context.read<FirestoreService>(),
         )
+      ),
+      ChangeNotifierProvider<DriverProvider>(
+        create: (context) => DriverProvider(
+          authService: context.read<AuthService>(),
+          firestoreService: context.read<FirestoreService>(),
+        ),
+      ),
+      // NotificationProvider depends on multiple services and providers.
+      ChangeNotifierProvider<NotificationProvider>(
+        create: (context) => NotificationProvider(
+          authService: context.read<AuthService>(),
+          firestoreService: context.read<FirestoreService>(),
+          driverProvider: context.read<DriverProvider>(),
+        ),
       ),
     ],
     child: const MyApp(),
@@ -152,7 +159,6 @@ class _MyAppState extends State<MyApp> {
     final notificationProvider = Provider.of<NotificationProvider>(context, listen: false);
     notificationProvider.initialize(
       onNotificationTap: _handleNotificationTap,
-      onForegroundMessageReceived: _handleForegroundMessage,
     );
   }
 
@@ -194,12 +200,6 @@ class _MyAppState extends State<MyApp> {
     );
   }
 
-  void _handleForegroundMessage(RemoteMessage message) {
-    debugPrint("Foreground message received in UI: ${message.notification?.title}");
-    // This is a great place to show an in-app banner or update a badge count.
-    // For now, we'll just log it. The local notification is already shown by the provider.
-  }
-
   /// Handles navigation when a notification is tapped.
   void _handleNotificationTap(Map<String, dynamic> data) {
     final navigator = navigatorKey.currentState;
@@ -210,6 +210,14 @@ class _MyAppState extends State<MyApp> {
 
     final String? type = data['type'] as String?;
     debugPrint("Handling notification tap with data: $data");
+
+    // If the notification is a new ride request for a driver, update the provider state
+    // before navigating. This ensures the UI is ready when the HomeScreen is shown.
+    final String? status = data['status'] as String?;
+    if (status == 'pending_driver_acceptance') {
+      final driverProvider = navigator.context.read<DriverProvider>();
+      driverProvider.setNewPendingRide(data);
+    }
 
     if (type == 'chat_message') {
       final String? rideRequestId = data['rideRequestId'] as String?;
