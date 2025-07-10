@@ -16,13 +16,14 @@ class AccountUtils {
         content: Text(AppLocale.deleteAccountContent.getString(dialogContext)),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
+            onPressed: () => Navigator.of(dialogContext).pop(false), // Return false when cancel is pressed
             child: Text(AppLocale.deleteAccountCancel.getString(dialogContext)),
           ),
-          TextButton(
+          ElevatedButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            style: TextButton.styleFrom(
-              foregroundColor: Theme.of(context).colorScheme.error,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
             ),
             child: Text(AppLocale.deleteAccountConfirm.getString(dialogContext)),
           ),
@@ -31,32 +32,35 @@ class AccountUtils {
     );
 
     if (confirmed == true && context.mounted) {
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => const Center(child: CircularProgressIndicator()),
-      );
+      // Capture localized strings before the async gap.
+        final authService = Provider.of<AuthService>(context, listen: false);
+        final successMessage = AppLocale.deleteAccountSuccess.getString(context);
+        final errorMessage = AppLocale.deleteAccountError.getString(context);
+        final scaffoldMessenger = ScaffoldMessenger.of(context);
 
+      //showDialog(
+        //context: context,
+        //barrierDismissible: false,
+        //builder: (context) => const Center(child: CircularProgressIndicator()),
+      //);
       try {
-        final HttpsCallable callable = FirebaseFunctions.instance.httpsCallable('deleteUserAccount');
-        await callable.call();
+          final HttpsCallable callable = FirebaseFunctions.instance.httpsCallable('deleteUserAccount');
+          await callable.call();
 
-        if (!context.mounted) return;
-        Navigator.of(context, rootNavigator: true).pop(); // Dismiss loading dialog
+          if (!context.mounted) return; // Check if the widget is still mounted
+          Navigator.of(context, rootNavigator: true).pop(); // Dismiss loading dialog on success
 
-        await Provider.of<AuthService>(context, listen: false).signOut();
+          await authService.signOut(); // Sign out after successful deletion
 
-        if (!context.mounted) return;
-        Navigator.of(context).pushNamedAndRemoveUntil('/login', (Route<dynamic> route) => false);
-        
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(AppLocale.deleteAccountSuccess.getString(context))),
-        );
+          if (!context.mounted) return; // Check before navigating
+          Navigator.of(context, rootNavigator: true).pushNamedAndRemoveUntil('/login', (Route<dynamic> route) => false);
+
+          scaffoldMessenger.showSnackBar(SnackBar(content: Text(successMessage)));
       } catch (e) {
-        if (!context.mounted) return;
-        Navigator.of(context, rootNavigator: true).pop(); // Dismiss loading dialog
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${AppLocale.deleteAccountError.getString(context)} Please try again.')),
+        if (!context.mounted) return; // Handle errors gracefully
+        Navigator.of(context, rootNavigator: true).pop(); // Dismiss loading dialog on error
+        scaffoldMessenger.showSnackBar(
+          SnackBar(content: Text('$errorMessage Please try again.')),
         );
       }
     }
@@ -67,7 +71,7 @@ class AccountUtils {
       context: context,
       builder: (dialogContext) {
         // It's best practice to get theme and localization from the dialog's own context.
-        final theme = Theme.of(dialogContext);
+        final theme = Theme.of(dialogContext); // Use dialogContext for theme
 
         // Choose the confirmation message based on the user's role.
         final String confirmationMessage = (userRole == 'Driver')
@@ -78,7 +82,10 @@ class AccountUtils {
           title: Text(AppLocale.logout.getString(dialogContext)),
           content: Text(confirmationMessage),
           actions: [
-            TextButton(
+              TextButton(
+              // Cancel action remains as before
+              style: TextButton.styleFrom(
+                  foregroundColor: Theme.of(context).colorScheme.onSurface.withOpacity(0.7)),
               child: Text(AppLocale.dialog_cancel.getString(dialogContext), style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.7))),
               onPressed: () => Navigator.of(dialogContext).pop(),
             ),
@@ -89,13 +96,20 @@ class AccountUtils {
               ),
               child: Text(AppLocale.logout.getString(dialogContext)),
               onPressed: () async {
-                // Close dialog
+                // Close confirmation dialog
                 Navigator.of(dialogContext).pop();
+
+                // Show loading indicator
+                //showDialog(
+                  //context: context,
+                  //barrierDismissible: false,
+                  //builder: (context) => const Center(child: CircularProgressIndicator()),
+                //);
 
                 // Capture context-dependent objects from the original context before the async gap
                 final scaffoldMessenger = ScaffoldMessenger.of(context);
-                final navigator = Navigator.of(context);
                 final authService = Provider.of<AuthService>(context, listen: false);
+                final errorLoggingOutMessage = AppLocale.error_logging_out.getString(context);
 
                 try {
                   // If user is a driver, make them offline first
@@ -109,13 +123,16 @@ class AccountUtils {
                   // Sign out using the AuthService, consistent with delete dialog
                   await authService.signOut();
 
-                  // Navigate to login screen
                   if (!context.mounted) return;
-                  navigator.pushNamedAndRemoveUntil('/login', (Route<dynamic> route) => false);
+                  // Use root navigator for both actions to ensure dialog is dismissed before navigation
+                  Navigator.of(context, rootNavigator: true).popAndPushNamed('/login');
                 } catch (e) {
+                    if (context.mounted) {
+                    Navigator.of(context, rootNavigator: true).pop(); // Dismiss loading dialog
+                  }
                   debugPrint("Error during logout: $e");
                   if (context.mounted) {
-                    scaffoldMessenger.showSnackBar(SnackBar(content: Text('${AppLocale.error_logging_out.getString(context)}: ${e.toString()}')));
+                    scaffoldMessenger.showSnackBar(SnackBar(content: Text('$errorLoggingOutMessage: ${e.toString()}')));
                   }
                 }
               },
@@ -132,7 +149,7 @@ class AccountUtils {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text(AppLocale.switchToCustomer.getString(context)),
-        content: Text(AppLocale.switch_to_customer_warning.getString(context)),
+          content: Text(AppLocale.switch_to_customer_warning.getString(context)),
         actions: [
           TextButton(
             child: Text(AppLocale.dialog_cancel.getString(context), style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.7))),
@@ -145,19 +162,27 @@ class AccountUtils {
             ),
             child: Text(AppLocale.switch_and_go_offline.getString(context)),
             onPressed: () async {
-              // Close dialog first
+              // Close confirmation dialog first
               Navigator.of(dialogContext).pop();
+
+              // Show loading indicator
+              //showDialog(
+                //context: context,
+                //barrierDismissible: false,
+                //builder: (context) => const Center(child: CircularProgressIndicator()),
+              //);
 
               // Capture context-dependent objects before async gap
               final scaffoldMessenger = ScaffoldMessenger.of(context);
-              final navigator = Navigator.of(context);
               final driverProvider = Provider.of<DriverProvider>(context, listen: false);
               final authService = Provider.of<AuthService>(context, listen: false);
               final String? userId = authService.currentUser?.uid;
+              final userNotFoundMessage = AppLocale.error_user_not_found.getString(context);
+              final failedToSwitchMessage = AppLocale.failedToSwitchRole.getString(context);
 
               if (userId == null) {
                 if (context.mounted) {
-                  scaffoldMessenger.showSnackBar(SnackBar(content: Text(AppLocale.error_user_not_found.getString(context))));
+                  scaffoldMessenger.showSnackBar(SnackBar(content: Text(userNotFoundMessage)));
                 }
                 return;
               }
@@ -175,12 +200,15 @@ class AccountUtils {
                 await authService.signOut();
 
                 // Navigate to login screen using named route
-                if (!context.mounted) return;
-                navigator.pushNamedAndRemoveUntil('/login', (route) => false);
+                if (!context.mounted) return; // Check before navigation
+                // Use root navigator for both actions
+                Navigator.of(context, rootNavigator: true).popAndPushNamed('/login');
               } catch (e) {
                 if (context.mounted) {
-                    scaffoldMessenger.showSnackBar(SnackBar(content: Text("${AppLocale.failedToSwitchRole.getString(context)}: $e")));
-                }
+                    // Dismiss loading dialog on error
+                    Navigator.of(context, rootNavigator: true).pop();
+                    scaffoldMessenger.showSnackBar(SnackBar(content: Text("$failedToSwitchMessage: $e")));
+                  }
               }
             },
           ),
@@ -189,29 +217,62 @@ class AccountUtils {
     );
   }
 
-  static void switchRoleToDriver(BuildContext context, String userId) async {
+  static void showSwitchToDriverDialog(BuildContext context) async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final String? userId = authService.currentUser?.uid;
+
+      if (userId == null) {
+      final userNotFoundMessage = AppLocale.error_user_not_found.getString(context);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(userNotFoundMessage)));
+      }
+      return;
+    }
+
+    // Show confirmation dialog
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(AppLocale.switchToDriverTitle.getString(dialogContext)),
+        content: Text(AppLocale.switchToDriverContent.getString(dialogContext)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(AppLocale.dialog_cancel.getString(dialogContext)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(AppLocale.switchToDriverConfirm.getString(dialogContext)),
+              ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !context.mounted) return;
+
+    // Show loading indicator
+    //showDialog(
+      //context: context,
+      //barrierDismissible: false,
+      //builder: (context) => const Center(child: CircularProgressIndicator()),
+    //);
+
     // Capture context-dependent objects before async gap
     final scaffoldMessenger = ScaffoldMessenger.of(context);
-    final navigator = Navigator.of(context);
-    final authService = Provider.of<AuthService>(context, listen: false);
+    final failedToSwitchMessage = AppLocale.failedToSwitchRole.getString(context);
 
     try {
       await FirebaseFirestore.instance.collection('users').doc(userId).update({'role': 'Driver'});
-
-      // Sign out to force re-authentication with the new role
       await authService.signOut();
 
-      // After the await, check if the widget is still mounted before navigating
       if (!context.mounted) return;
-
-      // Navigate to login screen using named route
-      navigator.pushNamedAndRemoveUntil('/login', (route) => false);
+      // Use root navigator for both actions
+      Navigator.of(context, rootNavigator: true).popAndPushNamed('/login');
     } catch (e) {
       debugPrint("Error switching role to Driver: $e");
       if (context.mounted) {
-        scaffoldMessenger.showSnackBar(
-          SnackBar(content: Text('${AppLocale.failedToSwitchRole.getString(context)}: ${e.toString()}')),
-        );
+        Navigator.of(context, rootNavigator: true).pop(); // Dismiss loading dialog
+        scaffoldMessenger.showSnackBar(SnackBar(content: Text('$failedToSwitchMessage: ${e.toString()}')));
       }
     }
   }

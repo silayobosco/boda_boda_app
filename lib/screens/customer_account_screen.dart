@@ -65,7 +65,7 @@ class CustomerAccountScreen extends StatelessWidget {
         // Add a null check for safety, even though uid should be non-nullable.
         final userId = userModel.uid;
         if (userId != null) {
-          AccountUtils.switchRoleToDriver(context, userId);
+          AccountUtils.showSwitchToDriverDialog(context);
         }
       });
     } else {

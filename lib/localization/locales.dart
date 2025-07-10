@@ -68,6 +68,9 @@ mixin AppLocale {
   static const String unableToLoadDriverStatus = 'unable_to_load_driver_status';
   static const String switchToCustomer = 'switch_to_customer';
   static const String switchToDriver = 'switch_to_driver';
+  static const String switchToDriverTitle = 'switch_to_driver_title';
+  static const String switchToDriverContent = 'switch_to_driver_content';
+  static const String switchToDriverConfirm = 'switch_to_driver_confirm';
   static const String becomeADriver = 'become_a_driver';
   static const String goOffline = 'goOffline';
   static const String error_user_not_found = 'error_user_not_found';
@@ -616,6 +619,9 @@ mixin AppLocale {
     unableToLoadDriverStatus: 'Unable to load driver status',
     switchToCustomer: 'Switch to Customer',
     switchToDriver: 'Switch to Driver',
+    switchToDriverTitle: 'Switch to Driver Role?',
+    switchToDriverContent: 'This will log you out and you will need to log back in as a driver. Are you sure you want to continue?',
+    switchToDriverConfirm: 'Yes, Switch Role',
     becomeADriver: 'Become a Driver',
     goOffline: 'Go Offline',
     error_user_not_found: 'Error: User not found.',
@@ -1133,6 +1139,9 @@ mixin AppLocale {
     unableToLoadDriverStatus: 'Imeshindwa kupakia hali ya dereva',
     switchToCustomer: 'Badilisha uwe Mteja',
     switchToDriver: 'Badilisha uwe Dereva',
+    switchToDriverTitle: 'Badilisha Jukumu la Dereva?',
+    switchToDriverContent: 'Hii itakuondoa na utahitaji kuingia tena kama dereva. Una uhakika unataka kuendelea?',
+    switchToDriverConfirm: 'Ndio, Badilisha Jukumu',
     becomeADriver: 'Kuwa Dereva',
     goOffline: 'Toka Hewani',
     error_user_not_found: 'Hitilafu: Mtumiaji hajapatikana.',

@@ -4,17 +4,18 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart'; // Example for local notifications
 import '../utils/notification_localization_util.dart';
+import '../providers/driver_provider.dart'; // Import DriverProvider
 import '../services/firestore_service.dart';
 import '../services/auth_service.dart'; // Import AuthService
 
 class NotificationProvider with ChangeNotifier {
   final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
   final FirestoreService _firestoreService;
-  final AuthService _authService; // Add AuthService dependency
+  final AuthService _authService;
+  final DriverProvider _driverProvider; // Add DriverProvider dependency
   final FlutterLocalNotificationsPlugin _localNotificationsPlugin = FlutterLocalNotificationsPlugin();
 
   // Callbacks will be set during initialization
-  late Function(RemoteMessage message) _onForegroundMessageReceived;
   late Function(Map<String, dynamic> data) _onNotificationTap;
 
   bool _isFcmInitialized = false; // Flag to ensure FCM setup runs once
@@ -22,13 +23,14 @@ class NotificationProvider with ChangeNotifier {
   NotificationProvider({
     required AuthService authService,
     required FirestoreService firestoreService,
+    required DriverProvider driverProvider, // Add to constructor
   }) : _authService = authService,
-       _firestoreService = firestoreService {
+       _firestoreService = firestoreService,
+       _driverProvider = driverProvider { // Initialize it
     _initializeLocalNotifications(); // Initialize local notifications immediately
   }
 
   Future<void> initialize({
-    required Function(RemoteMessage message) onForegroundMessageReceived,
     required Function(Map<String, dynamic> data) onNotificationTap,
   }) async {
     if (_isFcmInitialized) {
@@ -42,7 +44,6 @@ class NotificationProvider with ChangeNotifier {
     await checkAndRequestNotificationPermissions();
 
     // Store the callbacks
-    _onForegroundMessageReceived = onForegroundMessageReceived;
     _onNotificationTap = onNotificationTap;
 
     // Then proceed with token and listeners
@@ -99,19 +100,26 @@ class NotificationProvider with ChangeNotifier {
   void _setupForegroundNotifications() {
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       debugPrint('NotificationProvider: Foreground FCM message received!');
-      // Show the local notification first
       if (message.notification != null) { // Only show if there's a notification part
         _showLocalNotification(message);
       }
-      // If it's a chat message and the user is not on the chat screen for this ride,
-      // NotificationProvider could show a generic local notification here.
-      // However, the current setup relies on the onForegroundMessageReceived callback
-      // in HomeScreen to decide on further actions or UI updates based on the message type
-      // and app state (e.g., current screen).
+      // Handle the logic for the message directly within the provider.
+      _handleForegroundMessage(message);
+    });
+  }
 
-      _onForegroundMessageReceived(message); // Then call the UI callback for other actions
-      }
-    );
+  /// Handles the logic for a foreground message, like updating other providers.
+  void _handleForegroundMessage(RemoteMessage message) {
+    debugPrint('NotificationProvider: Handling foreground message logic directly.');
+    final data = message.data;
+    final String? status = data['status'] as String?;
+    final String? rideRequestId = data['rideRequestId'] as String?;
+
+    // If the message is a new ride request, update the DriverProvider.
+    if (status == 'pending_driver_acceptance' && rideRequestId != null) {
+      debugPrint('NotificationProvider: New ride request detected. Updating DriverProvider.');
+      _driverProvider.setNewPendingRide(data);
+    }
   }
 
   void _setupInteractionHandlers() {

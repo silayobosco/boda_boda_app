@@ -100,8 +100,8 @@ class _DriverHomeState extends State<DriverHome> with AutomaticKeepAliveClientMi
 
     // Define the listener method
   void _locationProviderListener() {
-    // Use the stored provider instance. The mounted check prevents calling setState on a disposed widget.
-    if (mounted && _locationProvider.currentLocation != null) {
+    debugPrint("DriverHome: _locationProviderListener invoked. Mounted: $mounted, Location: ${_locationProvider.currentLocation}");
+    if (mounted && _locationProvider.currentLocation != null) { // Mounted check within the listener
       _updateDriverLocationAndMap(_locationProvider);
     }
   }

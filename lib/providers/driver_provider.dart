@@ -7,14 +7,14 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'dart:math';
 
 class DriverProvider extends ChangeNotifier {
-  final AuthService _authService = AuthService();
-  final FirestoreService _firestoreService = FirestoreService();
+  final AuthService _authService;
+  final FirestoreService _firestoreService;
   // RideRequestProvider is typically accessed via Provider.of in widgets, or passed if needed for direct calls
   bool _isOnline = false;
   String? _currentKijiweId;
   bool _isLoading = false;
-  double _dailyEarnings = 0.0; // New field for daily earnings
-  Map<String, dynamic>? _pendingRideRequestDetails;
+    double _dailyEarnings = 0.0; // New field for daily earnings
+    Map<String, dynamic>? _pendingRideRequestDetails;
   Map<String, dynamic>? _driverProfileData; // To store driver-specific profile data
   Map<String, dynamic>? _fareConfig; // To store fare configuration from Firestore
 
@@ -22,8 +22,16 @@ class DriverProvider extends ChangeNotifier {
   bool get isOnline => _isOnline;
   String? get currentKijiweId => _currentKijiweId;
   Map<String, dynamic>? get pendingRideRequestDetails => _pendingRideRequestDetails;
-  double get dailyEarnings => _dailyEarnings; // Getter for daily earnings
-  Map<String, dynamic>? get driverProfileData => _driverProfileData; // Getter for driver profile
+    double get dailyEarnings => _dailyEarnings; // Getter for daily earnings
+    Map<String, dynamic>? get driverProfileData => _driverProfileData; // Getter for driver profile
+  DriverProvider({
+    required AuthService authService,
+    required FirestoreService firestoreService,
+  })  : _authService = authService,
+        _firestoreService = firestoreService,
+        super() {
+    debugPrint("DriverProvider: Initialized with authService and firestoreService.");
+  }
 
   void setLoading(bool value) {
     _isLoading = value;

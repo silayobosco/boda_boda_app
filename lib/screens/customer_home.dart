@@ -354,7 +354,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                   markerId: MarkerId('kijiwe_${doc.id}'),
                   position: kijiweLocation, // This is correct
                   icon: _kijiweIcon!, // This is correct
-                  infoWindow: InfoWindow(title: kijiweName, snippet: AppLocale.infoWindowKijiweSnippet.getString(context)),
+                  infoWindow: InfoWindow(title: kijiweName, snippet: 'Tap for options'),
                   onTap: () => _showKijiweOptionsDialog(kijiweName, kijiweLocation, kijiweId),
                   alpha: 0.8,
                   zIndex: 1,
@@ -1463,14 +1463,14 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                     DropdownButtonFormField<String>(
                       value: _recurrenceType,
                       decoration: appInputDecoration(labelText: AppLocale.frequency.getString(context)),
-                      items: [AppLocale.daily.getString(context), AppLocale.weekly.getString(context)]
+                      items: ['Daily', 'Weekly']
                           .map((label) => DropdownMenuItem(
                                 value: label,
-                                child: Text(label),
+                                child: Text(label == 'Daily' ? AppLocale.daily.getString(context) : AppLocale.weekly.getString(context)),
                               ))
                           .toList(),
                       onChanged: (value) {
-                        stfSetState(() {
+                       stfSetState(() {
                           _recurrenceType = value ?? 'Daily';
                           if (_recurrenceType != AppLocale.weekly.getString(context)) {
                             _selectedRecurrenceDays = List.filled(7, false);
@@ -1500,11 +1500,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                     verticalSpaceSmall,
                     ElevatedButton.icon(
                       icon: const Icon(Icons.calendar_today), // The Icon
-                      label: Text(
-                        _recurrenceEndDate != null
-                          ? AppLocale.repeatUntil.getString(context).replaceFirst('{date}', _recurrenceEndDate!.toLocal().toString().split(' ')[0])
-                          : AppLocale.setEndDate.getString(context)
-                      ),
+                      label: Text(_recurrenceEndDate != null ? "Repeat until: ${_recurrenceEndDate!.toLocal()}".split(' ')[0] : 'Set End Date'),
                       onPressed: () async {
                         final DateTime? pickedEndDate = await showDatePicker(
                           context: stfContext,
