@@ -2050,25 +2050,36 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                                     overflow: TextOverflow.ellipsis, // Handle long text
                                   ),
                                 ),
-                                horizontalSpaceSmall, // Space before fare
-                                // Fare display part
-                                Builder(builder: (context) {
-                                  final currentFare = _estimatedFare;
-                                  // This log will now always execute when this part of the sheet is built
-                                  debugPrint("CustomerHome: DraggableSheet Builder - RENDERING FARE. CurrentFare: $currentFare, Distance: $_selectedRouteDistance, Duration: $_selectedRouteDuration");
-                                  if (currentFare != null && _selectedRouteDistance != null && _selectedRouteDuration != null) {
-                                    return Text(
-                                      '${AppLocale.fare.getString(context)}: TZS ${currentFare == currentFare.roundToDouble() ? currentFare.toStringAsFixed(0) : currentFare.toStringAsFixed(2)}',
-                                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold),
-                                    );
-                                  } else if (_selectedRouteDistance != null && _selectedRouteDuration != null) {
-                                      return Text(
-                                        '${AppLocale.fare.getString(context)}: ${AppLocale.calculatingFare.getString(context)}',
-                                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontStyle: FontStyle.italic, color: Theme.of(context).hintColor),
-                                      );
+                                horizontalSpaceMedium, // Space before fare
+                                  // Display Fare: Preferring final fare from active ride, then estimated fare, then a "calculating" message.
+                                  StreamBuilder<DocumentSnapshot>(
+                                    stream: _activeRideRequestId != null ? FirebaseFirestore.instance.collection('rideRequests').doc(_activeRideRequestId).snapshots() : null,
+                                    builder: (context, snapshot) {
+                                      // 1. Check for and display the final fare if available.
+                                      if (snapshot.hasData && snapshot.data!.exists) {
+                                        final rideData = snapshot.data!.data() as Map<String, dynamic>?;
+                                        final fare = rideData?['fare'] as num?;
+                                        if (fare != null) {
+                                          return Text('${AppLocale.final_fare.getString(context)}: TZS ${fare.toStringAsFixed(0)}', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary));
+                                        }
                                   }
-                                  return const SizedBox.shrink(); // If no distance/duration, don't show fare text yet
-                                }),
+
+                                      // 2. If no final fare, fall back to showing the estimated fare.
+                                      final currentFare = _estimatedFare;
+                                      if (currentFare != null && _selectedRouteDistance != null && _selectedRouteDuration != null) {
+                                        return Text(
+                                          '${AppLocale.fare.getString(context)}: TZS ${currentFare.toStringAsFixed(0)}',
+                                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold),
+                                        );
+                                      } else if (_selectedRouteDistance != null && _selectedRouteDuration != null) {
+                                        return Text(
+                                          '${AppLocale.fare.getString(context)}: ${AppLocale.calculatingFare.getString(context)}',
+                                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontStyle: FontStyle.italic, color: Theme.of(context).hintColor),
+                                        );
+                                      }
+                                    return const SizedBox.shrink(); // Show nothing if no active ride and no estimated fare.
+                                    },
+                                  ),
                                 ],
                               ),
                             ),
@@ -2790,6 +2801,23 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                   children: <Widget>[
                     Text(AppLocale.howWasYourRide.getString(context), style: theme.textTheme.bodyMedium),
                     verticalSpaceMedium,
+                    // Display final fare, if available
+                    StreamBuilder<DocumentSnapshot>(
+                      stream: FirebaseFirestore.instance.collection('rideRequests').doc(rideId).snapshots(),
+                      builder: (context, snapshot) {
+                        if (snapshot.hasData && snapshot.data!.exists) {
+                          final rideData = snapshot.data!.data() as Map<String, dynamic>?;
+                          final fare = rideData?['fare'] as num?;
+                          if (fare != null) {
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 8.0),
+                              child: Text('${AppLocale.final_fare_prefix.getString(context)} TZS ${fare.toStringAsFixed(0)}', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: theme.colorScheme.primary)),
+                            );
+                          }
+                        }
+                        return const SizedBox.shrink();
+                      }
+                    ),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: List.generate(5, (index) {
