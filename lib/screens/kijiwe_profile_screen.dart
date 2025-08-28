@@ -169,7 +169,7 @@ class _KijiweProfileScreenState extends State<KijiweProfileScreen> {
         }
         final user = userSnapshot.data!;
         final ageGroup = _calculateAgeGroup(user.dob);
-        final licensePlate = user.driverDetails?['licenseNumber'] ?? 'N/A';
+        final licensePlate = user.driverProfile?['licenseNumber'] ?? 'N/A';
 
         return Card(
           margin: const EdgeInsets.symmetric(vertical: 6.0),
@@ -182,7 +182,7 @@ class _KijiweProfileScreenState extends State<KijiweProfileScreen> {
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(user.driverDetails?['vehicleType'] ?? 'No vehicle info'),
+                Text(user.driverProfile?['vehicleType'] ?? 'No vehicle info'),
                 if (_currentUserRole == 'Driver') ...[
                   Text('${user.gender ?? 'N/A'} • $ageGroup'),
                   Text('${AppLocale.licensePlate.getString(context)}: $licensePlate'),

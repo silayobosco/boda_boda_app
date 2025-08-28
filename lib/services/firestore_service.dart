@@ -1,4 +1,4 @@
-import 'package:boda_boda/models/Ride_Request_Model.dart';
+import 'package:boda_boda/models/ride_request_model.dart';
 import 'dart:async';
 import 'dart:io';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -45,6 +45,33 @@ class FirestoreService {
       await _firestore.collection('users').doc(user.uid).update(user.toJson());
     } catch (e) {
       print("Error updating user: $e");
+      rethrow;
+    }
+  }
+
+  Future<void> updateUserField(String uid, String field, dynamic value) async {
+    try {
+      await _firestore.collection('users').doc(uid).update({field: value});
+    } catch (e) {
+      print("Error updating user field: $e");
+      rethrow;
+    }
+  }
+
+  Future<void> removeDriverFromKijiwe(String driverId) async {
+    try {
+      await _firestore.collection('users').doc(driverId).update({'driverProfile.kijiweId': null});
+    } catch (e) {
+      print("Error removing driver from kijiwe: $e");
+      rethrow;
+    }
+  }
+
+  Future<void> suspendDriver(String driverId, bool isSuspended) async {
+    try {
+      await _firestore.collection('users').doc(driverId).update({'isSuspended': isSuspended});
+    } catch (e) {
+      print("Error suspending driver: $e");
       rethrow;
     }
   }

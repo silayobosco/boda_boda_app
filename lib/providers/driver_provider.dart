@@ -99,17 +99,8 @@ class DriverProvider extends ChangeNotifier {
       _isOnline = false; // Reset on error
       _currentKijiweId = null;
       _driverProfileData = null;
-    } finally {
-      // Fetch daily earnings after loading driver data
-      try {
-        _dailyEarnings = await _firestoreService.getDriverDailyEarnings(userId);
-        debugPrint("DriverProvider: Fetched daily earnings: $_dailyEarnings");
-      } catch (e) {
-        debugPrint("DriverProvider: Error fetching daily earnings: $e");
-        _dailyEarnings = 0.0; // Reset on error
-      }
-          setLoading(false); // This will also call notifyListeners()
     }
+    setLoading(false);
   }
 
   Future<String?> toggleOnlineStatus() async {
@@ -463,6 +454,18 @@ class DriverProvider extends ChangeNotifier {
     } finally {
       setLoading(false);
     }
+  }
+
+  Future<void> fetchDriverDailyEarnings(String userId) async {
+    try {
+      _dailyEarnings = await _firestoreService.getDriverDailyEarnings(userId);
+      debugPrint("DriverProvider: Fetched daily earnings: $_dailyEarnings");
+    } catch (e) {
+      debugPrint("DriverProvider: Error fetching daily earnings: $e");
+      _dailyEarnings = 0.0; // Reset on error
+    }
+    // Notify listeners about the change in earnings
+    notifyListeners();
   }
 
   /// Calculates the fare for a given distance and duration.

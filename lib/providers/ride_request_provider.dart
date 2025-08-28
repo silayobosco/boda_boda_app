@@ -1,4 +1,4 @@
-import 'package:boda_boda/models/Ride_Request_Model.dart';
+import 'package:boda_boda/models/ride_request_model.dart';
 import 'package:boda_boda/models/user_model.dart';
 import 'package:cloud_firestore/cloud_firestore.dart'; // Add this import
 import 'package:flutter/material.dart';
@@ -36,7 +36,7 @@ class RideRequestProvider extends ChangeNotifier {
   }
 
   void _listenToRideRequests() {
-    _firestoreService.getRideRequests().listen((List<RideRequestModel> rideRequests) {
+    _firestoreService.getRideRequests().listen((rideRequests) {
       _rideRequests = rideRequests;
       notifyListeners(); 
     });
@@ -442,6 +442,24 @@ class RideRequestProvider extends ChangeNotifier {
 
   Stream<DocumentSnapshot> getQueueStream(String kijiweId) {
     return _firestoreService.getKijiweQueueStream(kijiweId);
+  }
+
+  Stream<RideRequestModel?> getCurrentRideForDriver(String driverId) {
+    return _firestoreService.getRideRequests()
+      .map((requests) {
+        try {
+          return requests.firstWhere(
+            (r) => r.driverId == driverId && 
+                  (r.status == 'goingToPickup' || 
+                   r.status == 'arrivedAtPickup' || 
+                   r.status == 'onRide' ||
+                   r.status == 'accepted'
+                  ),
+          );
+        } catch (e) {
+          return null; // No active ride found
+        }
+      });
   }
 
   // Client-side matching logic (_findAndAssignToNearestKijiweDriver) and

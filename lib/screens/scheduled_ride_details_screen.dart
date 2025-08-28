@@ -5,7 +5,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart' as gmf;
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 
-import '../models/Ride_Request_Model.dart';
+import '../models/ride_request_model.dart';
 import '../localization/locales.dart';
 import '../providers/ride_request_provider.dart';
 import '../utils/ui_utils.dart';
@@ -106,7 +106,7 @@ class _ScheduledRideDetailsScreenState extends State<ScheduledRideDetailsScreen>
     final rideProvider = Provider.of<RideRequestProvider>(context, listen: false);
 
     return StreamBuilder<RideRequestModel?>(
-      stream: rideProvider.getScheduledRideStream(widget.initialRide.id!),
+      stream: rideProvider.getScheduledRideStream(widget.initialRide.id!) as Stream<RideRequestModel?>?,
       initialData: widget.initialRide,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {

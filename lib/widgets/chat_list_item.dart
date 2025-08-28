@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
-import '../models/Ride_Request_Model.dart';
+import '../models/ride_request_model.dart';
 import '../screens/chat_screen.dart'; // For navigation
 
 class ChatListItem extends StatefulWidget {

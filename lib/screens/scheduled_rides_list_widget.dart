@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:provider/provider.dart';
-import '../models/Ride_Request_Model.dart'; // Assuming ScheduledRideModel or adapt RideRequestModel
+import '../models/ride_request_model.dart'; // Assuming ScheduledRideModel or adapt RideRequestModel
 import '../providers/ride_request_provider.dart'; // To fetch scheduled rides
 import '../services/auth_service.dart'; // To get current user ID
 import '../localization/locales.dart';
@@ -24,7 +24,7 @@ class ScheduledRidesListWidget extends StatelessWidget {
     }
 
     return StreamBuilder<List<RideRequestModel>>(
-      stream: Provider.of<RideRequestProvider>(context, listen: false).getScheduledRides(currentUserId),
+      stream: Provider.of<RideRequestProvider>(context, listen: false).getScheduledRides(currentUserId) as Stream<List<RideRequestModel>>?,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());

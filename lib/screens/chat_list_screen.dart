@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../models/Ride_Request_Model.dart';
+import '../models/ride_request_model.dart';
 import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 import '../widgets/chat_list_item.dart';
