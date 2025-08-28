@@ -316,6 +316,7 @@ mixin AppLocale {
   static const String pickDate = 'pickDate';
   static const String pickTime = 'pickTime';
   static const String addNoteToDriverHint = 'addNoteToDriverHint';
+  static const String cannotCancelRide = 'cannotCancelRide';
   static const String cannotCancelRideNotProcessed = 'cannotCancelRideNotProcessed';
   static const String driverUnavailableFindAnother = 'driverUnavailableFindAnother';
   static const String noDriversFoundTryAgain = 'noDriversFoundTryAgain';
@@ -550,6 +551,16 @@ mixin AppLocale {
 
   static const Map<String, dynamic> EN = {
     // Add these localizations
+    edit_ride: 'Edit Ride',
+    scheduled_time: 'Scheduled Time',
+    route_and_fare: 'Route & Fare',
+    estimated_duration: 'Estimated Duration',
+    estimated_distance: 'Estimated Distance',
+    estimated_fare: 'Estimated Fare',
+    recurrence: 'Recurrence',
+    days: 'Days',
+    ends_on: 'Ends On',
+    editing_coming_soon: 'Editing coming soon',
     recurringRide: 'Recurring Ride',
     noteUpdated: 'Note updated successfully.',
     failedToUpdateNote: 'Failed to update note.',
@@ -848,6 +859,7 @@ mixin AppLocale {
     pickDate: 'Pick Date',
     pickTime: 'Pick Time',
     addNoteToDriverHint: 'Add a note to the driver (optional)',
+    cannotCancelRide: 'Cannot cancel ride: Request not fully processed.',
     cannotCancelRideNotProcessed: 'Cannot cancel ride that has not been processed yet.',  
     driverUnavailableFindAnother: 'Driver unavailable. Please find another driver.',
     noDriversFoundTryAgain: 'No drivers found. Please try again later.',
@@ -929,7 +941,7 @@ mixin AppLocale {
     set_kijiwe_to_go_online: 'You must set your Kijiwe before going online.',
     you_are_online: 'You are Online',
     waiting_for_ride_requests: 'Waiting for ride requests...',
-    daily_earnings: 'Today\'s Earnings',
+    daily_earnings: 'Today',
     current_kijiwe: 'Current Kijiwe',
     no_kijiwe_set: 'No Kijiwe Set',
     new_ride_request: 'New Ride Request',
@@ -1070,7 +1082,17 @@ mixin AppLocale {
 // Swahili (SW) Localizations
   static const Map<String, dynamic> SW = {
     // Add these localizations
+    edit_ride: 'Hariri Safari',
+    scheduled_time: 'Muda uliopangwa',
+    route_and_fare: 'Njia na nauli',
+    estimated_duration: 'Makadirio ya muda',
+    estimated_distance: 'Makadirio ya umbari',
+    estimated_fare: 'Makadirio ya nauli',
+    recurrence: 'Ujirudiaji',
+    days: 'Siku',
+    ends_on: 'Itaishia',
     recurringRide: 'Safari ya Mara kwa Mara',
+    editing_coming_soon: 'Hivi karibuni utaweza kuhariri',
     noteUpdated: 'Kumbukumbu Imeboreshwa',
     failedToUpdateNote: 'Imeshindikana Kuboreshwa Kumbukumbu',
     noDriversFound: 'Hakuna Madereva Walio Patikana',
@@ -1179,7 +1201,7 @@ mixin AppLocale {
     status_cancelled_by_customer: 'Imeghairiwa na wewe',
     status_cancelled_by_driver: 'Imeghairiwa na dereva',
     no_scheduled_rides_found: 'Hakuna safari zilizopangwa.',
-    scheduled_for_prefix: 'Imepangwa kwenda: ',
+    scheduled_for_prefix: 'Tarehe: ',
     cancel_scheduled_ride_dialog_content: 'Una uhakika unataka kughairi kabisa safari hii iliyopangwa?',
     dialog_no: 'Hapana',
     dialog_yes_cancel: 'Ndio, Ghairi',
@@ -1364,12 +1386,13 @@ mixin AppLocale {
     stopWithNumber: 'Kituo {number}',
     failedToGetRouteDetails: 'Imeshindwa kupata maelezo ya njia. Tafadhali jaribu tena baadaye.',
     addNoteHint: 'Ongeza maelezo kwa dereva (hiari)',
+    cannotCancelRide: 'Imeshindwa kughairi safari: Ombi halijachakatwa kikamilifu.',
     cannotCancelRideNotProcessed: 'Imeshindwa kughairi safari: Safari haijachakatwa au tayari imekamilika.',
     driverUnavailableFindAnother: 'Dereva hayupo. Tafadhali tafuta dereva mwingine.',
     noDriversFoundTryAgain: 'Hakuna madereva waliopatikana. Tafadhali jaribu tena baadaye.',
     keepStopsDialogTitle: 'Bakiza Vituo',
     keepStopsDialogContent: 'Ungependa kubakiza vituo ulivyoongeza kwa safari yako inayofuata?',
-    infoWindowKijiweSnippet: 'Kijiwe: {kijiweName}\nMsimamizi: {adminName}\nWanachama: {memberCount}',
+    infoWindowKijiweSnippet: 'Wanachama: {memberCount}',
     errorLoadingHubs: 'Hitilafu kupakia maeneo ya Vijiwe: ',
     selectedLocation: 'Eneo Lililochaguliwa',
     // Kijiwe Profile specific keys
@@ -1443,9 +1466,9 @@ mixin AppLocale {
     you_are_offline: 'Haupo Hewani',
     go_online_to_receive_requests: 'Ingia hewani ili kuanza kupokea maombi ya safari.',
     set_kijiwe_to_go_online: 'Lazima uweke Kijiwe chako kabla ya kuingia hewani.',
-    you_are_online: 'Upo Hewani',
+    you_are_online: 'Hewani',
     waiting_for_ride_requests: 'Unasubiri maombi ya safari...',
-    daily_earnings: 'Mapato ya Leo',
+    daily_earnings: 'Leo',
     current_kijiwe: 'Kijiwe cha Sasa',
     no_kijiwe_set: 'Hakuna Kijiwe',
     new_ride_request: 'Ombi Jipya la Safari',
@@ -1504,7 +1527,7 @@ mixin AppLocale {
     error_ride_details_missing_for_cancellation: 'Hitilafu: Maelezo ya safari hayapo kwa ajili ya kughairi.',
     failed_to_complete_ride: 'Imeshindwa kukamilisha safari',
     ride_history: 'Historia ya Safari',
-    online: 'Uko Hewani',
+    online: 'Hewani',
     no_active_ride: 'Hakuna safari inayoendelea.',
     next_destination: 'Unakoenda Sasa',
     next_stop: 'Kituo Kinachofuata',
