@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
-import '../models/Ride_Request_Model.dart';
+import '../models/ride_request_model.dart';
 import '../providers/ride_request_provider.dart'; // To fetch ride history
 import '../services/auth_service.dart'; // To get current user ID
 import '../localization/locales.dart';
@@ -11,22 +11,22 @@ import 'ride_history_details_screen.dart'; // Import the details screen
 
 class RideHistoryListWidget extends StatelessWidget {
   final String role;
-  // final String userId; // Consider passing userId if not using a global provider for it
+  final String? userId;
 
-  const RideHistoryListWidget({super.key, required this.role /*, required this.userId */});
+  const RideHistoryListWidget({super.key, required this.role, this.userId});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final authService = Provider.of<AuthService>(context, listen: false);
-    final String? currentUserId = authService.currentUser?.uid;
+    final String? currentUserId = userId ?? authService.currentUser?.uid;
 
     if (currentUserId == null) {
       return Center(child: Text(AppLocale.userNotAuthenticated.getString(context)));
     }
 
     return StreamBuilder<List<RideRequestModel>>(
-      stream: Provider.of<RideRequestProvider>(context, listen: false).getRideHistory(currentUserId, role),
+      stream: Provider.of<RideRequestProvider>(context, listen: false).getRideHistory(currentUserId, role) as Stream<List<RideRequestModel>>?,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());

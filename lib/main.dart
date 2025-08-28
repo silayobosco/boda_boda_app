@@ -14,7 +14,7 @@ import 'screens/settings_screen.dart';
 import 'firebase_options.dart'; 
 import 'providers/notification_provider.dart';
 import 'providers/location_provider.dart';
-import 'map/providers/map_data_provider.dart';
+import 'providers/map_data_provider.dart';
 import 'providers/ride_request_provider.dart';
 import 'services/auth_service.dart';
 import 'providers/driver_provider.dart';

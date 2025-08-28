@@ -5,7 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
-import '../models/Ride_Request_Model.dart';
+import '../models/ride_request_model.dart';
 import '../localization/locales.dart';
 import '../utils/ui_utils.dart';
 import '../utils/map_utils.dart';

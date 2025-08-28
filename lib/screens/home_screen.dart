@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/auth_service.dart'; // Import AuthService
 import '../services/user_service.dart';
 import '../models/user_model.dart';
 import 'customer_home.dart';
 import 'driver_home.dart';
-import 'admin/admin_home.dart';
 import 'additional_info_screen.dart';
 import '../providers/location_provider.dart'; // Ensure LocationProvider is imported
 import 'customer_account_screen.dart'; // Import CustomerAccountScreen
@@ -16,6 +16,7 @@ import '../widgets/app_drawer.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import '../localization/locales.dart';
 import 'package:provider/provider.dart';
+import 'driver/kijiwe_admin_home.dart'; // Import KijiweAdminHome
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -103,32 +104,41 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  List<BottomNavigationBarItem> _getNavigationItems(String role) {
+  List<BottomNavigationBarItem> _getNavigationItems(String role, {String? kijiweAdminId, String? currentUserId}) {
     switch (role) {
-      case 'Admin':
-        return [
-          const BottomNavigationBarItem(icon: Icon(Icons.dashboard_customize_outlined), label: 'Panel'),
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.bar_chart_outlined),
-            label: 'Reports',
-          ),
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.settings_outlined),
-            label: 'Settings',
-          ),
-        ];
       case 'Driver':
-        return [
-          const BottomNavigationBarItem(icon: Icon(Icons.map), label: 'Home'),
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.assignment),
-            label: 'Rides',
-          ),
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.account_circle),
-            label: 'Account',
-          ),
-        ];
+        // Check if current driver is a kijiwe admin
+        final isKijiweAdmin = kijiweAdminId != null && currentUserId != null && kijiweAdminId == currentUserId;
+        
+        if (isKijiweAdmin) {
+          return [
+            const BottomNavigationBarItem(icon: Icon(Icons.map), label: 'Home'),
+            const BottomNavigationBarItem(
+              icon: Icon(Icons.assignment),
+              label: 'Rides',
+            ),
+            const BottomNavigationBarItem(
+              icon: Icon(Icons.admin_panel_settings),
+              label: 'Admin',
+            ),
+            const BottomNavigationBarItem(
+              icon: Icon(Icons.account_circle),
+              label: 'Account',
+            ),
+          ];
+        } else {
+          return [
+            const BottomNavigationBarItem(icon: Icon(Icons.map), label: 'Home'),
+            const BottomNavigationBarItem(
+              icon: Icon(Icons.assignment),
+              label: 'Rides',
+            ),
+            const BottomNavigationBarItem(
+              icon: Icon(Icons.account_circle),
+              label: 'Account',
+            ),
+          ];
+        }
       case 'Customer':
       default:
         return [
@@ -145,21 +155,27 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  List<Widget> _getCurrentScreenList(UserModel userModel) {
+  List<Widget> _getCurrentScreenList(UserModel userModel, {String? kijiweAdminId}) {
     // Build the screen lists on the fly to pass necessary data.
     switch (userModel.role) {
-      case 'Admin':
-        return const [ // Admin screens are simple for now
-          AdminHome(key: PageStorageKey('AdminHome')),
-          Center(child: Text("Reports Screen (Coming Soon)", key: PageStorageKey('AdminReports'))),
-          Center(child: Text("Admin Settings Screen (Coming Soon)", key: PageStorageKey('AdminSettings'))),
-        ];
       case 'Driver':
-        return const [
-          DriverHome(key: PageStorageKey('DriverHome')),
-          RidesScreen(key: PageStorageKey('DriverRides'), role: 'Driver'),
-          DriverAccountScreen(key: PageStorageKey('DriverAccountScreen')),
-        ];
+        // Check if current driver is a kijiwe admin
+        final isKijiweAdmin = kijiweAdminId != null && userModel.uid != null && kijiweAdminId == userModel.uid;
+        
+        if (isKijiweAdmin) {
+          return [
+            const DriverHome(key: PageStorageKey('DriverHome')),
+            const RidesScreen(key: PageStorageKey('DriverRides'), role: 'Driver'),
+            KijiweAdminHome(key: const PageStorageKey('KijiweAdminHome')),
+            DriverAccountScreen(key: const PageStorageKey('DriverAccountScreen')),
+          ];
+        } else {
+          return const [
+            DriverHome(key: PageStorageKey('DriverHome')),
+            RidesScreen(key: PageStorageKey('DriverRides'), role: 'Driver'),
+            DriverAccountScreen(key: PageStorageKey('DriverAccountScreen')),
+          ];
+        }
       case 'Customer':
       default:
         return [
@@ -279,7 +295,35 @@ class _HomeScreenState extends State<HomeScreen> {
   }
   
   Widget _buildMainScreen(UserModel userModel) {
-    final List<Widget> currentScreenList = _getCurrentScreenList(userModel);
+    // For drivers, check if they are kijiwe admin
+    String? kijiweAdminId;
+    if (userModel.role == 'Driver' && userModel.driverProfile != null) {
+      final kijiweId = userModel.driverProfile!['kijiweId'] as String?;
+      if (kijiweId != null) {
+        // We'll need to fetch the kijiwe admin ID
+        // For now, we'll use a FutureBuilder to handle this
+        return FutureBuilder<String?>(
+          future: _getKijiweAdminId(kijiweId),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return Scaffold(
+                body: Center(child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary)),
+              );
+            }
+            
+            kijiweAdminId = snapshot.data;
+            return _buildMainScreenContent(userModel, kijiweAdminId);
+          },
+        );
+      }
+    }
+    
+    return _buildMainScreenContent(userModel, kijiweAdminId);
+  }
+  
+  Widget _buildMainScreenContent(UserModel userModel, String? kijiweAdminId) {
+    final List<Widget> currentScreenList = _getCurrentScreenList(userModel, kijiweAdminId: kijiweAdminId);
+    
     return Scaffold(
       drawer: AppDrawer(
         userRole: userModel.role!,
@@ -292,11 +336,11 @@ class _HomeScreenState extends State<HomeScreen> {
         children: currentScreenList,
       ),
       bottomNavigationBar: BottomNavigationBar(
-        items: _getNavigationItems(userModel.role!),
+        items: _getNavigationItems(userModel.role!, kijiweAdminId: kijiweAdminId, currentUserId: userModel.uid ?? ''),
         currentIndex: _selectedIndex,
         // Use theme colors
         selectedItemColor: Theme.of(context).colorScheme.primary,
-        unselectedItemColor: Theme.of(context).hintColor, // Use theme hint color
+        unselectedItemColor: Theme.of(context).colorScheme.onSurfaceVariant, // Use theme onSurfaceVariant color
         onTap: _onItemTapped,
         backgroundColor: Theme.of(context).colorScheme.surface, // Use theme surface color
         type: BottomNavigationBarType.fixed, // Ensures background color is applied
@@ -312,5 +356,19 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.startTop,
     );
+  }
+  
+  Future<String?> _getKijiweAdminId(String kijiweId) async {
+    try {
+      final firestore = FirebaseFirestore.instance;
+      final kijiweDoc = await firestore.collection('kijiwe').doc(kijiweId).get();
+      if (kijiweDoc.exists) {
+        final kijiweData = kijiweDoc.data()!;
+        return kijiweData['adminId'] as String?;
+      }
+    } catch (e) {
+      debugPrint('Error fetching kijiwe admin ID: $e');
+    }
+    return null;
   }
 }

@@ -13,7 +13,8 @@ class UserModel {
   final String? fcmToken;
   final Map<String, dynamic>? driverProfile;
   final Map<String, dynamic>? customerProfile;
-  final double? driverAverageRating; // <-- Add this line
+  final double? driverAverageRating;
+  final bool isSuspended;
 
   UserModel({
     this.uid,
@@ -28,7 +29,8 @@ class UserModel {
     this.fcmToken,
     this.driverProfile,
     this.customerProfile,
-    this.driverAverageRating, // <-- Add this line
+    this.driverAverageRating,
+    this.isSuspended = false,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -69,7 +71,8 @@ class UserModel {
       customerProfile: json['customerProfile'] != null
           ? Map<String, dynamic>.from(json['customerProfile'] as Map)
           : null,
-      driverAverageRating: (json['driverAverageRating'] as num?)?.toDouble(), // <-- Add this line
+      driverAverageRating: (json['driverAverageRating'] as num?)?.toDouble(),
+      isSuspended: json['isSuspended'] as bool? ?? false,
     );
   }
 
@@ -98,8 +101,9 @@ class UserModel {
       data['customerProfile'] = customerProfile;
     }
     if (driverAverageRating != null) {
-      data['driverAverageRating'] = driverAverageRating; // <-- Add this line
+      data['driverAverageRating'] = driverAverageRating;
     }
+    data['isSuspended'] = isSuspended;
     return data;
   }
 
@@ -116,7 +120,8 @@ class UserModel {
     String? fcmToken,
     Map<String, dynamic>? driverProfile,
     Map<String, dynamic>? customerProfile,
-    double? driverAverageRating, // <-- Add this line
+    double? driverAverageRating,
+    bool? isSuspended,
   }) {
     return UserModel(
       uid: uid ?? this.uid,
@@ -131,7 +136,8 @@ class UserModel {
       fcmToken: fcmToken ?? this.fcmToken,
       driverProfile: driverProfile ?? this.driverProfile,
       customerProfile: customerProfile ?? this.customerProfile,
-      driverAverageRating: driverAverageRating ?? this.driverAverageRating, // <-- Add this line
+      driverAverageRating: driverAverageRating ?? this.driverAverageRating,
+      isSuspended: isSuspended ?? this.isSuspended,
     );
   }
 
@@ -139,6 +145,6 @@ class UserModel {
   String toString() {
     return 'UserModel(uid: $uid, name: $name, phoneNumber: $phoneNumber, dob: $dob, '
         'gender: $gender, location: $location, profileImageUrl: $profileImageUrl, '
-        'email: $email, role: $role, fcmToken: $fcmToken, driverProfile: $driverProfile, customerProfile: $customerProfile, driverAverageRating: $driverAverageRating)';
+        'email: $email, role: $role, fcmToken: $fcmToken, driverProfile: $driverProfile, customerProfile: $customerProfile, driverAverageRating: $driverAverageRating, isSuspended: $isSuspended)';
   }
 }

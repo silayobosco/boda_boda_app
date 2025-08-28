@@ -5,12 +5,21 @@ service cloud.firestore {
 
     // Rules for the 'users' collection
     match /users/{userId} {
-      // Allow any authenticated user to read user profiles (e.g., for driver location).
-      allow read: if request.auth != null;
       // Allow users to create their own document during signup.
       allow create: if request.auth != null;
       // Only allow users to update or delete their own document.
       allow update, delete: if request.auth != null && request.auth.uid == userId;
+      
+      // Allow reading user profiles with proper access control
+      allow read: if request.auth != null && (
+        // Case 1: User reading their own profile
+        request.auth.uid == userId ||
+        // Case 2: Kijiwe admin reading driver profiles in their kijiwe
+        (
+          isKijiweAdmin() &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.driverProfile.kijiweId == get(/databases/$(database)/documents/users/$(userId)).data.driverProfile.kijiweId
+        )
+      );
     }
 
     // Rules for the 'rideRequests' collection
@@ -61,7 +70,12 @@ service cloud.firestore {
       // Allow customers and drivers to read their ride history
       allow read: if request.auth != null && (
         resource.data.customerId == request.auth.uid ||
-        resource.data.driverId == request.auth.uid
+        resource.data.driverId == request.auth.uid ||
+        // Allow kijiwe admins to read rides from their kijiwe
+        (
+          isKijiweAdmin() &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.driverProfile.kijiweId == resource.data.kijiweId
+        )
       );
 
       // Only backend can create ride history
@@ -134,7 +148,7 @@ service cloud.firestore {
       (
         request.auth != null &&
         request.resource.data.senderRole == "KijiweAdmin" &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "Admin" &&
+        isKijiweAdmin() &&
         getKijiweAdminIdForDriver(get(/databases/$(database)/documents/rideRequests/$(rideRequestId)).data.driverId) == request.auth.uid
       );
       // Prevent updates and deletes for chat history integrity.
@@ -156,8 +170,24 @@ service cloud.firestore {
       // Disallow updating or deleting messages to maintain chat integrity.
       allow update, delete: if false;
     }
+        // Function to check if a user is an admin
+    function isAdmin() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Admin';
+    }
+
+
+    // Helper function to check if a user is a kijiwe admin
+    function isKijiweAdmin() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Driver' &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.driverProfile.kijiweId != null &&
+             get(/databases/$(database)/documents/kijiwe/$(get(/databases/$(database)/documents/users/$(request.auth.uid)).data.driverProfile.kijiweId)).data.adminId == request.auth.uid;
+    }
+    
+    // Helper function to get kijiwe admin ID for a driver
     function getKijiweAdminIdForDriver(driverId) {
         return get(/databases/$(database)/documents/users/$(driverId)).data.driverProfile.kijiweId == null ? null : get(/databases/$(database)/documents/kijiwe/$(get(/databases/$(database)/documents/users/$(driverId)).data.driverProfile.kijiweId)).data.adminId
     }
   }
 }
+
+
