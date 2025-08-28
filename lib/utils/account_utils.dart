@@ -125,7 +125,7 @@ class AccountUtils {
 
                   if (!context.mounted) return;
                   // Use root navigator for both actions to ensure dialog is dismissed before navigation
-                  Navigator.of(context, rootNavigator: true).popAndPushNamed('/login');
+                  Navigator.of(context, rootNavigator: true).pushNamedAndRemoveUntil('/login', (Route<dynamic> route) => false);
                 } catch (e) {
                     if (context.mounted) {
                     Navigator.of(context, rootNavigator: true).pop(); // Dismiss loading dialog
