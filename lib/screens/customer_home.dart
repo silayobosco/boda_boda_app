@@ -1,58 +1,53 @@
 import 'dart:async';
-import 'dart:convert';
-import 'package:boda_boda/models/Ride_Request_Model.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:boda_boda/providers/ride_request_provider.dart';
-import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:latlong2/latlong.dart' as ll;
 import 'package:provider/provider.dart';
-import '../providers/location_provider.dart';
 import 'package:geocoding/geocoding.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // Import GeoPoint from cloud_firestore
+import '../providers/location_provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/stop.dart';
-import '../models/user_model.dart'; // For Driver's UserModel
-import '../utils/ui_utils.dart'; // Import ui_utils
-import '../utils/map_utils.dart'; // Import the new map utility
+import '../utils/ui_utils.dart';
+import '../utils/map_utils.dart';
 import '../services/firestore_service.dart';
 import 'chat_screen.dart';
-import 'kijiwe_profile_screen.dart'; // Import KijiweProfileScreen
-import 'scheduled_rides_list_widget.dart'; // Import ScheduledRidesListWidget
-import 'rides_screen.dart'; // Import RidesScreen for ride history
+import 'kijiwe_profile_screen.dart';
+import 'scheduled_rides_list_widget.dart';
+import 'rides_screen.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import '../localization/locales.dart';
+import '../viewmodels/customer_home_viewmodel.dart';
 
-class CustomerHome extends StatefulWidget {
+class CustomerHome extends StatelessWidget {
   const CustomerHome({super.key});
 
   @override
-  _CustomerHomeState createState() => _CustomerHomeState();
+  Widget build(BuildContext context) {
+    return ChangeNotifierProvider(
+      create: (context) => CustomerHomeViewModel(
+        rideRequestProvider: Provider.of<RideRequestProvider>(context, listen: false),
+        firestoreService: Provider.of<FirestoreService>(context, listen: false),
+        locationProvider: Provider.of<LocationProvider>(context, listen: false),
+        context: context,
+      ),
+      child: const CustomerHomeView(),
+    );
+  }
 }
 
-class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClientMixin {
-  static const double _kijiweSearchRadiusKm = 10.0; // Increased radius
+class CustomerHomeView extends StatefulWidget {
+  const CustomerHomeView({super.key});
+
+  @override
+  _CustomerHomeViewState createState() => _CustomerHomeViewState();
+}
+
+class _CustomerHomeViewState extends State<CustomerHomeView> with AutomaticKeepAliveClientMixin {
   // Map and Location Variables
   GoogleMapController? _mapController;
-  ll.LatLng? _pickupLocation;
-  ll.LatLng? _dropOffLocation;
-  final Set<Marker> _markers = {};
-  final Set<Polyline> _polylines = {};
-  final TextEditingController _pickupController = TextEditingController();
-  final TextEditingController _destinationController = TextEditingController();
-  
-  // Search and Suggestions
-  List<Map<String, dynamic>> _destinationSuggestions = [];
-  List<Map<String, dynamic>> _pickupSuggestions = [];
-  final String _googlePlacesApiKey = dotenv.env['GOOGLE_MAPS_API_KEY']!;
-  final List<String> _searchHistory = [];
-  
+
   // UI State Variables
-  bool _selectingPickup = false;
-  bool _editingPickup = false;
-  bool _editingDestination = false;
-  // bool _isLoadingRoute = false; // Will be replaced by _isFindingDriver or specific loading for route drawing
   final FocusNode _destinationFocusNode = FocusNode();
   final FocusNode _pickupFocusNode = FocusNode();
   final FocusNode _stopFocusNode = FocusNode();
@@ -61,42 +56,8 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
   final DraggableScrollableController _sheetController = DraggableScrollableController();
   double _currentSheetSize = 0.35;
   bool _isSheetExpanded = false;
-  
-  // Stops Management
-  final List<Stop> _stops = [];
-  int? _editingStopIndex;
-  bool _routeReady = false;
-  List<Map<String, dynamic>> _stopSuggestions = [];
 
-  // Route Management
-  List<Map<String, dynamic>> _allFetchedRoutes = []; // To store all routes from MapUtils
-  int _selectedRouteIndex = 0; // Index of the currently selected route
-  String? _selectedRouteDistance;
-  String? _selectedRouteDuration;
-
-  // Ride Lifecycle State
-  bool _isFindingDriver = false;
-  String? _activeRideRequestId;
-  RideRequestModel? _activeRideRequestDetails; // This will be updated by the stream
-  UserModel? _assignedDriverModel;
-  StreamSubscription? _activeRideSubscription;
-  StreamSubscription? _driverLocationSubscription;
-  BitmapDescriptor? _driverIcon; // For the driver's marker
-  bool _isDriverIconLoaded = false;
-  StreamSubscription? _kijiweSubscription;
-  BitmapDescriptor? _kijiweIcon;
-  final Set<Marker> _kijiweMarkers = {};
-  // Scheduling limits
-  int _maxSchedulingDaysAhead = 30; // Default
-  int _minSchedulingMinutesAhead = 5; // Default
-  double? _estimatedFare; // Declare _estimatedFare
-  Map<String, dynamic>? _fareConfig; // Declare _fareConfig
-  final TextEditingController _customerNoteController = TextEditingController(); // For the initial note
-  String? _processedCompletedRideId; // Flag to prevent re-processing a completed ride
-
-  bool _kijiweFetchInitiated = false; // Flag to ensure kijiwe fetch happens once per lifecycle
-  // To safely access providers in dispose() and listeners
-  late final LocationProvider _locationProvider;
+  late final CustomerHomeViewModel _viewModel;
 
   @override
   bool get wantKeepAlive => true;
@@ -104,289 +65,48 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
   @override
   void initState() {
     super.initState();
-    _locationProvider = Provider.of<LocationProvider>(context, listen: false);
-    _locationProvider.addListener(_onLocationUpdated);
+    _viewModel = Provider.of<CustomerHomeViewModel>(context, listen: false);
+    _viewModel.onUiAction = _handleUiAction;
 
     _setupFocusListeners();
     _sheetController.addListener(_onSheetChanged);
-    _loadSearchHistory(); 
-    _fetchSchedulingLimits();
-    _fetchFareConfig(); 
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _setupInitialMapState(); // Call the new setup method here
+      _viewModel.setupInitialMapState().then((_) {
+        _adjustMapForExpandedSheet();
+      });
     });
   }
 
-  @override
-  void reassemble() {
-    super.reassemble();
-    _kijiweFetchInitiated = false;
-  }
-
-  // New listener function to react to location updates
-  void _onLocationUpdated() {
-    final newLocation = _locationProvider.currentLocation;
-
-    // Check if we have a location and haven't fetched kijiwes in this session yet.
-    // This is more robust against hot reloads where _pickupLocation might persist.
-    if (!_kijiweFetchInitiated && newLocation != null) {
-      _kijiweFetchInitiated = true; // Set flag to prevent re-fetching on every minor location update
-      if (mounted) {
-        if (_pickupLocation == null) {
-          // This is the initial setup. Set the pickup location automatically.
-          setState(() {
-            _pickupLocation = newLocation;
-            _updateGooglePickupMarker(LatLng(newLocation.latitude, newLocation.longitude));
-            // Immediately set destination to editing mode.
-            _editingDestination = true;
-          });
-          _reverseGeocode(newLocation, _pickupController);
-        }
-        _fetchAndDisplayNearbyKijiwes();
-      }
-    } 
-  }
-
-  // Simplified initial setup
-  Future<void> _setupInitialMapState() async {
+  void _handleUiAction(UiAction action) {
     if (!mounted) return;
-    await _loadMarkerIcons(); // Ensure icons are loaded, then initialize state
 
-    // Ensure location provider attempts to get a location
-    await _locationProvider.updateLocation();
-
-    // If location is already available when this runs, the listener won't fire.
-    // So, we manually trigger the logic if location is already present.
-    if (_locationProvider.currentLocation != null) {
-      _onLocationUpdated();
-    }
-  }
-
-  Future<void> _fetchFareConfig() async {
-    debugPrint("CustomerHome: _fetchFareConfig - ENTERED function.");
-    try {
-      debugPrint("CustomerHome: _fetchFareConfig - Attempting to fetch 'appConfiguration/fareSettings' document...");
-      final doc = await FirebaseFirestore.instance
-          .collection('appConfiguration')
-          .doc('fareSettings')
-          .get();
-
-      if (!mounted) {
-        debugPrint("CustomerHome: _fetchFareConfig - Widget unmounted after fetch. Aborting setState.");
-        return;
-      }
-
-      if (doc.exists && doc.data() != null) {
-        final newFareConfig = doc.data();
-        debugPrint("CustomerHome: _fetchFareConfig - Fare config loaded successfully: $newFareConfig");
-        setState(() => _fareConfig = newFareConfig);
-        // After loading config, check if route data is already available and calculate fare
-        if (_selectedRouteDistance != null && _selectedRouteDuration != null) {
-           debugPrint("CustomerHome: _fetchFareConfig - Route data already available after config load. Recalculating fare.");
-           _calculateEstimatedFare();
-        }
-      } else {
-        debugPrint("CustomerHome: _fetchFareConfig - 'fareSettings' document does not exist.");
-        setState(() => _fareConfig = null); 
-        _calculateEstimatedFare(); 
-      }
-    } catch (e, s) { // Added stack trace to the catch block
-      debugPrint("CustomerHome: _fetchFareConfig - ERROR fetching fare config: $e");
-      debugPrint("CustomerHome: _fetchFareConfig - StackTrace: $s");
-      if (mounted) {
-        setState(() => _fareConfig = null); 
-        // _calculateEstimatedFare(); // Not strictly needed here as _fareConfig is null
-      }
-    }
-    debugPrint("CustomerHome: _fetchFareConfig - EXITED function.");
-  }
-
-  // Helper to parse distance and duration strings into numeric values.
-  (double, double) _parseRouteDistanceAndDuration() {
-    if (_selectedRouteDistance == null || _selectedRouteDuration == null) {
-      return (0.0, 0.0);
-    }
-
-    // Parse distance
-    double distanceKm = 0;
-    final distanceMatch = RegExp(r'([\d\.]+)').firstMatch(_selectedRouteDistance!);
-    if (distanceMatch != null) {
-      double numericValue = double.tryParse(distanceMatch.group(1) ?? '0') ?? 0;
-      if (_selectedRouteDistance!.toLowerCase().contains("km")) {
-        distanceKm = numericValue;
-      } else if (_selectedRouteDistance!.toLowerCase().contains("m")) {
-        distanceKm = numericValue / 1000.0;
-      } else {
-        distanceKm = numericValue;
-      }
-    }
-
-    // Parse duration
-    double durationMinutes = 0;
-    final hourMatch = RegExp(r'(\d+)\s*hr').firstMatch(_selectedRouteDuration!);
-    if (hourMatch != null) {
-      durationMinutes += (double.tryParse(hourMatch.group(1) ?? '0') ?? 0) * 60;
-    }
-    final minMatch = RegExp(r'(\d+)\s*min').firstMatch(_selectedRouteDuration!);
-    if (minMatch != null) {
-      durationMinutes += double.tryParse(minMatch.group(1) ?? '0') ?? 0;
-    }
-    if (durationMinutes == 0 && _selectedRouteDuration!.contains("min")) {
-      final simpleMinMatch = RegExp(r'([\d\.]+)').firstMatch(_selectedRouteDuration!);
-      if (simpleMinMatch != null) {
-        durationMinutes = double.tryParse(simpleMinMatch.group(1) ?? '0') ?? 0;
-      }
-    }
-    return (distanceKm, durationMinutes);
-  }
-
-  Future<void> _fetchSchedulingLimits() async {
-    try {
-      final doc = await FirebaseFirestore.instance
-          .collection('appConfiguration')
-          .doc('schedulingSettings')
-          .get();
-      if (doc.exists && doc.data() != null) {
-        final data = doc.data()!;
-        if (mounted) {
-          setState(() {
-            _maxSchedulingDaysAhead = data['maxSchedulingDaysAhead'] as int? ?? _maxSchedulingDaysAhead;
-            _minSchedulingMinutesAhead = data['minSchedulingMinutesAhead'] as int? ?? _minSchedulingMinutesAhead;
-          });
-        }
-      }
-    } catch (e) {
-      debugPrint("Error fetching scheduling limits: $e. Using defaults.");
-    }
-  }
-  
-  void _calculateEstimatedFare() {
-    if (!mounted || _fareConfig == null || _selectedRouteDistance == null || _selectedRouteDuration == null) {
-      final bool fareChanged = _estimatedFare != null;
-      if (fareChanged) {
-        setState(() => _estimatedFare = null);
-      }
-      return;
-    }
-
-    final (distanceKm, durationMinutes) = _parseRouteDistanceAndDuration();
-
-    final double baseFare = (_fareConfig!['startingFare'] as num?)?.toDouble() ?? 0.0;
-    final double perKmRate = (_fareConfig!['farePerKilometer'] as num?)?.toDouble() ?? 0.0;
-    final double perMinRate = (_fareConfig!['farePerMinuteDriving'] as num?)?.toDouble() ?? 0.0;
-    final double minFare = (_fareConfig!['minimumFare'] as num?)?.toDouble() ?? 0.0;
-    double calculatedFare = baseFare + (distanceKm * perKmRate) + (durationMinutes * perMinRate);
-    calculatedFare = calculatedFare > minFare ? calculatedFare : minFare;
-    final double roundingInc = (_fareConfig!['roundingIncrement'] as num?)?.toDouble() ?? 0.0;
-    if (roundingInc > 0) calculatedFare = (calculatedFare / roundingInc).ceil() * roundingInc;
-
-    if (_estimatedFare != calculatedFare) {
-      setState(() => _estimatedFare = calculatedFare);
-    }
-    debugPrint("CustomerHome: Parsed Distance for fare: ${distanceKm}km, Parsed Duration: ${durationMinutes}min. Calculated Fare: $_estimatedFare");
-  }
-
-  Future<void> _loadMarkerIcons() async {
-    try {
-      _driverIcon = await BitmapDescriptor.fromAssetImage(
-        const ImageConfiguration(size: Size(48, 48)), // Adjust size as needed
-        'assets/boda_marker.png', // Use your specific driver icon
+    if (action.message.startsWith('kijiwe_tap:')) {
+      final parts = action.message.split(':');
+      final kijiweId = parts[1];
+      final kijiweName = parts[2];
+      final lat = double.parse(parts[3]);
+      final lng = double.parse(parts[4]);
+      _showKijiweOptionsDialog(kijiweName, LatLng(lat, lng), kijiweId);
+    } else if (action.message.startsWith('unfocus:')) {
+      final field = action.message.split(':')[1];
+      if (field == 'pickup') _pickupFocusNode.unfocus();
+      if (field == 'destination') _destinationFocusNode.unfocus();
+      if (field == 'stop') _stopFocusNode.unfocus();
+      _collapseSheet();
+    } else if (action.message.startsWith('show_rate_dialog:')) {
+      final parts = action.message.split(':');
+      _showRateDriverDialog(parts[1], parts[2]);
+    } else if (action.message == 'show_post_schedule_dialog') {
+      _showPostSchedulingDialog();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(action.message),
+          backgroundColor: action.isError ? Theme.of(context).colorScheme.error : null,
+        ),
       );
-      if (mounted) setState(() => _isDriverIconLoaded = true);
-
-      _kijiweIcon = await BitmapDescriptor.fromAssetImage(
-        const ImageConfiguration(size: Size(48, 48)), // Smaller size for kijiwe
-        'assets/kijiwe_marker.png',
-      );
-      debugPrint("CustomerHome: Kijiwe marker icon loaded successfully.");
-      // No separate loaded flag for kijiwe icon, assume it loads or fails with driver icon
-    } catch (e) {
-      debugPrint("Error loading marker icons: $e");
     }
-  }
-
-  Future<void> _fetchAndDisplayNearbyKijiwes() async {
-    // =======================================================================
-    print("=======================================================================");
-    print("CustomerHome: _fetchAndDisplayNearbyKijiwes - ENTERED");
-
-    if (_pickupLocation == null) {
-      print("CustomerHome: EXITING _fetchAndDisplayNearbyKijiwes because _pickupLocation is null.");
-      print("=======================================================================");
-      return;
-    }
-    if (_kijiweIcon == null) {
-      print("CustomerHome: EXITING _fetchAndDisplayNearbyKijiwes because _kijiweIcon is null.");
-      print("=======================================================================");
-      return;
-    }
-    print("CustomerHome: Fetching nearby kijiwes around $_pickupLocation...");
-
-    _kijiweSubscription?.cancel(); // Cancel any existing listener
-    final firestoreService = Provider.of<FirestoreService>(context, listen: false); // This is correct
-
-    print("CustomerHome: Subscribing to getNearbyKijiwes stream...");
-    _kijiweSubscription = firestoreService.getNearbyKijiwes(_pickupLocation!, _kijiweSearchRadiusKm).listen(
-      (kijiweDocs) {
-        if (!mounted) {
-          print("CustomerHome: Stream emitted but widget is not mounted. Ignoring.");
-          return;
-        }
-        print("=======================================================================");
-        print("CustomerHome: SUCCESS - Received ${kijiweDocs.length} kijiwe documents from Firestore.");
-        final Set<Marker> newMarkers = {};
-        for (var doc in kijiweDocs) {
-          final data = doc.data() as Map<String, dynamic>?; // Cast to nullable map
-
-          // Defensive check for the nested GeoPoint to prevent crashes from malformed data.
-          final positionField = data?['position'];
-          if (positionField is Map) {
-            final geoPointField = positionField['geopoint'];
-            if (geoPointField is GeoPoint) {
-              final kijiweId = doc.id;
-              final kijiweLocation = LatLng(geoPointField.latitude, geoPointField.longitude);
-              final kijiweName = data?['name'] as String? ?? 'Kijiwe';
-              print("  - Found Kijiwe: '$kijiweName' at ${geoPointField.latitude}, ${geoPointField.longitude}");
-
-              newMarkers.add(
-                Marker(
-                  markerId: MarkerId('kijiwe_${doc.id}'),
-                  position: kijiweLocation, // This is correct
-                  icon: _kijiweIcon!, // This is correct
-                  infoWindow: InfoWindow(title: kijiweName, snippet: 'Tap for options'),
-                  onTap: () => _showKijiweOptionsDialog(kijiweName, kijiweLocation, kijiweId),
-                  alpha: 0.8,
-                  zIndex: 1,
-                ),
-              );
-            } else {
-              print("CustomerHome: Skipping kijiwe document '${doc.id}' because 'position.geopoint' is not a valid GeoPoint. Value: $geoPointField");
-            }
-          } else {
-            print("CustomerHome: Skipping kijiwe document '${doc.id}' due to missing or invalid 'position.geopoint' field.");
-          }
-        }
-        setState(() {
-          _kijiweMarkers.clear();
-          _kijiweMarkers.addAll(newMarkers);
-          print("CustomerHome: Updated map with ${newMarkers.length} kijiwe markers.");
-          print("=======================================================================");
-        });
-      },
-      onError: (error) {
-        print("=======================================================================");
-        if (mounted && error.toString().contains("type 'Null' is not a subtype of type 'GeoPoint'")) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(AppLocale.errorLoadingHubs.getString(context))),
-          );
-        }
-        print("=======================================================================");
-      },
-      onDone: () {
-        print("CustomerHome: getNearbyKijiwes stream is DONE.");
-      },
-    );
   }
 
   void _showKijiweOptionsDialog(String kijiweName, LatLng kijiweLocation, String kijiweId) {
@@ -412,15 +132,15 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
             TextButton(
               child: Text(AppLocale.setAsPickup.getString(context)),
               onPressed: () {
-                Navigator.of(context).pop(); // Close the dialog
-                _setKijiweAsLocation(kijiweName, kijiweLocation, isPickup: true);
+                Navigator.of(context).pop();
+                _viewModel.setKijiweAsLocation(kijiweName, kijiweLocation, isPickup: true);
               },
             ),
             TextButton(
               child: Text(AppLocale.setAsDropoff.getString(context)),
               onPressed: () {
-                Navigator.of(context).pop(); // Close the dialog
-                _setKijiweAsLocation(kijiweName, kijiweLocation, isPickup: false);
+                Navigator.of(context).pop();
+                _viewModel.setKijiweAsLocation(kijiweName, kijiweLocation, isPickup: false);
               },
             ),
           ],
@@ -429,158 +149,54 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
     );
   }
 
-  void _setKijiweAsLocation(String name, LatLng location, {required bool isPickup}) {
-    final llLocation = ll.LatLng(location.latitude, location.longitude);
-    setState(() {
-      if (isPickup) {
-        _pickupLocation = llLocation;
-        _pickupController.text = name;
-        _updateGooglePickupMarker(location);
-      } else {
-        _dropOffLocation = llLocation;
-        _destinationController.text = name;
-        _updateGoogleDropOffMarker(location);
-      }
-      _updateSearchHistory(name); // Add Kijiwe to search history
-    });
-    _drawRoute(); // Redraw the route with the new location
-    _checkRouteReady();
-    _collapseSheet();
-  }
-
-  void _startEditing(String field, {bool requestFocus = true}) {
-    setState(() {
-      // Clear all editing states first
-      _editingPickup = false;
-      _editingDestination = false;
-      _editingStopIndex = null;
-      
-      // Set the new editing state
-      if (field == 'pickup') {
-        _editingPickup = true;
-        if (requestFocus) _pickupFocusNode.requestFocus();
-      } else if (field == 'destination') {
-        _editingDestination = true;
-        if (requestFocus) _destinationFocusNode.requestFocus();
-      } else if (field.startsWith('stop_')) {
-        final index = int.parse(field.split('_')[1]);
-        _editingStopIndex = index;
-        if (requestFocus) _stopFocusNode.requestFocus();
-      }
-    });
+  void _startEditing(String field) {
+    _viewModel.startEditing(field);
+    if (field == 'pickup') _pickupFocusNode.requestFocus();
+    if (field == 'destination') _destinationFocusNode.requestFocus();
+    if (field.startsWith('stop_')) _stopFocusNode.requestFocus();
     _expandSheet();
   }
 
-  // Calculate the visible map area based on sheet position
   LatLngBounds _getVisibleMapArea() {
     final screenHeight = MediaQuery.of(context).size.height;
     final sheetTop = screenHeight * (1 - _currentSheetSize);
     final visibleHeightRatio = sheetTop / screenHeight;
-    
     final locationProvider = Provider.of<LocationProvider>(context, listen: false);
-    
-    if (_pickupLocation == null && _dropOffLocation == null) {
-      return LatLngBounds(
-        northeast: LatLng(
-          locationProvider.currentLocation?.latitude ?? 0, 
-          locationProvider.currentLocation?.longitude ?? 0
-        ),
-        southwest: LatLng(
-          locationProvider.currentLocation?.latitude ?? 0, 
-          locationProvider.currentLocation?.longitude ?? 0
-        ),
-      );
-    }
 
     final points = <LatLng>[
-      if (_pickupLocation != null)
-        LatLng(_pickupLocation!.latitude, _pickupLocation!.longitude),
-      if (_dropOffLocation != null)
-        LatLng(_dropOffLocation!.latitude, _dropOffLocation!.longitude),
-      ..._stops.where((s) => s.location != null)
-               .map((s) => LatLng(s.location!.latitude, s.location!.longitude)),
+      if (_viewModel.pickupLocation != null) LatLng(_viewModel.pickupLocation!.latitude, _viewModel.pickupLocation!.longitude),
+      if (_viewModel.dropOffLocation != null) LatLng(_viewModel.dropOffLocation!.latitude, _viewModel.dropOffLocation!.longitude),
+      ..._viewModel.stops.where((s) => s.location != null).map((s) => LatLng(s.location!.latitude, s.location!.longitude)),
     ];
-    
+
     if (points.isEmpty) {
       return LatLngBounds(
-        northeast: LatLng(
-          locationProvider.currentLocation?.latitude ?? 0, 
-          locationProvider.currentLocation?.longitude ?? 0
-        ),
-        southwest: LatLng(
-          locationProvider.currentLocation?.latitude ?? 0, 
-          locationProvider.currentLocation?.longitude ?? 0
-        ),
+        northeast: LatLng(locationProvider.currentLocation?.latitude ?? 0, locationProvider.currentLocation?.longitude ?? 0),
+        southwest: LatLng(locationProvider.currentLocation?.latitude ?? 0, locationProvider.currentLocation?.longitude ?? 0),
       );
     }
 
-    final bounds = MapUtils.boundsFromLatLngList(points); // Use MapUtils
+    final bounds = MapUtils.boundsFromLatLngList(points);
     final latDelta = bounds.northeast.latitude - bounds.southwest.latitude;
     final lngDelta = bounds.northeast.longitude - bounds.southwest.longitude;
-    
+
     return LatLngBounds(
-      northeast: LatLng(
-        bounds.northeast.latitude + (latDelta * 0.2),
-        bounds.northeast.longitude + (lngDelta * 0.2),
-      ),
-      southwest: LatLng(
-        bounds.southwest.latitude - (latDelta * 0.2 * (1 - visibleHeightRatio)),
-        bounds.southwest.longitude - (lngDelta * 0.2),
-      ),
+      northeast: LatLng(bounds.northeast.latitude + (latDelta * 0.2), bounds.northeast.longitude + (lngDelta * 0.2)),
+      southwest: LatLng(bounds.southwest.latitude - (latDelta * 0.2 * (1 - visibleHeightRatio)), bounds.southwest.longitude - (lngDelta * 0.2)),
     );
   }
 
   void _setupFocusListeners() {
-    _destinationFocusNode.addListener(_onDestinationFocusChange);
-    _pickupFocusNode.addListener(_onPickupFocusChange);
-    _stopFocusNode.addListener(_onStopFocusChange);
-  }
-
-  void _onDestinationFocusChange() {
-    if (_destinationFocusNode.hasFocus) {
-      _expandSheet();
-      setState(() {
-        _selectingPickup = false;
-        _editingStopIndex = null;
-        _editingDestination = true;
-      });
-      _adjustMapForExpandedSheet();
-    } else if (!_destinationFocusNode.hasFocus && _editingDestination) {
-      // Don't automatically turn off editing when losing focus
-      // Wait for explicit submission or map tap
-    }
-  }
-
-  void _onPickupFocusChange() {
-    if (_pickupFocusNode.hasFocus) {
-      _expandSheet();
-      setState(() {
-        _selectingPickup = false;
-        _editingStopIndex = null;
-        _editingPickup = true;
-      });
-      _adjustMapForExpandedSheet();
-    } else if (!_pickupFocusNode.hasFocus && _editingPickup) {
-      // Don't automatically turn off editing when losing focus
-      // Wait for explicit submission or map tap
-    }
-  }
-
-  void _onStopFocusChange() {
-    if (_stopFocusNode.hasFocus) {
-      _expandSheet();
-      _adjustMapForExpandedSheet();
-    }
+    _destinationFocusNode.addListener(() { if (_destinationFocusNode.hasFocus) _startEditing('destination'); });
+    _pickupFocusNode.addListener(() { if (_pickupFocusNode.hasFocus) _startEditing('pickup'); });
+    _stopFocusNode.addListener(() { if (_stopFocusNode.hasFocus && _viewModel.editingStopIndex != null) _expandSheet(); });
   }
 
   void _adjustMapForExpandedSheet() {
     if (_mapController != null) {
       final bounds = _getVisibleMapArea();
       final padding = 50.0 + (100 * _currentSheetSize);
-      
-      _mapController?.animateCamera(
-        CameraUpdate.newLatLngBounds(bounds, padding),
-      );
+      _mapController?.animateCamera(CameraUpdate.newLatLngBounds(bounds, padding));
     }
   }
 
@@ -589,725 +205,20 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
     setState(() {
       _currentSheetSize = _sheetController.size;
       _isSheetExpanded = _sheetController.size > 0.6;
-      _checkRouteReady();
     });
-
-    // Adjust map view when sheet changes
     _adjustMapForExpandedSheet();
   }
 
-  void _checkRouteReady() {
-    setState(() {
-      _routeReady = _pickupLocation != null && _dropOffLocation != null;
-    });
-  }
-
   void _collapseSheet() {
-    _sheetController.animateTo(0.23,
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeOut,
-    );
+    _sheetController.animateTo(0.23, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
   }
 
   void _expandSheet() {
-    _sheetController.animateTo(0.9,
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeOut,
-    );
-  }
-
-  //
-  // Load search history from SharedPreferences
-  Future<void> _loadSearchHistory() async {
-  final prefs = await SharedPreferences.getInstance();
-  final List<String>? storedHistory = prefs.getStringList('search_history');
-    if (storedHistory != null) {
-      setState(() {
-        _searchHistory.clear();
-        _searchHistory.addAll(storedHistory);
-      });
-    }
-  }
-
-  void _updateSearchHistory(String address) {
-    if (address.isNotEmpty && !_searchHistory.contains(address)) {
-      setState(() {
-        _searchHistory.insert(0, address);
-        if (_searchHistory.length > 8) {
-          _searchHistory.removeLast(); // Keep max 8 items
-        }
-      });
-      _saveSearchHistory();
-    }
-  } 
-
-  Future<void> _saveSearchHistory() async {
-  final prefs = await SharedPreferences.getInstance();
-  await prefs.setStringList('search_history', _searchHistory);
-  }
-
-  Future<void> _reverseGeocode(ll.LatLng location, TextEditingController controller) async {
-    try {
-      List<Placemark> placemarks = await placemarkFromCoordinates(
-        location.latitude,
-        location.longitude,
-      );
-      if (placemarks.isNotEmpty) {
-        if (!mounted) return;
-        final Placemark place = placemarks.first;
-        String address = _formatAddress(place);
-        controller.text = address;
-             _updateSearchHistory(address); // <--- CALL saving function here ✅
-      } else {
-        throw Exception('No placemarks found');
-      }
-    } catch (e) {
-      print('Error reverse geocoding: $e');
-      controller.text = _formatFallbackAddress(location);
-    }
-  }
-
-  String _formatAddress(Placemark place) {
-    // Improved address formatting
-    List<String> addressParts = [];
-    
-    if (place.name != null && place.name!.isNotEmpty && place.name != 'Unnamed Road') {
-      addressParts.add(place.name!);
-    }
-    
-    if (place.street != null && place.street!.isNotEmpty) {
-      if (addressParts.isEmpty || !addressParts.last.contains(place.street!)) {
-        addressParts.add(place.street!);
-      }
-    }
-    
-    if (place.subLocality != null && place.subLocality!.isNotEmpty) {
-      addressParts.add(place.subLocality!);
-    } else if (place.locality != null && place.locality!.isNotEmpty) {
-      addressParts.add(place.locality!);
-    }
-    
-    if (addressParts.isEmpty) {
-      return AppLocale.selectedLocation.getString(context);
-    }
-    
-    return addressParts.join(', ');
-  }
-
-  String _formatFallbackAddress(ll.LatLng location) {
-    return AppLocale.locationWithCoords.getString(context)
-        .replaceFirst('{lat}', location.latitude.toStringAsFixed(4))
-        .replaceFirst('{lng}', location.longitude.toStringAsFixed(4));
-  }
-
-  void _updateGooglePickupMarker(LatLng location) {
-    setState(() {
-      _markers.removeWhere((marker) => marker.markerId == const MarkerId('pickup'));
-      _markers.add(
-        Marker(
-          markerId: const MarkerId('pickup'),
-          position: location,
-          infoWindow: InfoWindow(title: AppLocale.pickup.getString(context)),
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
-        ),
-      );
-    });
-  }
-
-  void _updateGoogleDropOffMarker(LatLng? location) {
-    if (location != null) {
-      setState(() {
-        _markers.removeWhere((marker) => marker.markerId == const MarkerId('dropoff'));
-        _markers.add(
-          Marker(
-      markerId: const MarkerId('dropoff'),
-            position: location, // This is correct
-            infoWindow: InfoWindow(title: AppLocale.dropoff.getString(context)),
-      icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-          ),
-        );
-      });
-    }
-  }
-  
-  void _updateStopMarker(int index, LatLng location) {
-    setState(() {
-      _markers.removeWhere((marker) => marker.markerId == MarkerId('stop_$index'));
-      _markers.add(
-        Marker(
-      markerId: MarkerId('stop_$index'),
-          position: location, // This is correct
-          infoWindow: InfoWindow(title: AppLocale.stopWithNumber.getString(context).replaceFirst('{number}', (index + 1).toString())),
-      icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
-      zIndex: index.toDouble(),
-        ),
-    );
-    });
-  }
-
-  void _handleMapTap(LatLng tappedLatLng) {
-    final llTappedLatLng = ll.LatLng(tappedLatLng.latitude, tappedLatLng.longitude);
-    
-    if (_selectingPickup || _editingPickup) {
-      setState(() {
-        _pickupLocation = llTappedLatLng;
-        _updateGooglePickupMarker(tappedLatLng);
-        _selectingPickup = false;
-        _editingPickup = false;
-        _editingDestination = true; // Set destination to editing mode
-        _pickupFocusNode.unfocus();
-        _collapseSheet();
-      });
-      _reverseGeocode(_pickupLocation!, _pickupController); // Can be outside setState
-    } else if (_editingStopIndex != null) {
-      setState(() {
-        _stops[_editingStopIndex!].location = llTappedLatLng;
-        _reverseGeocode(llTappedLatLng, _stops[_editingStopIndex!].controller);
-        _updateStopMarker(_editingStopIndex!, tappedLatLng);
-        _editingStopIndex = null;
-        _stopFocusNode.unfocus();
-        _collapseSheet();
-        _drawRoute(); // Redraw route if a stop location changes
-      });
-    } else if (_editingDestination) {
-      setState(() {
-        _dropOffLocation = llTappedLatLng;
-        _updateGoogleDropOffMarker(tappedLatLng);
-        _reverseGeocode(_dropOffLocation!, _destinationController);
-        _editingDestination = false;
-        _destinationFocusNode.unfocus();
-        _collapseSheet();
-      });
-      _drawRoute(); // Draw route after setting destination
-    } else if (_dropOffLocation == null && !_editingPickup && _editingStopIndex == null) {
-      setState(() {
-        _dropOffLocation = llTappedLatLng;
-        _updateGoogleDropOffMarker(tappedLatLng);
-        _reverseGeocode(_dropOffLocation!, _destinationController);
-      });
-    }
-    _checkRouteReady();
-  }
-
-  Future<void> _drawRoute() async {
-  if (_pickupLocation == null || _dropOffLocation == null) return;
-  
-  setState(() {
-    // _isLoadingRoute = true; // This is for drawing the customer's proposed route
-    _polylines.clear();
-    _allFetchedRoutes.clear();
-    _selectedRouteIndex = 0;
-    _selectedRouteDistance = null;
-    _selectedRouteDuration = null;
-  });
-  
-  try {
-    final List<ll.LatLng>? waypointsLatLng = _stops
-        .where((s) => s.location != null)
-        .map((s) => s.location!)
-        .toList();
-
-    final List<Map<String, dynamic>>? routes = await MapUtils.getRouteDetails(
-      origin: LatLng(_pickupLocation!.latitude, _pickupLocation!.longitude),
-      destination: LatLng(_dropOffLocation!.latitude, _dropOffLocation!.longitude),
-      apiKey: _googlePlacesApiKey,
-      waypoints: waypointsLatLng?.map((ll) => LatLng(ll.latitude, ll.longitude)).toList(),
-    );
-
-    if (!mounted) return;
-
-    if (routes != null && routes.isNotEmpty) {
-      setState(() {
-        _allFetchedRoutes = routes; // Store all fetched routes
-        _selectRoute(0); // Select and display the first route by default
-      });
-
-      // Adjust camera to fit all points of the first (primary) route initially
-      if (_allFetchedRoutes.isNotEmpty) {
-        final List<LatLng> primaryRoutePoints = _allFetchedRoutes[0]['points'] as List<LatLng>;
-        _mapController?.animateCamera(
-          CameraUpdate.newLatLngBounds(MapUtils.boundsFromLatLngList(primaryRoutePoints), 100),
-        );
-      }
-    } else {
-      // Handle no routes found or API error
-      if (mounted) {
-        setState(() {
-          _polylines.clear();
-          _selectedRouteDistance = null;
-          _selectedRouteDuration = null;
-          _estimatedFare = null; // Explicitly set fare to null
-        });
-      }
-    }
-  } catch (e) {
-    debugPrint('Error in _drawRoute (CustomerHome): $e');
-    if (mounted) {
-      setState(() {
-        _polylines.clear(); // Also clear polylines on error
-        _selectedRouteDistance = null;
-        _selectedRouteDuration = null;
-        _estimatedFare = null;
-        // Inform the user about the failure
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(AppLocale.failedToGetRouteDetails.getString(context))),
-          );
-        }
-      });
-    }
-    _checkRouteReady();
-  }
-}
-
-  void _selectRoute(int index) {
-    // This method updates all state related to the selected route.
-    // It should be called from within a setState() block.
-    if (_allFetchedRoutes.isEmpty) return;
-
-    _selectedRouteIndex = index;
-    _polylines.clear();
-    for (int i = 0; i < _allFetchedRoutes.length; i++) {
-      final routeData = _allFetchedRoutes[i];
-      final Polyline originalPolyline = routeData['polyline'] as Polyline;
-
-      _polylines.add(originalPolyline.copyWith(
-        colorParam: i == _selectedRouteIndex ? Colors.blueAccent : Colors.grey,
-        widthParam: i == _selectedRouteIndex ? 6 : 4,
-        onTapParam: () => setState(() => _selectRoute(i)), // Cleanly update state on tap
-      ));
-    }
-    _selectedRouteDistance = _allFetchedRoutes[_selectedRouteIndex]['distance'] as String?;
-    _selectedRouteDuration = _allFetchedRoutes[_selectedRouteIndex]['duration'] as String?;
-    _calculateEstimatedFare(); // Recalculate fare for the newly selected route
-  }
-
-  void _listenToActiveRide(String rideId) {
-    _stopListeningToActiveRide(); // Cancel any previous subscription first
-    final rideRequestProvider = Provider.of<RideRequestProvider>(context, listen: false);
-
-    _activeRideSubscription = rideRequestProvider.getRideStream(rideId).listen((rideDetails) {
-      if (!mounted) return;
-
-      // Update the main ride details state
-      setState(() {
-        _activeRideRequestDetails = rideDetails;
-      });
-
-      if (rideDetails == null) {
-        // Ride document was deleted or an error occurred.
-        _resetUIForNewTrip();
-        return;
-      }
-
-      final driverId = rideDetails.driverId;
-      final rideStatus = rideDetails.status;
-
-      // Handle driver assignment and location tracking
-      if (driverId != null) {
-        if (['accepted', 'goingToPickup', 'arrivedAtPickup', 'onRide'].contains(rideStatus)) {
-          if (_isFindingDriver) setState(() => _isFindingDriver = false);
-          if (_driverLocationSubscription == null || _assignedDriverModel?.uid != driverId) {
-            setState(() => _assignedDriverModel = UserModel(uid: driverId));
-            _startListeningToDriverLocation(driverId);
-          }
-        }
-      } else {
-        if (_driverLocationSubscription != null) {
-          _stopListeningToDriverLocation();
-          setState(() => _assignedDriverModel = null);
-        }
-      }
-
-      // Handle ride completion flow
-      if ((rideStatus == 'completed' || rideStatus.contains('cancelled') || rideStatus == 'no_drivers_available') &&
-          rideId == _activeRideRequestId && rideId != _processedCompletedRideId) {
-        _processedCompletedRideId = rideId;
-        final endMessage = _getRideEndMessage(rideStatus);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(endMessage)));
-        if (rideStatus == 'completed' && rideDetails.driverId != null) {
-          _showRateDriverDialog(rideId, rideDetails.driverId!);
-        } else {
-          _resetUIForNewTrip();
-        }
-      }
-    });
-  }
-
-  // Update polylines based on selected route
-  void _startListeningToDriverLocation(String driverId) {
-    _driverLocationSubscription?.cancel(); // Cancel any previous subscription
-    final firestoreService = Provider.of<FirestoreService>(context, listen: false);
-    _driverLocationSubscription = firestoreService.getUserDocumentStream(driverId).listen((driverDoc) {
-      if (driverDoc.exists && driverDoc.data() != null) {
-        final data = driverDoc.data() as Map<String, dynamic>;
-        final driverProfile = data['driverProfile'] as Map<String, dynamic>?;
-        if (driverProfile != null && driverProfile['currentLocation'] is GeoPoint) {
-          final GeoPoint driverGeoPoint = driverProfile['currentLocation'] as GeoPoint;
-          final LatLng driverLatLng = LatLng(driverGeoPoint.latitude, driverGeoPoint.longitude);
-          final double driverHeading = (driverProfile['currentHeading'] as num?)?.toDouble() ?? 0.0;          
-
-          if (mounted) {
-            setState(() {
-              _markers.removeWhere((m) => m.markerId.value == 'driver_active_location');
-              _markers.add(
-                Marker(
-                  markerId: const MarkerId('driver_active_location'),
-                  position: driverLatLng,
-                  icon: _isDriverIconLoaded && _driverIcon != null ? _driverIcon! : BitmapDescriptor.defaultMarker, // Use default if custom not loaded
-                  rotation: driverHeading,
-                  anchor: const Offset(0.5, 0.5),
-                  flat: true,
-                  zIndex: 10, // Ensure driver marker is prominent
-                ),
-              );
-              // Zoom to show both driver and pickup location
-              if (_pickupLocation != null) {
-                final LatLng pickupLatLng = LatLng(_pickupLocation!.latitude, _pickupLocation!.longitude);
-                final bounds = MapUtils.boundsFromLatLngList([driverLatLng, pickupLatLng]);
-                _mapController?.animateCamera(CameraUpdate.newLatLngBounds(bounds, 100)); // 100 is padding
-              } else {
-                // Fallback to just centering on the driver if pickup location is somehow null
-                _mapController?.animateCamera(CameraUpdate.newLatLng(driverLatLng));
-              }
-            });
-          }
-        }
-      }
-    }, onError: (error) {
-      debugPrint("Error listening to driver location: $error");
-    });
-  }
-
-  void _stopListeningToDriverLocation() {
-    _driverLocationSubscription?.cancel();
-    _driverLocationSubscription = null;
-    _markers.removeWhere((m) => m.markerId.value == 'driver_active_location');
-    // No need to call setState here if the marker removal is part of a larger state reset
-  }
-
-  Future<List<Map<String, dynamic>>> _getGooglePlacesSuggestions(String query) async {
-    if (query.isEmpty) return [];
-    final url = 'https://maps.googleapis.com/maps/api/place/autocomplete/json?input=$query&key=$_googlePlacesApiKey';
-    try {
-      final response = await http.get(Uri.parse(url));
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body); // Keep json.decode for Google Places API
-        if (data['status'] == 'OK') {
-          return (data['predictions'] as List).map((p) => {
-            'place_id': p['place_id'],
-            'description': p['description'],
-          }).toList();
-        }
-      }
-      return [];
-    } catch (e) {
-      debugPrint('Error fetching suggestions: $e');
-      return [];
-    }
-  }
-
-  Future<Map<String, dynamic>?> _getPlaceDetails(String placeId) async {
-    final url = 'https://maps.googleapis.com/maps/api/place/details/json?place_id=$placeId&key=$_googlePlacesApiKey';
-    try {
-      final response = await http.get(Uri.parse(url));
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body); // Keep json.decode for Google Places API
-        if (data['status'] == 'OK') {
-          final geometry = data['result']['geometry']['location'];
-          return {
-            'latitude': geometry['lat'],
-            'longitude': geometry['lng'],
-          };
-        }
-      }
-      return null;
-    } catch (e) {
-      debugPrint('Error fetching place details: $e');
-      return null;
-    }
-  }
-
-  Future<void> _handleDestinationSelected(Map<String, dynamic> suggestion) async {
-    final placeDetails = await _getPlaceDetails(suggestion['place_id']);
-    if (!mounted) return;
-    if (placeDetails != null) {
-      final latLng = ll.LatLng(placeDetails['latitude'], placeDetails['longitude']);
-      final address = suggestion['description'] ?? '';
-
-      setState(() {
-        _dropOffLocation = latLng;
-        _updateGoogleDropOffMarker(LatLng(latLng.latitude, latLng.longitude));
-        _destinationController.text = suggestion['description'] ?? '';
-        _destinationSuggestions = [];
-        
-       // 🔥 Insert into search history if not duplicate
-        _updateSearchHistory(address);
-        _editingDestination = false;
-        _destinationFocusNode.unfocus();
-      });
-      // Only reverse geocode if no description or too short
-      if ((suggestion['description'] != null && (suggestion['description'] as String).length < 5)) {
-        //await _reverseGeocode(_pickupLocation!, _pickupController);
-      }
-
-      _drawRoute();
-      _collapseSheet();
-    }
-      _checkRouteReady();
-  }
-
-  // Handle pickup, drop-off, and stop selection
-  Future<void> _handlePickupSelected(Map<String, dynamic> suggestion) async {
-  final placeDetails = await _getPlaceDetails(suggestion['place_id']);
-  if (!mounted) return;
-  if (placeDetails != null) {
-    final latLng = ll.LatLng(placeDetails['latitude'], placeDetails['longitude']);
-    final address = suggestion['description'] ?? '';
-    setState(() {
-      _pickupLocation = latLng;
-      _updateGooglePickupMarker(LatLng(latLng.latitude, latLng.longitude));
-      _pickupController.text = suggestion['description'] ?? '';
-      _pickupSuggestions = [];
-      
-     // 🔥 Insert into search history if not duplicate
-        _updateSearchHistory(address);
-        _editingPickup = false;
-        _pickupFocusNode.unfocus();  
-    });
-
-    // Only reverse geocode if no description or too short
-    if (((suggestion['description'] as String?)?.length ?? 0) < 5) {
-      await _reverseGeocode(_pickupLocation!, _pickupController);
-    }
-
-    _drawRoute();
-    _collapseSheet();
-  }
-  _checkRouteReady();
-  }
-
-
-  Future<void> _handleStopSelected(int index, Map<String, dynamic> suggestion) async {
-  final placeDetails = await _getPlaceDetails(suggestion['place_id']);
-  if (!mounted) return;
-  if (placeDetails != null) {
-    final latLng = ll.LatLng(placeDetails['latitude'], placeDetails['longitude']);
-    final address = suggestion['description'] ?? '';
-    setState(() {
-      _stops[index].location = latLng;
-      _stops[index].controller.text = suggestion['description'] ?? '';
-      _updateStopMarker(index, LatLng(latLng.latitude, latLng.longitude));
-      _stopSuggestions = [];
-      
-       // 🔥 Insert into search history if not duplicate
-        _updateSearchHistory(address);
-        _editingStopIndex = null;
-        _destinationFocusNode.unfocus();
-    });
-
-    if (((suggestion['description'] as String?)?.length ?? 0) < 5) {
-      await _reverseGeocode(latLng, _stops[index].controller);
-    }
-
-    _drawRoute();
-    _collapseSheet();
-  }
-  _checkRouteReady();
-  }
-
-
-  void _swapLocations() {
-    setState(() {
-      // Swap text
-      final tempText = _pickupController.text;
-      _pickupController.text = _destinationController.text;
-      _destinationController.text = tempText;
-      
-      // Swap locations
-      final tempLoc = _pickupLocation;
-      _pickupLocation = _dropOffLocation;
-      _dropOffLocation = tempLoc;
-      
-      // Update markers
-      _markers.removeWhere((m) => m.markerId == const MarkerId('pickup'));
-      _markers.removeWhere((m) => m.markerId == const MarkerId('dropoff'));
-      
-      if (_pickupLocation != null) {
-        _markers.add(Marker(
-          markerId: const MarkerId('pickup'),
-          position: LatLng(_pickupLocation!.latitude, _pickupLocation!.longitude),
-          infoWindow: const InfoWindow(title: 'Pickup'),
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
-        ));
-      }
-      
-      if (_dropOffLocation != null) {
-        _markers.add(Marker(
-          markerId: const MarkerId('dropoff'),
-          position: LatLng(_dropOffLocation!.latitude, _dropOffLocation!.longitude),
-          infoWindow: const InfoWindow(title: 'Drop-off'),
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-        ));
-      }
-      
-      // _drawRoute(); // REMOVED: This will be called by the dialog's onPressed handler.
-    });
-    _checkRouteReady();
-  }
-
-  void _clearPickup() {
-    setState(() {
-      _pickupController.clear();
-      _pickupLocation = null;
-      _selectedRouteDistance = null;
-      _selectedRouteDuration = null;
-      _markers.removeWhere((m) => m.markerId == const MarkerId('pickup'));
-      _drawRoute();
-    });
-    _checkRouteReady();
-  }
-
-  void _clearDestination() {
-    setState(() {
-      _destinationController.clear();
-      _dropOffLocation = null;
-      _selectedRouteDistance = null;
-      _selectedRouteDuration = null;
-      _markers.removeWhere((m) => m.markerId == const MarkerId('dropoff'));
-      _drawRoute();
-    });
-    _checkRouteReady();
-  }
-
-  void _clearStop(int index) {
-    setState(() {
-      _stops[index].controller.clear();
-      _stops[index].location = null;
-      _selectedRouteDistance = null;
-      _selectedRouteDuration = null;
-      _markers.removeWhere((m) => m.markerId == MarkerId('stop_$index'));
-      _drawRoute();
-    });
-    _checkRouteReady();
-  }
-
-  void _addStop() {
-    setState(() {
-      _stops.add(Stop(
-        name: 'Stop ${_stops.length + 1}',
-        address: 'Search or tap on map',
-      ));
-      _editingStopIndex = _stops.length - 1;
-      _expandSheet();
-    });
-  }
-
-  void _removeStop(int index) {
-  setState(() {
-    _markers.removeWhere((m) => m.markerId == MarkerId('stop_$index'));
-    _stops[index].dispose(); // Dispose the stop's controller and focus node
-    _stops.removeAt(index);
-
-    // After removing, update the markers of other stops
-    for (int i = 0; i < _stops.length; i++) {
-      if (_stops[i].location != null) {
-        _markers.removeWhere((m) => m.markerId == MarkerId('stop_$i'));
-        _updateStopMarker(i, LatLng(_stops[i].location!.latitude, _stops[i].location!.longitude));
-      }
-    }
-
-    _drawRoute();
-    _checkRouteReady();
-  });
-  }
-
-  void _confirmRideRequest() async {
-    if (_isFindingDriver) return; // Prevent multiple requests
-
-    // Set _isFindingDriver = true HERE, immediately before async work
-    if (mounted) {
-      // We will set _isFindingDriver and _activeRideRequestId after the ride request is created
-      // to ensure _activeRideRequestId is available when _isFindingDriver is true.
-      // For now, just show a generic loading state if needed, or rely on button press feedback.
-      // setState(() {
-      //   _isFindingDriver = true; // Temporarily set to true to show loading
-      // });
-    }
-    final rideRequestProvider = Provider.of<RideRequestProvider>(context, listen: false); // Ensure RideRequestProvider is defined and imported
-
-    if (!mounted || _pickupLocation == null || _dropOffLocation == null) { // Add !mounted check
-      // Check mounted BEFORE using context
-      if (mounted) { 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(AppLocale.selectPickupAndDropoff.getString(context))),
-        );
-        // setState(() => _isFindingDriver = false); // No longer needed here
-      }
-      return;
-    }
-    final currentUserId = rideRequestProvider.currentUserId;
-    if (!mounted || currentUserId == null) { // Add !mounted check
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-           SnackBar(content: Text(AppLocale.userNotAuthenticated.getString(context))),
-        );
-        // if (mounted) setState(() => _isFindingDriver = false); // No longer needed here
-      }
-      return;
-    }
-
-    try {        
-      // Create a ride request model
-      if (mounted) { // Set finding driver true just before the async call
-        setState(() => _isFindingDriver = true);
-      }
-      _processedCompletedRideId = null; // Reset the flag for a new ride
- // Unused variable
-
-      String rideId = await rideRequestProvider.createRideRequest(
-        pickup: _pickupLocation!, // _pickupLocation is already ll.LatLng (latlong2.LatLng)
-        pickupAddressName: _pickupController.text,
-        dropoff: _dropOffLocation!, // _dropOffLocation is already ll.LatLng (latlong2.LatLng)
-        estimatedDistanceText: _selectedRouteDistance, // Pass the selected route distance string
-        estimatedFare: _estimatedFare, // Pass the calculated estimated fare
-        estimatedDurationText: _selectedRouteDuration, // Pass the selected route duration string
-        dropoffAddressName: _destinationController.text,
-        customerNote: _customerNoteController.text.trim(), // Pass the note
-        stops: _stops.map((s) => {
-          'name': s.name,
-          // s.location is ll.LatLng (latlong2.LatLng), which is what createRideRequest expects for stops' location
-          'location': s.location!, 
-          'addressName': s.controller.text, // Assuming controller holds the address name
-        }).toList(),
-      );
-
-      // After await, check if the widget is still mounted before using context or calling setState.
-      if (mounted) { 
-        setState(() {
-          _activeRideRequestId = rideId;
-          _isFindingDriver = true;
-        });
-        // Start listening to the ride document for real-time updates.
-        _listenToActiveRide(rideId);
-      }
-    } catch (e) {
-      // After await (in catch), check if the widget is still mounted.
-      if (mounted) { 
-        // Use the current context for the SnackBar, assuming it's still valid if mounted.
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${AppLocale.failedToCreateRideRequest.getString(context)}: $e')),
-        );
-        // If creation fails, reset both
-        setState(() {
-          _isFindingDriver = false; _activeRideRequestId = null;}); 
-      }
-    }
+    _sheetController.animateTo(0.9, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
   }
 
   Future<void> _showAddNoteDialog(String rideId, String? currentNote) async {
     final noteController = TextEditingController(text: currentNote);
-    final rideRequestProvider = Provider.of<RideRequestProvider>(context, listen: false);
 
     return showDialog(
       context: context,
@@ -1321,8 +232,8 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext), child: Text(AppLocale.cancel.getString(context))),
           ElevatedButton(onPressed: () async {
-            await rideRequestProvider.updateCustomerNote(rideId, noteController.text.trim());
             Navigator.pop(dialogContext);
+            await _viewModel.updateCustomerNote(rideId, noteController.text.trim());
           }, child:  Text(AppLocale.save.getString(context))),
         ],
       ),
@@ -1330,13 +241,9 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
   }
 
   Future<void> _scheduleRide(
-    BuildContext context,
-    LatLng pickupLocation,
-    LatLng dropOffLocation,
-    String pickupAddress,
-    String dropOffAddress,
-    List<Map<String, dynamic>> stops 
+    BuildContext context
     ) async {
+  final dropOffAddress = _viewModel.destinationController.text;
   final TextEditingController titleController = TextEditingController(
     text: AppLocale.scheduledRideTo.getString(context).replaceFirst('{destination}', dropOffAddress.isNotEmpty ? dropOffAddress : AppLocale.destination.getString(context))
   );
@@ -1348,6 +255,8 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
   List<bool> _selectedRecurrenceDays = List.filled(7, false); // For weekly: Mon, Tue, Wed, Thu, Fri, Sat, Sun
   DateTime? _recurrenceEndDate;
   final List<String> _dayAbbreviations = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  final maxDays = _viewModel.maxSchedulingDaysAhead;
+  final minMinutes = _viewModel.minSchedulingMinutesAhead;
 
   final theme = Theme.of(context); // Get theme for styling
  
@@ -1384,15 +293,15 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                               context: stfContext, // Use StatefulBuilder context
                               initialDate: selectedDate ?? now,
                               firstDate: now,
-                              lastDate: now.add(Duration(days: _maxSchedulingDaysAhead)),
+                              lastDate: now.add(Duration(days: maxDays)),
                             );
                             if (pickedDate != null) {
                               stfSetState(() {
                                 selectedDate = pickedDate;
                                 // If date changed to today, ensure time is valid
                                 if (selectedDate!.isAtSameMomentAs(DateTime(now.year, now.month, now.day))) {
-                                  final minTimeToday = now.add(Duration(minutes: _minSchedulingMinutesAhead));
-                                  if (selectedTime != null) {
+                                  final minTimeToday = now.add(Duration(minutes: minMinutes));
+                                  if (selectedTime != null) { // This seems to have a typo, should be minMinutes
                                     final currentSelectedDateTime = DateTime(selectedDate!.year, selectedDate!.month, selectedDate!.day, selectedTime!.hour, selectedTime!.minute);
                                     if (currentSelectedDateTime.isBefore(minTimeToday)) {
                                       selectedTime = TimeOfDay.fromDateTime(minTimeToday);
@@ -1413,10 +322,10 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                           label: Text(selectedTime != null ? selectedTime!.format(stfContext) : AppLocale.pickTime.getString(context)),
                           onPressed: () async {
                             final now = DateTime.now();
-                            TimeOfDay initialTime = selectedTime ?? TimeOfDay.fromDateTime(now.add(Duration(minutes: _minSchedulingMinutesAhead + 5))); // Default with a small buffer
+                            TimeOfDay initialTime = selectedTime ?? TimeOfDay.fromDateTime(now.add(Duration(minutes: minMinutes + 5))); // Default with a small buffer
 
                             if (selectedDate != null && selectedDate!.year == now.year && selectedDate!.month == now.month && selectedDate!.day == now.day) {
-                              final minTimeToday = now.add(Duration(minutes: _minSchedulingMinutesAhead));
+                              final minTimeToday = now.add(Duration(minutes: minMinutes));
                               if (initialTime.hour < minTimeToday.hour || (initialTime.hour == minTimeToday.hour && initialTime.minute < minTimeToday.minute)) {
                                 initialTime = TimeOfDay.fromDateTime(minTimeToday);
                               }
@@ -1527,7 +436,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                         selectedTime!.hour, selectedTime!.minute,
                       );
                       final DateTime now = DateTime.now();
-                      final DateTime minValidDateTime = now.add(Duration(minutes: _minSchedulingMinutesAhead));
+                      final DateTime minValidDateTime = now.add(Duration(minutes: minMinutes));
 
                       if (_isRecurring && _recurrenceType == AppLocale.weekly.getString(context) && !_selectedRecurrenceDays.contains(true)) {
                         ScaffoldMessenger.of(stfContext).showSnackBar(
@@ -1544,7 +453,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
 
                       if (scheduledDateTime.isBefore(minValidDateTime)) {
                         ScaffoldMessenger.of(stfContext).showSnackBar(
-                          SnackBar(content: Text(AppLocale.scheduledTimeMustBeAtleast.getString(context).replaceFirst('{minutes}', _minSchedulingMinutesAhead.toString()))),
+                          SnackBar(content: Text(AppLocale.scheduledTimeMustBeAtleast.getString(context).replaceFirst('{minutes}', minMinutes.toString()))),
                         );
                         return;
                       }
@@ -1571,53 +480,16 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
       selectedTime!.hour,
       selectedTime!.minute,
     );
-    final rideRequestProvider = Provider.of<RideRequestProvider>(context, listen: false);
-    final String? customerId = rideRequestProvider.authService.currentUser?.uid;
 
-    if (customerId == null) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppLocale.userNotAuthenticated.getString(context))));
-      return;
-    }
-    try {
-      final rideData = {
-        'customerId': customerId, // Use the passed customerId
-        'title': titleController.text,
-        'scheduledDateTime': Timestamp.fromDate(scheduledDateTime), // Store as Timestamp
-        'createdAt': FieldValue.serverTimestamp(), // Use server timestamp
-        'pickup': GeoPoint(pickupLocation.latitude, pickupLocation.longitude), // Use 'pickup'
-        'dropoff': GeoPoint(dropOffLocation.latitude, dropOffLocation.longitude), // Use 'dropoff'
-        'pickupAddressName': pickupAddress,
-        'dropoffAddressName': dropOffAddress,
-        'status': 'scheduled',
-          'isRecurring': _isRecurring,
-          'recurrenceType': _isRecurring ? _recurrenceType : null,
-          'recurrenceDaysOfWeek': _isRecurring && _recurrenceType == AppLocale.weekly.getString(context)
-              ? _selectedRecurrenceDays.asMap().entries.where((e) => e.value).map((e) => _dayAbbreviations[e.key]).toList()
-              : null,
-          'recurrenceEndDate': _isRecurring && _recurrenceEndDate != null ? Timestamp.fromDate(_recurrenceEndDate!) : null,
-        'stops': stops.map((stop) => { // 'stops' is already List<Map<String, dynamic>>
-          'name': stop['name'],
-          'location': stop['location'], // This is already GeoPoint? from the argument
-          'addressName': stop['addressName'], // This is String? from the argument
-        }).toList(),
-      };
-
-      await FirebaseFirestore.instance.collection('scheduledRides').add(rideData);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(AppLocale.rideScheduledSuccessfully.getString(context))),
-        );
-        debugPrint("CustomerHome: Attempting to show post-scheduling dialog."); // <--- ADD THIS
-        _showPostSchedulingDialog(); // Show the new dialog
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${AppLocale.failedToScheduleRide.getString(context)}: $e')),
-        );
-      }
-    }
+    await _viewModel.saveScheduledRide(
+      title: titleController.text,
+      scheduledDateTime: scheduledDateTime,
+      isRecurring: _isRecurring,
+      recurrenceType: _recurrenceType,
+      selectedRecurrenceDays: _selectedRecurrenceDays,
+      recurrenceEndDate: _recurrenceEndDate,
+      dayAbbreviations: _dayAbbreviations,
+    );
   }});
 }
   void _showPostSchedulingDialog() {
@@ -1633,7 +505,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
               child: Text(AppLocale.planAnotherRide.getString(context)),
               onPressed: () {
                 Navigator.of(dialogContext).pop();
-                _resetUIForNewTrip();
+                _viewModel.resetUIForNewTrip();
               },
             ),
             TextButton(
@@ -1644,7 +516,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                   context,
                   MaterialPageRoute(builder: (context) => const ScheduledRidesListWidget()),
                 );
-                _resetUIForNewTrip(); // Also clear form after navigating
+                _viewModel.resetUIForNewTrip(); // Also clear form after navigating
               },
             ),
             TextButton(
@@ -1658,54 +530,6 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
         );
       },
     );
-  }
-
-  void _resetUIForNewTrip() {
-    setState(() {
-      _pickupController.clear();
-      _destinationController.clear();
-      _stops.forEach((stop) => stop.controller.clear());
-      _stops.clear();
-
-      _pickupLocation = null;
-      _dropOffLocation = null;
-
-      _markers.clear();
-      _polylines.clear();
-
-      _selectedRouteDistance = null;
-      _selectedRouteDuration = null;
-      _estimatedFare = null;
-      _routeReady = false;
-
-      // Clear suggestion lists so history can be shown
-      _pickupSuggestions = [];
-      _destinationSuggestions = [];
-      _stopSuggestions = [];
-      // _processedCompletedRideId = null; // DO NOT reset this here. It's reset when a new ride is created.
-
-      // Reset editing states
-      _editingPickup = false;
-      _editingDestination = true; // Set to false, user will tap to edit
-      _editingStopIndex = null;
-
-      _pickupFocusNode.unfocus();
-      _destinationFocusNode.unfocus();
-      _stopFocusNode.unfocus();
-
-      // Also reset the active ride state
-      _activeRideRequestId = null;
-      _activeRideRequestDetails = null;
-      _assignedDriverModel = null;
-      _isFindingDriver = false;
-      _stopListeningToActiveRide(); // Cancel the active ride subscription
-      _stopListeningToDriverLocation();
-
-      // Reset the flag to allow initial location setup to run again.
-      _kijiweFetchInitiated = false;
-    });
-    // Re-initialize pickup location and collapse sheet to default
-      _setupInitialMapState(); // Call the new setup method here
   }
 
   Widget _buildLocationField({
@@ -1764,7 +588,8 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final locationProvider = Provider.of<LocationProvider>(context);
+    final locationProvider = Provider.of<LocationProvider>(context, listen: false);
+    final viewModel = Provider.of<CustomerHomeViewModel>(context);
 
     return Scaffold(
       resizeToAvoidBottomInset: true,
@@ -1792,27 +617,27 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                 zoom: 15, // Start with a more zoomed-in view
               ),
               onMapCreated: (controller) {
-                _mapController = controller;
+                _viewModel.mapController = controller;
+                _mapController = controller; // Keep local reference for UI-only actions
                 WidgetsBinding.instance.addPostFrameCallback((_) {
                   _adjustMapForExpandedSheet();
                 });
               },
-              onTap: _handleMapTap,
-              markers: {..._markers, ..._kijiweMarkers},
-              polylines: _polylines,
+              onTap: viewModel.handleMapTap,
+              markers: viewModel.markers,
+              polylines: viewModel.polylines,
               zoomControlsEnabled: false,
               myLocationEnabled: true,
               padding: EdgeInsets.only(
                 bottom: MediaQuery.of(context).size.height * _currentSheetSize,
               ),
             ),
-          // The DraggableScrollableSheet is now built directly, using the state
-          // variables (_activeRideRequestDetails, _isFindingDriver) that are
-          // updated by our new _listenToActiveRide subscription.
-          _buildRouteSheet(key: const ValueKey('main_sheet')),
+          // The DraggableScrollableSheet is now built directly, using the viewModel state
+          // which is updated by the logic within the ViewModel.
+          _buildRouteSheet(key: const ValueKey('main_sheet'), viewModel: viewModel),
 
       // Custom Map Controls (Recenter and Zoom) - only show when not in an active ride
-      if (_activeRideRequestDetails == null)
+      if (viewModel.activeRideRequestDetails == null)
           Positioned(
             bottom: MediaQuery.of(context).size.height * _currentSheetSize + 20, // Position above the sheet
             right: 16,
@@ -1820,8 +645,8 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
               children: [
                 // Recenter Button
                 FloatingActionButton.small(
-              heroTag: 'customer_recenter_button',
-                  onPressed: _centerMapOnCurrentLocation,
+                  heroTag: 'customer_recenter_button',
+                  onPressed: viewModel.centerMapOnCurrentLocation,
                   backgroundColor: Theme.of(context).colorScheme.surface,
                   foregroundColor: Theme.of(context).colorScheme.onSurface,
                   child: const Icon(Icons.my_location),
@@ -1829,7 +654,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                 const SizedBox(height: 16),
                 // Zoom Buttons
                 FloatingActionButton.small(
-              heroTag: 'customer_zoom_in_button', // Unique heroTag
+                  heroTag: 'customer_zoom_in_button', // Unique heroTag
                   onPressed: () => _mapController?.animateCamera(CameraUpdate.zoomIn()),
                   backgroundColor: Theme.of(context).colorScheme.surface,
                   foregroundColor: Theme.of(context).colorScheme.onSurface,
@@ -1837,7 +662,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                 ),
                 const SizedBox(height: 2),
                 FloatingActionButton.small(
-              heroTag: 'customer_zoom_out_button', // Unique heroTag
+                  heroTag: 'customer_zoom_out_button', // Unique heroTag
                   onPressed: () => _mapController?.animateCamera(CameraUpdate.zoomOut()),
                   backgroundColor: Theme.of(context).colorScheme.surface,
                   foregroundColor: Theme.of(context).colorScheme.onSurface,
@@ -1847,50 +672,6 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  String _getRideEndMessage(String? status) {
-    switch (status) {
-      case 'completed':
-        return AppLocale.rideCompleted.getString(context);
-      case 'cancelled_by_customer':
-        return AppLocale.rideCancelledByYou.getString(context);
-      case 'cancelled_by_driver':
-        return AppLocale.rideCancelledByDriver.getString(context);
-      case 'no_drivers_available':
-        return AppLocale.noDriverAvailable.getString(context);
-      case 'matching_error_missing_pickup':
-        return AppLocale.matchingErrorMissingPickup.getString(context);
-      case 'matching_error_kijiwe_fetch':
-        return AppLocale.matchingErrorKijiweFetch.getString(context);
-      default:
-        return AppLocale.rideHasEnded.getString(context);
-    }
-  }
-
-  Future<void> _centerMapOnCurrentLocation() async {
-    if (_mapController == null) return;
-
-    final locationProvider = Provider.of<LocationProvider>(context, listen: false);
-    // Prioritize centering on the selected pickup location, otherwise use the user's current location.
-    final targetLocation = _pickupLocation ?? locationProvider.currentLocation;
-
-    if (targetLocation == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-         SnackBar(content: Text(AppLocale.currentLocationNotAvailable.getString(context))),
-        );
-      }
-      return;
-    }
-
-    final currentZoom = await _mapController!.getZoomLevel();
-
-    _mapController!.animateCamera(
-      CameraUpdate.newCameraPosition(
-        CameraPosition(target: LatLng(targetLocation.latitude, targetLocation.longitude), zoom: currentZoom, bearing: 0),
       ),
     );
   }
@@ -1908,9 +689,9 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
     );
   }
 
-  Widget _buildRouteSheet({Key? key}) { // Removed Key parameter as it's managed by the parent IndexedStack
+  Widget _buildRouteSheet({Key? key, required CustomerHomeViewModel viewModel}) {
     // If a driver is assigned, show driver info and ride progress
-    final rideDetails = _activeRideRequestDetails;
+    final rideDetails = viewModel.activeRideRequestDetails;
     if (rideDetails != null) {
       final status = rideDetails.status;
       final driverId = rideDetails.driverId;
@@ -1918,26 +699,26 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
       // Active ride with an assigned driver
       if (driverId != null && ['pending_driver_acceptance', 'accepted', 'goingToPickup', 'arrivedAtPickup', 'onRide'].contains(status)) {
         debugPrint("CustomerHome: _buildRouteSheet -> Showing DriverAssignedSheet. Status: $status");
-        return _buildDriverAssignedSheet();
+        return _buildDriverAssignedSheet(viewModel);
       }
 
       // Ride was declined or no drivers found
       if (status == 'declined_by_driver' || status == 'no_drivers_available') {
         debugPrint("CustomerHome: _buildRouteSheet -> Showing RideFailedSheet. Status: $status");
-        return _buildRideFailedSheet(status);
+        return _buildRideFailedSheet(viewModel, status);
       }
 
       // Still finding a driver
-      if (_isFindingDriver || status == 'pending_match' || status == 'pending_driver_acceptance') {
+      if (viewModel.isFindingDriver || status == 'pending_match' || status == 'pending_driver_acceptance') {
         debugPrint("CustomerHome: _buildRouteSheet -> Showing FindingDriverSheet. Status: $status");
-        return _buildFindingDriverSheet();
+        return _buildFindingDriverSheet(viewModel);
       }
-    } else if (_isFindingDriver) { // Handle case where rideDetails is momentarily null but we are finding
-      return _buildFindingDriverSheet();
+    } else if (viewModel.isFindingDriver) { // Handle case where rideDetails is momentarily null but we are finding
+      return _buildFindingDriverSheet(viewModel);
     }
     // Default: Show route planning sheet
-    debugPrint("CustomerHome: _buildRouteSheet -> Showing default route planning sheet. Estimated Fare: $_estimatedFare");
-    final bool showActionButtons = _pickupLocation != null && _dropOffLocation != null && !_isFindingDriver && _activeRideRequestId == null;
+    debugPrint("CustomerHome: _buildRouteSheet -> Showing default route planning sheet. Estimated Fare: ${viewModel.estimatedFare}");
+    final bool showActionButtons = viewModel.pickupLocation != null && viewModel.dropOffLocation != null && !viewModel.isFindingDriver && viewModel.activeRideRequestId == null;
      // Revert to static sheet sizes
     const double initialSheetSize = 0.55;
     const List<double> snapSizes = [0.23, 0.35, 0.45, 0.55, 0.7, 0.8, 0.9]; // Added 0.23 as a snap point
@@ -2005,18 +786,18 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                                   style: Theme.of(context).textTheme.titleLarge,
                                 ),                                const Spacer(),
                                 // Swap button (only show if both pickup and destination are set)
-                                if (_pickupLocation != null && _dropOffLocation != null)
+                                if (viewModel.pickupLocation != null && viewModel.dropOffLocation != null)
                                   IconButton( // The IconButton
                                     icon: const Icon(Icons.swap_vert, size: 24), // The Icon
                                     tooltip: AppLocale.swapLocations.getString(context),
-                                    onPressed: _swapLocations,
+                                    onPressed: viewModel.swapLocations,
                                   ),
                                 // Add Stop button (only show if pickup and destination are set)
-                                if (_pickupLocation != null && _dropOffLocation != null) 
+                                if (viewModel.pickupLocation != null && viewModel.dropOffLocation != null) 
                                   IconButton(
                                     icon: const Icon(Icons.add_location_alt_outlined),
                                     tooltip: AppLocale.addStop.getString(context),
-                                    onPressed: _addStop,
+                                    onPressed: viewModel.addStop,
                                   ),
                                 // Expand/Collapse toggle
                                 IconButton(
@@ -2043,8 +824,8 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                                 horizontalSpaceSmall,
                                 Expanded( // Allow text to take available space
                                   child: Text(
-                                    _selectedRouteDistance != null && _selectedRouteDuration != null
-                                        ? '$_selectedRouteDuration · $_selectedRouteDistance' // This is correct
+                                    viewModel.selectedRouteDistance != null && viewModel.selectedRouteDuration != null
+                                        ? '${viewModel.selectedRouteDuration} · ${viewModel.selectedRouteDistance}' // This is correct
                                         : AppLocale.calculatingRoute.getString(context), // Placeholder if distance/duration not ready
                                     style: Theme.of(context).textTheme.bodyMedium,
                                     overflow: TextOverflow.ellipsis, // Handle long text
@@ -2053,7 +834,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                                 horizontalSpaceMedium, // Space before fare
                                   // Display Fare: Preferring final fare from active ride, then estimated fare, then a "calculating" message.
                                   StreamBuilder<DocumentSnapshot>(
-                                    stream: _activeRideRequestId != null ? FirebaseFirestore.instance.collection('rideRequests').doc(_activeRideRequestId).snapshots() : null,
+                                    stream: viewModel.activeRideRequestId != null ? FirebaseFirestore.instance.collection('rideRequests').doc(viewModel.activeRideRequestId).snapshots() : null,
                                     builder: (context, snapshot) {
                                       // 1. Check for and display the final fare if available.
                                       if (snapshot.hasData && snapshot.data!.exists) {
@@ -2065,13 +846,13 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                                   }
 
                                       // 2. If no final fare, fall back to showing the estimated fare.
-                                      final currentFare = _estimatedFare;
-                                      if (currentFare != null && _selectedRouteDistance != null && _selectedRouteDuration != null) {
+                                      final currentFare = viewModel.estimatedFare;
+                                      if (currentFare != null && viewModel.selectedRouteDistance != null && viewModel.selectedRouteDuration != null) {
                                         return Text(
                                           '${AppLocale.fare.getString(context)}: TZS ${currentFare.toStringAsFixed(0)}',
                                           style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold),
                                         );
-                                      } else if (_selectedRouteDistance != null && _selectedRouteDuration != null) {
+                                      } else if (viewModel.selectedRouteDistance != null && viewModel.selectedRouteDuration != null) {
                                         return Text(
                                           '${AppLocale.fare.getString(context)}: ${AppLocale.calculatingFare.getString(context)}',
                                           style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontStyle: FontStyle.italic, color: Theme.of(context).hintColor),
@@ -2086,7 +867,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                           
                           // Pickup Field (conditionally shown)
                           // Show if pickup is not set (needs input) OR if action buttons are visible (for review/edit)
-                          if (_pickupLocation == null || showActionButtons)
+                          if (viewModel.pickupLocation == null || showActionButtons)
                             Padding(
                               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), 
                               child: Row( // Wrap _buildLocationField and Add Stop button in a Row
@@ -2094,17 +875,17 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                                   Expanded(
                                     child: _buildLocationField(
                                       key: const ValueKey('pickup_field'),
-                                      controller: _pickupController, // This is correct
+                                      controller: viewModel.pickupController, // This is correct
                                       labelText: AppLocale.pickup.getString(context),
                                       hintText: AppLocale.enterPickupLocation.getString(context),
                                       iconData: Icons.my_location,
                                       iconColor: successColor,
-                                      isEditing: _editingPickup,
+                                      isEditing: viewModel.editingPickup,
                                       focusNode: _pickupFocusNode,
                                       onTapWhenNotEditing: () => _startEditing('pickup'),
-                                      onChanged: (value) async { if (value.isNotEmpty) { final suggestions = await _getGooglePlacesSuggestions(value); if (mounted) setState(() => _pickupSuggestions = suggestions); } else { if (mounted) setState(() => _pickupSuggestions = []); } },
-                                      onClear: _clearPickup,
-                                      onMapIconTap: () { setState(() { _selectingPickup = true; _editingPickup = true; }); _collapseSheet(); ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppLocale.tapToSelectPickup.getString(context)))); },
+                                      onChanged: (value) => viewModel.getGooglePlacesSuggestions(value, 'pickup'),
+                                      onClear: viewModel.clearPickup,
+                                      onMapIconTap: () { viewModel.selectingPickup = true; viewModel.editingPickup = true; _collapseSheet(); ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppLocale.tapToSelectPickup.getString(context)))); },
                                     ),
                                   ),
                                 // X button to clear pickup
@@ -2112,30 +893,28 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                                   icon: const Icon(Icons.clear), // The Icon
                                   tooltip: AppLocale.clearPickup.getString(context),
                                   onPressed: () {
-                                      _clearPickup();
-                                      setState(() {
-                                        _editingPickup = true;
-                                        _pickupFocusNode.requestFocus();
-                                      });
+                                      viewModel.clearPickup();
+                                      viewModel.editingPickup = true;
+                                      _pickupFocusNode.requestFocus();
                                     },
                                   ),                                
                                 ],
                               ),
                             ),
-                          if (_editingPickup) // Suggestions list for pickup
+                          if (viewModel.editingPickup) // Suggestions list for pickup
                             Padding(
                               padding: const EdgeInsets.symmetric(horizontal: 16), 
                               child: Column(
-                                children: _buildSuggestionList(_pickupSuggestions, true, null),
+                                children: _buildSuggestionList(viewModel.pickupSuggestions, true, null),
                               ),
                             ),
                           
                           // Stops Section with + button for each stop
-                          if (_stops.isNotEmpty)
+                          if (viewModel.stops.isNotEmpty)
                             Padding(
                               padding: const EdgeInsets.fromLTRB(16, 8, 16, 8), 
                               child: Column(
-                                children: _stops.asMap().entries.map((entry) {
+                                children: viewModel.stops.asMap().entries.map((entry) {
                                   final index = entry.key;
                                   final stop = entry.value;
                                   return _buildStopItem(index, stop); // _buildStopItem will now use _buildLocationField
@@ -2151,14 +930,14 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                                 Expanded(
                                   child: _buildLocationField(
                                     key: const ValueKey('destination_field'),
-                                    controller: _destinationController,
+                                    controller: viewModel.destinationController,
                                     labelText: AppLocale.destination.getString(context),
                                     legDistance: () { // Calculate leg distance for destination
-                                      if (_allFetchedRoutes.isNotEmpty &&
-                                          _selectedRouteIndex < _allFetchedRoutes.length &&
-                                          _allFetchedRoutes[_selectedRouteIndex]['legs'] is List) {
-                                        final legs = _allFetchedRoutes[_selectedRouteIndex]['legs'] as List<dynamic>;
-                                        final destLegIndex = _stops.length; // The leg leading to destination
+                                      if (viewModel.allFetchedRoutes.isNotEmpty &&
+                                          viewModel.selectedRouteIndex < viewModel.allFetchedRoutes.length &&
+                                          viewModel.allFetchedRoutes[viewModel.selectedRouteIndex]['legs'] is List) {
+                                        final legs = viewModel.allFetchedRoutes[viewModel.selectedRouteIndex]['legs'] as List<dynamic>;
+                                        final destLegIndex = viewModel.stops.length; // The leg leading to destination
                                         if (destLegIndex < legs.length && legs[destLegIndex] is Map<String, dynamic>) {
                                           final legData = legs[destLegIndex] as Map<String, dynamic>;
                                           if (legData['distance'] is Map<String, dynamic>) {
@@ -2169,11 +948,11 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                                       return null;
                                     }(),
                                     legDuration: () { // Calculate leg duration for destination
-                                       if (_allFetchedRoutes.isNotEmpty &&
-                                          _selectedRouteIndex < _allFetchedRoutes.length &&
-                                          _allFetchedRoutes[_selectedRouteIndex]['legs'] is List) {
-                                        final legs = _allFetchedRoutes[_selectedRouteIndex]['legs'] as List<dynamic>;
-                                        final destLegIndex = _stops.length; // The leg leading to destination
+                                       if (viewModel.allFetchedRoutes.isNotEmpty &&
+                                          viewModel.selectedRouteIndex < viewModel.allFetchedRoutes.length &&
+                                          viewModel.allFetchedRoutes[viewModel.selectedRouteIndex]['legs'] is List) {
+                                        final legs = viewModel.allFetchedRoutes[viewModel.selectedRouteIndex]['legs'] as List<dynamic>;
+                                        final destLegIndex = viewModel.stops.length; // The leg leading to destination
                                         if (destLegIndex < legs.length && legs[destLegIndex] is Map<String, dynamic>) {
                                           final legData = legs[destLegIndex] as Map<String, dynamic>;
                                           if (legData['duration'] is Map<String, dynamic>) {
@@ -2186,35 +965,33 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                                     hintText: AppLocale.enterDestination.getString(context),
                                     iconData: Icons.flag_outlined,
                                     iconColor: Theme.of(context).colorScheme.error,
-                                    isEditing: _editingDestination,
+                                    isEditing: viewModel.editingDestination,
                                     focusNode: _destinationFocusNode,
                                     onTapWhenNotEditing: () => _startEditing('destination'),
-                                    onChanged: (value) async { if (value.isNotEmpty) { final suggestions = await _getGooglePlacesSuggestions(value); if (mounted) setState(() => _destinationSuggestions = suggestions); } else { if (mounted) setState(() => _destinationSuggestions = []); } },
-                                    onClear: _clearDestination,
-                                    onMapIconTap: () { setState(() => _editingDestination = true); _collapseSheet(); ScaffoldMessenger.of(context).showSnackBar( SnackBar(content: Text(AppLocale.tapOnMapToSelectDestination.getString(context)))); },
+                                    onChanged: (value) => viewModel.getGooglePlacesSuggestions(value, 'destination'),
+                                    onClear: viewModel.clearDestination,
+                                    onMapIconTap: () { viewModel.editingDestination = true; _collapseSheet(); ScaffoldMessenger.of(context).showSnackBar( SnackBar(content: Text(AppLocale.tapOnMapToSelectDestination.getString(context)))); },
                                   ),
                                 ),
-                                if (_pickupLocation != null && _dropOffLocation != null) // Show swap button if both are set
+                                if (viewModel.pickupLocation != null && viewModel.dropOffLocation != null) // Show swap button if both are set
                                   IconButton(
                                   icon: const Icon(Icons.clear), // The Icon
                                   tooltip: AppLocale.clearPickup.getString(context),
                                     onPressed: () {
-                                        _clearDestination();
-                                        setState(() {
-                                          _editingDestination = true;
-                                          _destinationFocusNode.requestFocus();
-                                        });
+                                        viewModel.clearDestination();
+                                        viewModel.editingDestination = true;
+                                        _destinationFocusNode.requestFocus();
                                       },                                 
                               ),
                               ],
                             ),
                           ),
                           
-                          if (_editingDestination) // Suggestions list for destination
+                          if (viewModel.editingDestination) // Suggestions list for destination
                             Padding(
                               padding: const EdgeInsets.symmetric(horizontal: 16),
                               child: Column(
-                                children: _buildSuggestionList(_destinationSuggestions, false, null),
+                                children: _buildSuggestionList(viewModel.destinationSuggestions, false, null),
                               ),
                             ),
                           
@@ -2225,7 +1002,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                               child: TextField(
                                 key: const ValueKey('customer_note_textfield'), // Add key
-                                controller: _customerNoteController,
+                                controller: viewModel.customerNoteController,
                                 decoration: appInputDecoration( // Use appInputDecoration
                                   labelText: AppLocale.addNoteToDriver.getString(context),
                                   hintText: AppLocale.addNoteToDriverHint.getString(context),
@@ -2261,20 +1038,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                       Expanded(
                         flex: 2,
                         child: OutlinedButton(
-                          onPressed: () => _scheduleRide(
-                            context,
-                            LatLng(_pickupLocation!.latitude, _pickupLocation!.longitude),
-                            LatLng(_dropOffLocation!.latitude, _dropOffLocation!.longitude),
-                            _pickupController.text,
-                            _destinationController.text,
-                            _stops.map((stop) => {
-                              'name': stop.name,
-                              'location': stop.location != null
-                                  ? GeoPoint(stop.location!.latitude, stop.location!.longitude)
-                                  : null,
-                              'addressName': stop.controller.text, // Pass addressName
-                            }).toList(),
-                          ),
+                          onPressed: () => _scheduleRide(context),
                           // Style comes from OutlinedButtonThemeData
                           style: Theme.of(context).outlinedButtonTheme.style?.copyWith(
                                 minimumSize: MaterialStateProperty.all(const Size(double.infinity, 50)),
@@ -2286,11 +1050,11 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                       Expanded(
                         flex: 3, // Confirm Route button larger
                         child: ElevatedButton(
-                          onPressed: _estimatedFare != null ? _confirmRideRequest : null, // Disable if no fare
+                          onPressed: viewModel.estimatedFare != null ? viewModel.confirmRideRequest : null, // Disable if no fare
                           style: Theme.of(context).elevatedButtonTheme.style?.copyWith(
                                 minimumSize: MaterialStateProperty.all(const Size(double.infinity, 50)),
                               ),
-                          child: Text(_estimatedFare != null ? AppLocale.confirmRoute.getString(context) : AppLocale.calculatingFare.getString(context), style: const TextStyle(color: Colors.white)),
+                          child: Text(viewModel.estimatedFare != null ? AppLocale.confirmRoute.getString(context) : AppLocale.calculatingFare.getString(context), style: const TextStyle(color: Colors.white)),
                         ),
                       ),
                     ],
@@ -2303,7 +1067,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
     );
   }
 
-  Widget _buildFindingDriverSheet() {
+  Widget _buildFindingDriverSheet(CustomerHomeViewModel viewModel) {
     final theme = Theme.of(context);
     return Positioned( // Use Positioned to overlay or place at bottom
       bottom: 0,
@@ -2334,32 +1098,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                 foregroundColor: theme.colorScheme.error,
                 side: BorderSide(color: theme.colorScheme.error),
               ),
-              onPressed: () async { // Make this async
-                if (_activeRideRequestId != null) {
-                  // Capture context-dependent items BEFORE await
-                  final rideProvider = Provider.of<RideRequestProvider>(context, listen: false);
-                  final scaffoldMessenger = ScaffoldMessenger.of(context); // Capture ScaffoldMessenger
-                  final bool isMounted = mounted; // Capture mounted state
-
-                  try {
-                    await rideProvider.cancelRideByCustomer(_activeRideRequestId!);
-                    // StreamBuilder will handle UI reset when status changes to cancelled
-                  } catch (e) {
-                    if (isMounted) { // Use captured mounted state
-                      scaffoldMessenger.showSnackBar( // Use captured ScaffoldMessenger
-                        SnackBar(content: Text('Failed to cancel ride: $e')),
-                      );
-                    } else {
-                      debugPrint("Cancel ride failed, but widget was unmounted: $e");
-                    }
-                  }
-                } else {
-                  debugPrint("Cancel Search pressed, but _activeRideRequestId is null.");
-                  if (mounted) { // Check mounted before showing SnackBar
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cannot cancel: Ride request not fully processed.')));
-                  }
-                }
-              },
+              onPressed: viewModel.cancelRideRequest,
               child: Text('Cancel Search', style: TextStyle(color: theme.colorScheme.error)),
             )
           ],
@@ -2368,7 +1107,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
     );
   }
 
-  Widget _buildRideFailedSheet(String status) {
+  Widget _buildRideFailedSheet(CustomerHomeViewModel viewModel, String status) {
     final theme = Theme.of(context);
     final message = status == 'declined_by_driver'
         ? 'The driver is unavailable. Would you like to find another?'
@@ -2395,20 +1134,14 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
             Row(
               children: [
                 Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => setState(() {
-                      _activeRideRequestId = null;
-                      _isFindingDriver = false;
-                    }),
-                    child:  Text(AppLocale.cancel.getString(context)),
-                  ),
+                  child: OutlinedButton(onPressed: () {
+                      viewModel.activeRideRequestId = null;
+                      viewModel.isFindingDriver = false;
+                    }, child: Text(AppLocale.cancel.getString(context))),
                 ),
                 horizontalSpaceMedium,
                 Expanded(
-                  child: ElevatedButton(
-                    onPressed: _confirmRideRequest, // Re-run the ride request logic
-                    child:  Text(AppLocale.findAnotherDriver.getString(context)),
-                  ),
+                  child: ElevatedButton(onPressed: viewModel.confirmRideRequest, child: Text(AppLocale.findAnotherDriver.getString(context))),
                 ),
               ],
             ),
@@ -2418,14 +1151,14 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
     );
   }
 
-  Widget _buildDriverAssignedSheet() {
+  Widget _buildDriverAssignedSheet(CustomerHomeViewModel viewModel) {
     return DraggableScrollableSheet(
       initialChildSize: 0.4, // Adjust initial size as needed
       minChildSize: 0.25,
       maxChildSize: 0.6, // Adjust max size
       builder: (BuildContext context, ScrollController scrollController) {
         final theme = Theme.of(context);
-        final rideDetails = _activeRideRequestDetails;
+        final rideDetails = viewModel.activeRideRequestDetails;
 
         if (rideDetails == null) {
           return Container(
@@ -2466,12 +1199,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                 if (rideStatus == 'pending_driver_acceptance')
                   OutlinedButton(
                     style: OutlinedButton.styleFrom(foregroundColor: theme.colorScheme.error, side: BorderSide(color: theme.colorScheme.error)),
-                    onPressed: () async {
-                      if (_activeRideRequestId != null) {
-                        final rideProvider = Provider.of<RideRequestProvider>(context, listen: false);
-                        try { await rideProvider.cancelRideByCustomer(_activeRideRequestId!); } catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to cancel: $e'))); }
-                      }
-                    },
+                    onPressed: viewModel.cancelRideRequest,
                     child:  Text(AppLocale.cancelRide.getString(context)),
                   ),
               ],
@@ -2554,7 +1282,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
               if (rideDetails.driverId != null && (rideStatus == 'accepted' || rideStatus == 'goingToPickup' || rideStatus == 'arrivedAtPickup' || rideStatus == 'onRide'))
                 TextButton.icon(
                   icon: Icon(Icons.chat_bubble_outline, color: theme.colorScheme.primary),
-                  label: Text('${AppLocale.chatWithDriver.getString(context)} $rideStatus', style: TextStyle(color: theme.colorScheme.primary)),
+                  label: Text(AppLocale.chatWithDriver.getString(context), style: TextStyle(color: theme.colorScheme.primary)),
                   onPressed: () {
                     Navigator.push(context, MaterialPageRoute(builder: (context) => ChatScreen(
                       rideRequestId: rideDetails.id!,
@@ -2568,7 +1296,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
               if (rideStatus == 'accepted' || rideStatus == 'goingToPickup')
                 TextButton.icon(
                   icon: Icon(Icons.edit_note_outlined, color: theme.colorScheme.secondary),
-                  label: Text(rideDetails.customerNoteToDriver != null && rideDetails.customerNoteToDriver!.isNotEmpty ? 'Edit Note' : 'Add Note for Driver', style: TextStyle(color: theme.colorScheme.secondary)),
+                  label: Text(rideDetails.customerNoteToDriver != null && rideDetails.customerNoteToDriver!.isNotEmpty ? AppLocale.editNote.getString(context) : AppLocale.addNoteToDriver.getString(context), style: TextStyle(color: theme.colorScheme.secondary)),
                   onPressed: () => _showAddNoteDialog(rideDetails.id!, rideDetails.customerNoteToDriver),
                 ),
               // Cancel Ride Button
@@ -2577,11 +1305,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                   padding: const EdgeInsets.only(top: 8.0), // Add some space above
                   child: OutlinedButton(
                     style: OutlinedButton.styleFrom(foregroundColor: theme.colorScheme.error, side: BorderSide(color: theme.colorScheme.error)),
-                    onPressed: () async {
-                      if (_activeRideRequestId != null) {
-                        try { await Provider.of<RideRequestProvider>(context, listen: false).cancelRideByCustomer(_activeRideRequestId!); } catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${AppLocale.failedToCancelRide.getString(context)}: $e'))); }
-                      }
-                    },
+                    onPressed: viewModel.cancelRideRequest,
                     child:  Text(AppLocale.cancelRide.getString(context)),
                   ),
                 ),
@@ -2593,16 +1317,16 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
   }
 
   Widget _buildStopItem(int index, Stop stop) {
-    final isEditing = _editingStopIndex == index;
+    final isEditing = _viewModel.editingStopIndex == index;
     final theme = Theme.of(context); // Get theme
     String? legDistanceText;
     String? legDurationText;
 
     // Safely access and parse leg data for this stop
-    if (_allFetchedRoutes.isNotEmpty &&
-        _selectedRouteIndex < _allFetchedRoutes.length &&
-        _allFetchedRoutes[_selectedRouteIndex]['legs'] is List) {
-      final legs = _allFetchedRoutes[_selectedRouteIndex]['legs'] as List<dynamic>;
+    if (_viewModel.allFetchedRoutes.isNotEmpty &&
+        _viewModel.selectedRouteIndex < _viewModel.allFetchedRoutes.length &&
+        _viewModel.allFetchedRoutes[_viewModel.selectedRouteIndex]['legs'] is List) {
+      final legs = _viewModel.allFetchedRoutes[_viewModel.selectedRouteIndex]['legs'] as List<dynamic>;
       // The leg at 'index' leads TO this stop 'index'.
       if (index < legs.length && legs[index] is Map<String, dynamic>) {
         final legData = legs[index] as Map<String, dynamic>;
@@ -2616,7 +1340,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
     }
     
     return Padding( // Added Padding around the stop item
-      key: ObjectKey(_stops[index]), // Key for the Padding, helps with list updates
+      key: ObjectKey(_viewModel.stops[index]), // Key for the Padding, helps with list updates
       padding: const EdgeInsets.only(bottom: 8.0),
       child: Column(
         children: [
@@ -2633,7 +1357,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                     padding: const EdgeInsets.only(right: 20),
                     child: Icon(Icons.delete, color: theme.colorScheme.onErrorContainer),
                   ),
-                  onDismissed: (direction) => _removeStop(index),
+                  onDismissed: (direction) => _viewModel.removeStop(index),
                   child: _buildLocationField( // Use the new _buildLocationField
                     key: ValueKey('stop_field_$index'), // Key for the location field itself
                     controller: stop.controller,
@@ -2646,15 +1370,11 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                     isEditing: isEditing,
                     focusNode: stop.focusNode, // Use stop's own focus node
                     onTapWhenNotEditing: () => _startEditing('stop_$index'),
-                    onChanged: (value) async { if (value.isNotEmpty) { final suggestions = await _getGooglePlacesSuggestions(value); if (mounted) setState(() => _stopSuggestions = suggestions); } else { if (mounted) setState(() => _stopSuggestions = []); } },
-                    onClear: () => _clearStop(index),
+                    onChanged: (value) => _viewModel.getGooglePlacesSuggestions(value, 'stop'),
+                    onClear: () => _viewModel.clearStop(index),
                     onMapIconTap: () { 
-                      setState(() { 
-                        _editingStopIndex = index; 
-                        _selectingPickup = false; 
-                        _editingPickup = false; 
-                        _editingDestination = false; 
-                      }); 
+                      _viewModel.editingStopIndex = index; 
+                      _viewModel.startEditing('stop_$index');
                       _collapseSheet(); 
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
@@ -2671,7 +1391,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
               IconButton(
                 icon: const Icon(Icons.add_circle_outline, size: 24),
                 color: theme.colorScheme.secondary,
-                onPressed: () => _addStopAfter(index),
+                onPressed: () => _viewModel.addStopAfter(index),
                 tooltip: 'Add stop after this one',
               ),
             ],
@@ -2680,7 +1400,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
             Padding(
               padding: const EdgeInsets.only(top: 0, left: 0, right: 40), // Adjust padding to align under text field
               child: Column(
-                children: _buildSuggestionList(_stopSuggestions, false, index),
+                children: _buildSuggestionList(_viewModel.stopSuggestions, false, index),
               ),
             ),
         ],
@@ -2688,23 +1408,12 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
     );
   }
 
-  void _addStopAfter(int index) {
-    setState(() {
-      _stops.insert(index + 1, Stop(
-        name: 'Stop ${_stops.length + 1}',
-        address: 'Search or tap on map'
-      ));
-      _editingStopIndex = index + 1;
-    });
-    _expandSheet();
-  }
-
   List<Widget> _buildSuggestionList(List<Map<String, dynamic>> suggestions, bool isPickup, int? stopIndex) {
     return [
       if (suggestions.isNotEmpty)
         ...suggestions.map((suggestion) => _buildSuggestionItem(suggestion, isPickup, stopIndex)).toList(),
-      if (suggestions.isEmpty && _searchHistory.isNotEmpty)
-        ..._searchHistory.map((history) => _buildHistoryItem(history)).toList(),
+      if (suggestions.isEmpty && _viewModel.searchHistory.isNotEmpty)
+        ..._viewModel.searchHistory.map((history) => _buildHistoryItem(history)).toList(),
     ];
   }
 
@@ -2713,14 +1422,14 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
     return ListTile(
       // Use theme icon color
       leading: Icon(isPickup ? Icons.location_on : Icons.flag, color: theme.iconTheme.color),
-      title: Text(suggestion[AppLocale.description.getString(context)] ?? '', style: theme.textTheme.bodyMedium), // Use theme text style
+    title: Text(suggestion['description'] ?? '', style: theme.textTheme.bodyMedium), // Use theme text style
       onTap: () {
         if (stopIndex != null) { // Check if editing a stop
-          _handleStopSelected(stopIndex, suggestion);
+          _viewModel.handleStopSelected(stopIndex, suggestion);
         } else if (isPickup) {
-          _handlePickupSelected(suggestion);
+          _viewModel.handlePickupSelected(suggestion);
         } else {
-          _handleDestinationSelected(suggestion);
+          _viewModel.handleDestinationSelected(suggestion);
         }
       },
     );
@@ -2738,40 +1447,31 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
         if (locations.isNotEmpty) {
           final location = locations.first;
           final llLatLng = ll.LatLng(location.latitude, location.longitude);
+          final suggestion = {'place_id': '', 'description': historyItem}; // Mock suggestion
 
-          setState(() {
-            if (_pickupFocusNode.hasFocus || _editingPickup) {
-              _pickupController.text = historyItem;
-              _pickupLocation = llLatLng;
-              _updateGooglePickupMarker(LatLng(location.latitude, location.longitude));
-              _editingPickup = false;
-              _pickupFocusNode.unfocus();
-              _pickupSuggestions = [];
-            } else if (_destinationFocusNode.hasFocus || _editingDestination) {
-              _destinationController.text = historyItem;
-              _dropOffLocation = llLatLng;
-              _updateGoogleDropOffMarker(LatLng(location.latitude, location.longitude));
-              _editingDestination = false;
-              _destinationFocusNode.unfocus();
-              _destinationSuggestions = [];
-            } else if (_stopFocusNode.hasFocus || _editingStopIndex != null) {
-              final index = _editingStopIndex!;
-              _stops[index].controller.text = historyItem;
-              _stops[index].location = llLatLng;
-              _updateStopMarker(index, LatLng(location.latitude, location.longitude));
-              _editingStopIndex = null;
-              _stopFocusNode.unfocus();
-              _stopSuggestions = [];
-            }
-          });
+          if (_pickupFocusNode.hasFocus || _viewModel.editingPickup) {
+            _viewModel.pickupController.text = historyItem;
+            _viewModel.pickupLocation = llLatLng;
+            _viewModel.handlePickupSelected(suggestion);
+          } else if (_destinationFocusNode.hasFocus || _viewModel.editingDestination) {
+            _viewModel.destinationController.text = historyItem;
+            _viewModel.dropOffLocation = llLatLng;
+            _viewModel.handleDestinationSelected(suggestion);
+          } else if (_stopFocusNode.hasFocus || _viewModel.editingStopIndex != null) {
+            final index = _viewModel.editingStopIndex!;
+            _viewModel.stops[index].controller.text = historyItem;
+            _viewModel.stops[index].location = llLatLng;
+            _viewModel.handleStopSelected(index, suggestion);
+          }
 
-          _drawRoute();
-          _checkRouteReady();
+          _viewModel.drawRoute();
           _collapseSheet();
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-             SnackBar(content: Text(AppLocale.locationNotFound.getString(context))),
-          );
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(AppLocale.locationNotFound.getString(context))),
+            );
+          }
         }
       } catch (e) {
         print('Error geocoding history item: $e');
@@ -2788,7 +1488,7 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
     final theme = Theme.of(context);
     TextEditingController commentController = TextEditingController();
 
-    return showDialog<void>(
+    await showDialog<void>(
       context: context,
       barrierDismissible: false, // User must explicitly submit or skip
       builder: (BuildContext dialogContext) {
@@ -2850,37 +1550,20 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                 ElevatedButton(
                   child:  Text(AppLocale.submitRating.getString(context)),
                   onPressed: () async {
-                    final rideProvider = Provider.of<RideRequestProvider>(context, listen: false);
                     final navigator = Navigator.of(dialogContext);
                     final scaffoldMessenger = ScaffoldMessenger.of(context);
 
                     if (ratingValue > 0) {
-                      try {
-                        await rideProvider.rateUser(
-                          rideId: rideId,
-                          ratedUserId: driverId,
-                          ratedUserRole: 'Driver',
-                          rating: ratingValue,
-                          comment: commentController.text.trim().isNotEmpty ? commentController.text.trim() : null,
-                        );
-                        
-                        if (!mounted) return;
-
-                        // Pop the dialog before showing other UI
-                        if (navigator.canPop()) {
-                           navigator.pop();
-                        }
-
-                        scaffoldMessenger.showSnackBar(SnackBar(content: Text(AppLocale.ratingSubmitted.getString(context))));
-                        _showPostRideCompletionDialog();
-                      } catch (e) {
-                        if (!mounted) return;
-
-                        if (navigator.canPop()) { 
-                           navigator.pop();
-                        }
-                        scaffoldMessenger.showSnackBar(SnackBar(content: Text('${AppLocale.failedToSubmitRating.getString(context)} $e')));
+                      final comment = commentController.text.trim().isNotEmpty ? commentController.text.trim() : null;
+                      
+                      // Pop the dialog first
+                      if (navigator.canPop()) {
+                        navigator.pop();
                       }
+
+                      // Then call the view model to do the work
+                      await _viewModel.rateDriver(rideId, driverId, ratingValue, comment);
+
                     } else {
                       scaffoldMessenger.showSnackBar( SnackBar(content: Text(AppLocale.pleaseSelectAStarRating.getString(context))));
                     }
@@ -2892,6 +1575,11 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
         );
       },
     );
+
+    // This now runs after the dialog is popped, either by submitting or skipping.
+    if (mounted) {
+      _showPostRideCompletionDialog();
+    }
   }
   
   void _showPostRideCompletionDialog() {
@@ -2902,25 +1590,25 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
         return AlertDialog(
           actions: <Widget>[
             TextButton(
-              child: const Text('Return Trip'),
+              child: Text(AppLocale.returnTrip.getString(context)),
               onPressed: () async { // Make onPressed async
                 Navigator.of(dialogContext).pop();
-                _resetActiveRideStateOnly(); // Reset the ride state but keep locations
-                if (_stops.isNotEmpty) {
+                _viewModel.resetActiveRideStateOnly(); // Reset the ride state but keep locations
+                if (_viewModel.stops.isNotEmpty) {
                   // Show another dialog to ask about stops
                   bool? clearStops = await showDialog<bool>(
                     context: context, // Use the main screen's context
                     builder: (BuildContext stopsDialogContext) {
                       return AlertDialog(
-                        title: const Text('Keep Stops?'),
-                        content: const Text('Do you want to keep the current stops for your return trip?'),
+                        title: Text(AppLocale.keepStopsDialogTitle.getString(context)),
+                        content: Text(AppLocale.keepStopsDialogContent.getString(context)),
                         actions: <Widget>[
                           TextButton(
-                            child: const Text('Clear Stops'),
+                            child: Text(AppLocale.clearStops.getString(context)),
                             onPressed: () => Navigator.of(stopsDialogContext).pop(true),
                           ),
                           TextButton(
-                            child: const Text('Keep Stops'),
+                            child: Text(AppLocale.keepStops.getString(context)),
                             onPressed: () => Navigator.of(stopsDialogContext).pop(false),
                           ),
                         ],
@@ -2928,29 +1616,27 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
                     },
                   );
                   if (clearStops == true) {
-                    setState(() {
-                      _stops.clear();
-                      _markers.removeWhere((m) => m.markerId.value.startsWith('stop_'));
-                    });
+                    _viewModel.stops.clear();
+                    // Markers will be cleared in drawRoute
                   }
                 }
-                _swapLocations(); // Swaps pickup and destination
-                _drawRoute(); // Redraw route after potential changes
+                _viewModel.swapLocations(); // Swaps pickup and destination
+                _viewModel.drawRoute(); // Redraw route after potential changes
               },
             ),
             TextButton(
-              child: const Text('View Ride History'),
+              child: Text(AppLocale.viewRideHistory.getString(context)),
               onPressed: () {
                 Navigator.of(dialogContext).pop();
-                _resetUIForNewTrip(); // Reset the form before navigating
+                _viewModel.resetUIForNewTrip(); // Reset the form before navigating
                 Navigator.push(context, MaterialPageRoute(builder: (context) => const RidesScreen(role: 'Customer')));
               },
             ),
             TextButton(
-              child: const Text('Thanks'),
+              child: Text(AppLocale.thanks.getString(context)),
               onPressed: () {
                 Navigator.of(dialogContext).pop();
-                _resetUIForNewTrip(); // Reset the form
+                _viewModel.resetUIForNewTrip(); // Reset the form
               },
             ),
           ],
@@ -2959,42 +1645,15 @@ class _CustomerHomeState extends State<CustomerHome> with AutomaticKeepAliveClie
     );
   }
 
-  void _stopListeningToActiveRide() {
-    _activeRideSubscription?.cancel();
-    _activeRideSubscription = null;
-  }
-
-  // Resets only the active ride state, keeping locations for a return trip.
-  void _resetActiveRideStateOnly() {
-    setState(() {
-      _activeRideRequestId = null;
-      _activeRideRequestDetails = null;
-      _assignedDriverModel = null;
-      _isFindingDriver = false;
-      _stopListeningToActiveRide();
-      _stopListeningToDriverLocation();
-      _polylines.clear();
-      _markers.removeWhere((m) => m.markerId.value == 'driver_active_location');
-      _routeReady = false;
-      _estimatedFare = null;
-    });
-  }
-
 @override
   void dispose() {
     _mapController?.dispose();
-    _locationProvider.removeListener(_onLocationUpdated);
     _sheetController.dispose();
     _destinationFocusNode.dispose();
     _pickupFocusNode.dispose();
-    _customerNoteController.dispose(); // Dispose the new controller
     _stopFocusNode.dispose();
-    _driverLocationSubscription?.cancel();
-    _kijiweSubscription?.cancel();
-    _stopListeningToActiveRide(); // Ensure subscription is cancelled on dispose
-    for (var stop in _stops) { // Dispose resources for each stop
-      stop.dispose();
-    }
+    _viewModel.onUiAction = null;
+    // ViewModel is disposed by the provider
     super.dispose();
   }
 }
