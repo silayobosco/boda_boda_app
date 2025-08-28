@@ -114,15 +114,37 @@ class _ManualRideScreenState extends State<ManualRideScreen> {
       final routeDetails = routes.first; // We'll use the primary route.
       final driverProvider =
           Provider.of<DriverProvider>(context, listen: false);
-      // Ensure correct types from the map, which can be dynamic.
-      final num distanceMeters = (routeDetails['distance_meters'] as num?) ?? 0;
-      final dynamic durationSecondsRaw = routeDetails['duration_seconds']; // Can be num or String
 
-      // The API might return duration as a String or num, so we parse it safely.
-      final int durationSeconds = int.tryParse(durationSecondsRaw.toString()) ?? 0;
+      // Get the string representations of distance and duration, which are more reliable for fare calculation.
+      final String? estimatedDistanceStr = routeDetails['distance'] as String?;
+      final String? estimatedDurationStr = routeDetails['duration'] as String?;
+
+      double distanceKm = 0;
+      int durationSeconds = 0;
+
+      if (estimatedDistanceStr != null) {
+        final distanceMatch = RegExp(r'([\d\.]+)').firstMatch(estimatedDistanceStr);
+        if (distanceMatch != null) {
+          double numericValue = double.tryParse(distanceMatch.group(1) ?? '0') ?? 0;
+          if (estimatedDistanceStr.toLowerCase().contains("km")) {
+            distanceKm = numericValue;
+          } else if (estimatedDistanceStr.toLowerCase().contains("m")) {
+            distanceKm = numericValue / 1000.0;
+          }
+        }
+      }
+
+      if (estimatedDurationStr != null) {
+        double durationMinutes = 0;
+        final hourMatch = RegExp(r'(\d+)\s*hr').firstMatch(estimatedDurationStr);
+        if (hourMatch != null) durationMinutes += (double.tryParse(hourMatch.group(1) ?? '0') ?? 0) * 60;
+        final minMatch = RegExp(r'(\d+)\s*min').firstMatch(estimatedDurationStr);
+        if (minMatch != null) durationMinutes += double.tryParse(minMatch.group(1) ?? '0') ?? 0;
+        durationSeconds = (durationMinutes * 60).round();
+      }
 
       final fare = driverProvider.calculateFare(
-        distanceMeters: distanceMeters.toDouble(),
+        distanceMeters: distanceKm * 1000,
         durationSeconds: durationSeconds,
       );
 
@@ -183,11 +205,31 @@ class _ManualRideScreenState extends State<ManualRideScreen> {
     _locationSubscription?.cancel();
     _locationSubscription = null;
 
-    final driverProvider =
-        Provider.of<DriverProvider>(context, listen: false);
+    final driverProvider = Provider.of<DriverProvider>(context, listen: false);
+
+    double distanceForFareMeters;
+    final int durationForFareSeconds = _trackedDurationSeconds;
+
+    // If the ride was short (under 1km), use the actual tracked distance.
+    // Otherwise, use the original estimated distance to prevent fare manipulation on long rides,
+    // while still using the actual time taken.
+    if (_trackedDistanceKm < 1.0) {
+      distanceForFareMeters = _trackedDistanceKm * 1000;
+    } else {
+      double estimatedDistanceKm = 0;
+      if (_estimatedDistance != null) {
+        // Parse the estimated distance string (e.g., "12.5 km") into a double.
+        final distanceMatch = RegExp(r'([\d\.]+)').firstMatch(_estimatedDistance!);
+        if (distanceMatch != null) {
+          estimatedDistanceKm = double.tryParse(distanceMatch.group(1) ?? '0') ?? 0;
+        }
+      }
+      distanceForFareMeters = estimatedDistanceKm * 1000;
+    }
+
     final finalFare = driverProvider.calculateFare(
-      distanceMeters: _trackedDistanceKm * 1000,
-      durationSeconds: _trackedDurationSeconds,
+      distanceMeters: distanceForFareMeters,
+      durationSeconds: durationForFareSeconds,
     );
 
     setState(() {
