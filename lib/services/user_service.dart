@@ -60,4 +60,22 @@ class UserService {
       rethrow;
     }
   }
+
+  Future<void> suspendDriver(String driverId, bool isSuspended) async {
+    try {
+      await _firestore.collection('users').doc(driverId).update({'isSuspended': isSuspended});
+    } catch (e) {
+      print('Error suspending driver: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> deleteDriver(String driverId) async {
+    try {
+      await _firestore.collection('users').doc(driverId).delete();
+    } catch (e) {
+      print('Error deleting driver: $e');
+      rethrow;
+    }
+  }
 }
