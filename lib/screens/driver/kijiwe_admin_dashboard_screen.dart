@@ -188,10 +188,39 @@ class _KijiweAdminDashboardScreenState
               ),
               verticalSpaceLarge,
 
-              // Recent Activity Section
-              Text('Recent Activity', style: theme.textTheme.titleLarge),
+              // Reports Section
+              Text('Reports & Analytics', style: theme.textTheme.titleLarge),
               verticalSpaceMedium,
-              _buildRecentActivityCard(theme),
+              _buildReportSection(
+                title: 'Total Rides (This Kijiwe)',
+                fetchData: _fetchTotalRides,
+                icon: Icons.motorcycle_outlined,
+                color: Colors.blue,
+              ),
+              _buildReportSection(
+                title: 'Total Earnings (This Kijiwe)',
+                fetchData: _fetchTotalEarnings,
+                icon: Icons.attach_money,
+                color: Colors.green,
+              ),
+              _buildReportSection(
+                title: 'Rides This Month',
+                fetchData: _fetchMonthlyRides,
+                icon: Icons.calendar_month,
+                color: Colors.orange,
+              ),
+              _buildReportSection(
+                title: 'Average Rating',
+                fetchData: _fetchAverageRating,
+                icon: Icons.star,
+                color: Colors.amber,
+              ),
+              _buildReportSection(
+                title: 'Active Drivers Today',
+                fetchData: _fetchActiveDriversToday,
+                icon: Icons.people,
+                color: Colors.purple,
+              ),
             ],
           ),
         ),
@@ -301,33 +330,156 @@ class _KijiweAdminDashboardScreenState
     );
   }
 
-  Widget _buildRecentActivityCard(ThemeData theme) {
+  Widget _buildReportSection({
+    required String title,
+    required Future<String> Function() fetchData,
+    required IconData icon,
+    required Color color,
+  }) {
     return Card(
+      margin: const EdgeInsets.symmetric(vertical: 8),
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Icon(Icons.history, color: theme.colorScheme.primary),
-                const SizedBox(width: 8),
-                Text('Recent Rides', style: theme.textTheme.titleMedium),
+                Icon(icon, color: color, size: 24),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
               ],
             ),
-            verticalSpaceMedium,
-            const Center(
-              child: Padding(
-                padding: EdgeInsets.all(20.0),
-                child: Text('Recent activity feed coming soon.'),
-              ),
+            const SizedBox(height: 16),
+            FutureBuilder<String>(
+              future: fetchData(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                } else if (snapshot.hasError) {
+                  return Text(
+                    'Error: ${snapshot.error}',
+                    style: TextStyle(color: Theme.of(context).colorScheme.error),
+                  );
+                } else {
+                  return Text(
+                    snapshot.data ?? 'N/A',
+                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: color,
+                    ),
+                  );
+                }
+              },
             ),
           ],
         ),
       ),
     );
+  }
+
+  Future<String> _fetchTotalRides() async {
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('rideHistory')
+          .where('kijiweId', isEqualTo: _kijiweId)
+          .get();
+      return snapshot.size.toString();
+    } catch (e) {
+      return 'Error: ${e.toString()}';
+    }
+  }
+
+  Future<String> _fetchTotalEarnings() async {
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('rideHistory')
+          .where('kijiweId', isEqualTo: _kijiweId)
+          .get();
+      
+      double totalEarnings = snapshot.docs.fold(0.0, (total, doc) {
+        final fare = doc.data()['fare'];
+        if (fare != null) {
+          return total + (fare is int ? fare.toDouble() : (fare as num).toDouble());
+        }
+        return total;
+      });
+      
+      return 'TZS ${totalEarnings.toStringAsFixed(2)}';
+    } catch (e) {
+      return 'Error: ${e.toString()}';
+    }
+  }
+
+  Future<String> _fetchMonthlyRides() async {
+    try {
+      final now = DateTime.now();
+      final startOfMonth = DateTime(now.year, now.month, 1);
+      final endOfMonth = DateTime(now.year, now.month + 1, 1);
+      
+      final snapshot = await FirebaseFirestore.instance
+          .collection('rideHistory')
+          .where('kijiweId', isEqualTo: _kijiweId)
+          .where('timestamp', isGreaterThanOrEqualTo: startOfMonth)
+          .where('timestamp', isLessThan: endOfMonth)
+          .get();
+      
+      return snapshot.size.toString();
+    } catch (e) {
+      return 'Error: ${e.toString()}';
+    }
+  }
+
+  Future<String> _fetchAverageRating() async {
+    try {
+      // Use rideRequests collection since it has rating fields
+      final snapshot = await FirebaseFirestore.instance
+          .collection('rideRequests')
+          .where('kijiweId', isEqualTo: _kijiweId)
+          .where('status', isEqualTo: 'completed')
+          .where('customerRatingToDriver', isGreaterThan: 0)
+          .get();
+      
+      if (snapshot.docs.isEmpty) {
+        return 'No ratings yet';
+      }
+      
+      double totalRating = snapshot.docs.fold(0.0, (total, doc) {
+        final rating = doc.data()['customerRatingToDriver'];
+        if (rating != null) {
+          return total + (rating is int ? rating.toDouble() : (rating as num).toDouble());
+        }
+        return total;
+      });
+      
+      final averageRating = totalRating / snapshot.docs.length;
+      return averageRating.toStringAsFixed(1);
+    } catch (e) {
+      return 'Error: ${e.toString()}';
+    }
+  }
+
+  Future<String> _fetchActiveDriversToday() async {
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .where('driverProfile.kijiweId', isEqualTo: _kijiweId)
+          .where('driverProfile.isOnline', isEqualTo: true)
+          .get();
+      
+      return snapshot.size.toString();
+    } catch (e) {
+      return 'Error: ${e.toString()}';
+    }
   }
 }
 

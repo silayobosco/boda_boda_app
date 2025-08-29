@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'kijiwe_admin_dashboard_screen.dart';
-
-import 'kijiwe_admin_reports_screen.dart';
 import 'kijiwe_admin_settings_screen.dart';
 
 class KijiweAdminHome extends StatelessWidget {
@@ -10,7 +8,7 @@ class KijiweAdminHome extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 3, // Number of tabs
+      length: 2, // Number of tabs
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Kijiwe Admin Panel'),
@@ -19,7 +17,6 @@ class KijiweAdminHome extends StatelessWidget {
           bottom: const TabBar(
             tabs: [
               Tab(icon: Icon(Icons.dashboard_outlined), text: 'Dashboard'),
-              Tab(icon: Icon(Icons.analytics_outlined), text: 'Reports'),
               Tab(icon: Icon(Icons.settings_outlined), text: 'Settings'),
             ],
           ),
@@ -27,7 +24,6 @@ class KijiweAdminHome extends StatelessWidget {
         body: const TabBarView(
           children: [
             KijiweAdminDashboardScreen(),
-            KijiweAdminReportsScreen(),
             KijiweAdminSettingsScreen(),
           ],
         ),
