@@ -3,7 +3,7 @@ plugins {
     // Using a very new Kotlin version (like 2.1.10) with an older AGP can cause dependency issues.
     id("com.android.application") version "8.10.1" apply false
     id("com.google.gms.google-services") version "4.4.2" apply false
-    id("org.jetbrains.kotlin.android") version "2.0.21" apply false
+    id("org.jetbrains.kotlin.android") version "2.1.0" apply false
 }
 
 buildscript {

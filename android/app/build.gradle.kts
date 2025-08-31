@@ -25,10 +25,8 @@ dependencies {
     
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
-    implementation("com.mapbox.mapboxsdk:mapbox-android-sdk:9.6.2") {
-        exclude(group = "com.google.android.gms")
-    }
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+    implementation("com.google.firebase:firebase-analytics-ktx") // or implementation("com.google.firebase:firebase-analytics-ktx")
 
 }
 
