@@ -30,9 +30,9 @@ exports.deleteUserAccount = onCall(async (request) => {
 
     return { success: true, message: "Account deleted successfully." };
   } catch (error) {
-    logger.error(`Error deleting account for user ${uid}:`, error);
-    if (error.code === 'auth/user-not-found') {
-      logger.warn(`User ${uid} was not found in Firebase Auth, but Firestore doc was deleted.`);
+    logger.error("Error deleting account for user ${uid}:", error);
+    if (error.code === "auth/user-not-found") {
+      logger.warn("User ${uid} was not found in Firebase Auth, but Firestore doc was deleted.");
       return { success: true, message: "Account data cleared." };
     }
     throw new HttpsError("internal", "An error occurred while deleting your account. Please contact support.", error.message);
